@@ -14,8 +14,8 @@
       {
         "label": "overlay",
         "title": "IOX Overlay",
-        "width": 640,
-        "height": 60,
+        "width": 500,
+        "height": 46,
         "resizable": false,
         "decorations": false,
         "transparent": true,

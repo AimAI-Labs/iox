@@ -1,7 +1,8 @@
 use arboard::Clipboard;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::System::Threading::*;
@@ -9,7 +10,66 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 static HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
-static LAST_DOWN_POS: std::sync::Mutex<Option<(i32, i32)>> = std::sync::Mutex::new(None);
+static IS_PINNED: AtomicBool = AtomicBool::new(false);
+
+/// 鼠标点击状态跟踪器（用于识别双击与三击）
+struct ClickState {
+    last_down_pos: Option<(i32, i32)>,
+    last_up_pos: (i32, i32),
+    last_up_time: Option<Instant>,
+    click_count: u32,
+}
+
+static CLICK_STATE: Mutex<ClickState> = Mutex::new(ClickState {
+    last_down_pos: None,
+    last_up_pos: (0, 0),
+    last_up_time: None,
+    click_count: 0,
+});
+
+/// 设置 Overlay 的 Pin 固定状态
+pub fn set_overlay_pinned(pinned: bool) {
+    IS_PINNED.store(pinned, Ordering::SeqCst);
+}
+
+/// 查询 Overlay 的 Pin 固定状态
+pub fn is_overlay_pinned() -> bool {
+    IS_PINNED.load(Ordering::SeqCst)
+}
+
+/// 检查指定屏幕物理坐标 (x, y) 是否落在 Overlay 窗口内
+pub fn is_point_inside_overlay(app: &AppHandle, x: i32, y: i32) -> bool {
+    if let Some(window) = app.get_webview_window("overlay") {
+        if let Ok(visible) = window.is_visible() {
+            if !visible {
+                return false;
+            }
+            if let Ok(hwnd) = window.hwnd() {
+                unsafe {
+                    let mut rect: RECT = std::mem::zeroed();
+                    if GetWindowRect(hwnd.0 as HWND, &mut rect) != 0 {
+                        return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// 尝试隐藏未固定的 Overlay 窗口
+pub fn hide_overlay_if_unpinned(app: &AppHandle) {
+    if is_overlay_pinned() {
+        return;
+    }
+    if let Some(window) = app.get_webview_window("overlay") {
+        if let Ok(visible) = window.is_visible() {
+            if visible {
+                let _ = window.hide();
+            }
+        }
+    }
+}
 
 /// 计算鼠标两点之间的欧氏位移距离
 pub fn calc_drag_distance(p1: (i32, i32), p2: (i32, i32)) -> f64 {
@@ -173,26 +233,86 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
             let hook_struct = *(l_param as *const MSLLHOOKSTRUCT);
             let x = hook_struct.pt.x;
             let y = hook_struct.pt.y;
+            let msg = w_param as u32;
 
-            if w_param as u32 == WM_LBUTTONDOWN {
-                if let Ok(mut last_pos) = LAST_DOWN_POS.lock() {
-                    *last_pos = Some((x, y));
+            let app_handle = {
+                if let Ok(h) = APP_HANDLE.lock() {
+                    h.clone()
+                } else {
+                    None
                 }
-            } else if w_param as u32 == WM_LBUTTONUP {
-                let start_pos = {
-                    if let Ok(mut last_pos) = LAST_DOWN_POS.lock() {
-                        last_pos.take()
-                    } else {
-                        None
-                    }
-                };
+            };
 
-                if let Some(p1) = start_pos {
-                    let p2 = (x, y);
-                    // 拖拽距离阈值 6px
-                    if is_drag_valid(p1, p2, 6.0) {
+            if msg == WM_LBUTTONDOWN {
+                if let Ok(mut state) = CLICK_STATE.lock() {
+                    state.last_down_pos = Some((x, y));
+                }
+
+                // 若在悬浮窗外部按下左键，且悬浮窗非固定，立即隐藏悬浮窗
+                if let Some(ref handle) = app_handle {
+                    if !is_point_inside_overlay(handle, x, y) {
+                        hide_overlay_if_unpinned(handle);
+                    }
+                }
+            } else if msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN {
+                // 右键或中键点击外部也自动隐藏
+                if let Some(ref handle) = app_handle {
+                    if !is_point_inside_overlay(handle, x, y) {
+                        hide_overlay_if_unpinned(handle);
+                    }
+                }
+            } else if msg == WM_LBUTTONUP {
+                let mut is_drag = false;
+                let mut is_double_or_triple = false;
+
+                if let Ok(mut state) = CLICK_STATE.lock() {
+                    let start_pos = state.last_down_pos.take();
+                    let now = Instant::now();
+                    let dbl_click_time_ms = GetDoubleClickTime() as u128;
+
+                    if let Some(p1) = start_pos {
+                        let p2 = (x, y);
+                        // 1. 判断是否为拖拽选词（位移 >= 6px）
+                        if is_drag_valid(p1, p2, 6.0) {
+                            is_drag = true;
+                            state.click_count = 0;
+                            state.last_up_time = Some(now);
+                            state.last_up_pos = p2;
+                        } else {
+                            // 2. 判断是否为双击/三击选词（时间差在系统双击阈值内，位移 <= 8px）
+                            let is_within_time = match state.last_up_time {
+                                Some(last_time) => now.duration_since(last_time).as_millis() <= dbl_click_time_ms,
+                                None => false,
+                            };
+                            let is_within_dist = calc_drag_distance(state.last_up_pos, p2) <= 8.0;
+
+                            if is_within_time && is_within_dist {
+                                state.click_count += 1;
+                                state.last_up_time = Some(now);
+                                state.last_up_pos = p2;
+                                if state.click_count >= 2 {
+                                    is_double_or_triple = true;
+                                }
+                            } else {
+                                state.click_count = 1;
+                                state.last_up_time = Some(now);
+                                state.last_up_pos = p2;
+                            }
+                        }
+                    }
+                }
+
+                if is_drag || is_double_or_triple {
+                    // 若点击在悬浮窗内部，不触发选词逻辑
+                    let inside_overlay = if let Some(ref handle) = app_handle {
+                        is_point_inside_overlay(handle, x, y)
+                    } else {
+                        false
+                    };
+
+                    if !inside_overlay {
                         // 异步处理选词与弹窗，不阻塞当前钩子链
-                        trigger_selection_detection_async(p2);
+                        trigger_selection_detection_async((x, y));
                     }
                 }
             }
@@ -278,8 +398,8 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32)) {
 
                     let _ = handle.emit("selection-triggered", payload);
                     
-                    // 调度窗口定位与展示
-                    crate::window_manager::show_overlay_at(&handle, cursor_pos.0, cursor_pos.1, 640, 60);
+                    // 调度窗口定位与展示（紧凑胶囊尺寸 500x46）
+                    crate::window_manager::show_overlay_at(&handle, cursor_pos.0, cursor_pos.1, 500, 46);
                 }
             }
         });
@@ -343,4 +463,13 @@ mod tests {
         assert!(!is_text_valid("a", 2));
         assert!(is_text_valid("Hello World", 2));
     }
+
+    #[test]
+    fn test_pin_state() {
+        set_overlay_pinned(true);
+        assert!(is_overlay_pinned());
+        set_overlay_pinned(false);
+        assert!(!is_overlay_pinned());
+    }
 }
+

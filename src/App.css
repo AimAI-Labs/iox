@@ -91,9 +91,9 @@
   height: 100vh;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   background: transparent;
-  padding: 8px 12px;
+  padding: 2px 4px;
   box-sizing: border-box;
 }
 

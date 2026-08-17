@@ -140,6 +140,11 @@ fn hide_overlay(app: AppHandle) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn set_pin_state(pinned: bool) {
+    selection::set_overlay_pinned(pinned);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial_config = AppConfig::load();
@@ -165,8 +170,10 @@ pub fn run() {
             cancel_action,
             resize_overlay,
             hide_overlay,
-            show_main_window
+            show_main_window,
+            set_pin_state
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+

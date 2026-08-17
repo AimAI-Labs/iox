@@ -43,9 +43,9 @@ export function useOverlayState(config: AppConfig | null) {
   // 调整窗口尺寸
   const updateWindowSize = useCallback(async (newMode: OverlayMode, allowFocus = false) => {
     if (newMode === 'bubble') {
-      await invoke('resize_overlay', { width: 640, height: 60, allowFocus: false });
+      await invoke('resize_overlay', { width: 500, height: 46, allowFocus: false });
     } else {
-      await invoke('resize_overlay', { width: 460, height: 400, allowFocus });
+      await invoke('resize_overlay', { width: 460, height: 420, allowFocus });
     }
   }, []);
 
@@ -57,6 +57,8 @@ export function useOverlayState(config: AppConfig | null) {
       setStreamText('');
       setError(null);
       setIsLoading(false);
+      setIsPinned(false);
+      invoke('set_pin_state', { pinned: false }).catch(() => {});
       setAnimKey((prev) => prev + 1);
       updateWindowSize('bubble', false);
     });
@@ -190,12 +192,17 @@ export function useOverlayState(config: AppConfig | null) {
   // 关闭/隐藏
   const handleClose = async () => {
     setIsPinned(false);
+    await invoke('set_pin_state', { pinned: false }).catch(() => {});
     await invoke('hide_overlay');
   };
 
   // 固定/解绑 Pin
   const handlePinToggle = () => {
-    setIsPinned((prev) => !prev);
+    setIsPinned((prev) => {
+      const next = !prev;
+      invoke('set_pin_state', { pinned: next }).catch(() => {});
+      return next;
+    });
   };
 
   return {
@@ -216,3 +223,4 @@ export function useOverlayState(config: AppConfig | null) {
     handlePinToggle,
   };
 }
+
