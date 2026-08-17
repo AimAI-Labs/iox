@@ -1,5 +1,5 @@
 use arboard::Clipboard;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -11,6 +11,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 static HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
 static IS_PINNED: AtomicBool = AtomicBool::new(false);
+static SELECTION_SEQ: AtomicU64 = AtomicU64::new(0);
+static HIDE_SEQ: AtomicU64 = AtomicU64::new(0);
+static CLIPBOARD_LOCK: Mutex<()> = Mutex::new(());
 
 /// 鼠标点击状态跟踪器（用于识别双击与三击）
 struct ClickState {
@@ -73,19 +76,23 @@ pub fn hide_overlay_if_unpinned(app: &AppHandle) {
     }
 }
 
-/// 优雅请求隐藏 Overlay（向前端广播退场动画事件，并设置 150ms 超时强制兜底）
+/// 优雅请求隐藏 Overlay（向前端广播退场动画事件，并设置 280ms 延时兜底，带 HIDE_SEQ 防抖）
 pub fn request_hide_overlay_gracefully(app: &AppHandle) {
     if is_overlay_pinned() {
         return;
     }
+    let seq = HIDE_SEQ.fetch_add(1, Ordering::SeqCst) + 1;
     // 向前端广播退场动画事件
     let _ = app.emit("request-overlay-hide", ());
 
-    // 启动 150ms 延时兜底线程，确保在前端未响应时依然安全隐藏
+    // 启动 280ms 延时兜底线程，确保在前端未响应时依然安全隐藏
     let app_handle = app.clone();
     thread::spawn(move || {
-        thread::sleep(Duration::from_millis(150));
-        hide_overlay_if_unpinned(&app_handle);
+        thread::sleep(Duration::from_millis(280));
+        // 若期间有新的选词任务触发，自动取消兜底隐藏
+        if HIDE_SEQ.load(Ordering::SeqCst) == seq {
+            hide_overlay_if_unpinned(&app_handle);
+        }
     });
 }
 
@@ -101,52 +108,69 @@ pub fn is_drag_valid(p1: (i32, i32), p2: (i32, i32), min_distance: f64) -> bool 
     calc_drag_distance(p1, p2) >= min_distance
 }
 
-/// 校验选中文本的有效性
+/// 校验选中文本是否有效（非空且大于最小长度要求）
 pub fn is_text_valid(text: &str, min_len: usize) -> bool {
     let trimmed = text.trim();
-    !trimmed.is_empty() && trimmed.chars().count() >= min_len
+    if trimmed.is_empty() {
+        return false;
+    }
+    // 计算有效字符数（忽略纯空白）
+    trimmed.chars().count() >= min_len
 }
 
-/// 检查修饰键过滤是否满足
+/// 检查触发修饰键是否满足条件
 pub fn is_modifier_satisfied(modifier: &str) -> bool {
-    unsafe {
-        match modifier {
-            "Ctrl" => (GetKeyState(VK_CONTROL as i32) as u16 & 0x8000) != 0,
-            "Alt" => (GetKeyState(VK_MENU as i32) as u16 & 0x8000) != 0,
-            "Shift" => (GetKeyState(VK_SHIFT as i32) as u16 & 0x8000) != 0,
-            _ => true, // "None" 或未配置时默认满足
-        }
+    match modifier.to_lowercase().as_str() {
+        "ctrl" => unsafe {
+            (GetAsyncKeyState(VK_CONTROL as i32) as u16 & 0x8000) != 0
+        },
+        "alt" => unsafe {
+            (GetAsyncKeyState(VK_MENU as i32) as u16 & 0x8000) != 0
+        },
+        "shift" => unsafe {
+            (GetAsyncKeyState(VK_SHIFT as i32) as u16 & 0x8000) != 0
+        },
+        _ => true, // "none" 或其他值默认无修饰键要求
     }
 }
 
-/// 获取当前前台窗口所属的进程文件名（如 "Code.exe"）
+/// 获取当前前台窗口所属的进程文件名（如 "notepad.exe", "chrome.exe"）
 pub fn get_foreground_process_name() -> Option<String> {
     unsafe {
         let hwnd = GetForegroundWindow();
         if hwnd.is_null() {
             return None;
         }
-        let mut process_id: u32 = 0;
-        GetWindowThreadProcessId(hwnd, &mut process_id);
-        if process_id == 0 {
+
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == 0 {
             return None;
         }
 
-        let process_handle = OpenProcess(
+        let h_proc = OpenProcess(
             PROCESS_QUERY_LIMITED_INFORMATION,
             0,
-            process_id,
+            pid,
         );
-        if process_handle.is_null() {
+
+        if h_proc.is_null() {
             return None;
         }
 
-        let mut buffer = [0u16; MAX_PATH as usize];
+        let mut buffer = [0u16; 1024];
         let mut size = buffer.len() as u32;
-        let success = QueryFullProcessImageNameW(process_handle, 0, buffer.as_mut_ptr(), &mut size);
-        CloseHandle(process_handle);
 
-        if success != 0 && size > 0 {
+        let ok = QueryFullProcessImageNameW(
+            h_proc,
+            0,
+            buffer.as_mut_ptr(),
+            &mut size,
+        );
+
+        CloseHandle(h_proc);
+
+        if ok != 0 && size > 0 {
             let full_path = String::from_utf16_lossy(&buffer[..size as usize]);
             let file_name = std::path::Path::new(&full_path)
                 .file_name()
@@ -220,8 +244,9 @@ pub fn simulate_ctrl_c() {
     }
 }
 
-/// 安全提取选中文本（备份原始剪贴板 -> 复制选区 -> 恢复原剪贴板）
+/// 安全提取选中文本（单例互斥锁保护：备份原始剪贴板 -> 复制选区 -> 恢复原剪贴板）
 pub fn extract_selected_text_safely() -> Option<String> {
+    let _guard = CLIPBOARD_LOCK.lock().ok()?;
     let mut clipboard = Clipboard::new().ok()?;
     
     // 1. 备份原剪贴板文本
@@ -262,13 +287,26 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
             };
 
             if msg == WM_LBUTTONDOWN {
+                let mut is_potential_dbl_click = false;
+                let dbl_click_time_ms = GetDoubleClickTime() as u128;
+                let now = Instant::now();
+
                 if let Ok(mut state) = CLICK_STATE.lock() {
                     state.last_down_pos = Some((x, y));
+                    if let Some(last_up) = state.last_up_time {
+                        let elapsed = now.duration_since(last_up).as_millis();
+                        let dist = calc_drag_distance(state.last_up_pos, (x, y));
+                        // 若距离上次抬起在系统双击窗口期内且位移极小，判定可能处于双击/三击动作中
+                        if elapsed <= dbl_click_time_ms && dist <= 8.0 {
+                            is_potential_dbl_click = true;
+                        }
+                    }
                 }
 
-                // 若在悬浮窗外部按下左键，且悬浮窗非固定，平滑请求隐藏悬浮窗
+                // 若在悬浮窗外部按下左键，且悬浮窗非固定：
+                // 若处于双击中途，则智能拦截即时隐藏广播，避免双击时“先闪退再弹出”
                 if let Some(ref handle) = app_handle {
-                    if !is_point_inside_overlay(handle, x, y) {
+                    if !is_point_inside_overlay(handle, x, y) && !is_potential_dbl_click {
                         request_hide_overlay_gracefully(handle);
                     }
                 }
@@ -329,8 +367,9 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                     };
 
                     if !inside_overlay {
-                        // 异步处理选词与弹窗，不阻塞当前钩子链
-                        trigger_selection_detection_async((x, y));
+                        // 递增全局任务序列号并派发异步取词
+                        let seq = SELECTION_SEQ.fetch_add(1, Ordering::SeqCst) + 1;
+                        trigger_selection_detection_async((x, y), seq, is_double_or_triple);
                     }
                 }
             }
@@ -374,11 +413,17 @@ pub fn set_app_handle(handle: AppHandle) {
     }
 }
 
-fn trigger_selection_detection_async(cursor_pos: (i32, i32)) {
+fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_double_or_triple: bool) {
     thread::spawn(move || {
         let _ = std::panic::catch_unwind(move || {
-            // 短暂延时以等待宿主窗口选区稳定
-            thread::sleep(Duration::from_millis(60));
+            // 等待宿主窗口选区稳定（双击在复杂应用中等待 75ms，普通拖选等待 55ms）
+            let wait_ms = if is_double_or_triple { 75 } else { 55 };
+            thread::sleep(Duration::from_millis(wait_ms));
+
+            // 防抖校验：若期间有更新的操作产生，废弃旧任务
+            if SELECTION_SEQ.load(Ordering::SeqCst) != task_seq {
+                return;
+            }
 
             let app_handle = {
                 if let Ok(h) = APP_HANDLE.lock() {
@@ -425,7 +470,15 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32)) {
             }
 
             if let Some(text) = extract_selected_text_safely() {
+                // 提取完成后再次进行防抖校验
+                if SELECTION_SEQ.load(Ordering::SeqCst) != task_seq {
+                    return;
+                }
+
                 if is_text_valid(&text, min_len) {
+                    // 取消任何待处理的隐藏操作
+                    HIDE_SEQ.fetch_add(1, Ordering::SeqCst);
+
                     // 触发全局划词事件
                     #[derive(serde::Serialize, Clone)]
                     #[serde(rename_all = "camelCase")]

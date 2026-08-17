@@ -64,15 +64,15 @@ export default {
           "100%": { opacity: "1", transform: "scale(1)" },
         },
         "capsule-in": {
-          "0%": { opacity: "0", transform: "scale(0.96) translateY(2.5px)" },
+          "0%": { opacity: "0", transform: "scale(0.94) translateY(3.5px)" },
           "100%": { opacity: "1", transform: "scale(1) translateY(0)" },
         },
         "capsule-out": {
           "0%": { opacity: "1", transform: "scale(1) translateY(0)" },
-          "100%": { opacity: "0", transform: "scale(0.97) translateY(1px)" },
+          "100%": { opacity: "0", transform: "scale(0.96) translateY(1.5px)" },
         },
         "spring-popup": {
-          "0%": { opacity: "0", transform: "scale(0.96) translateY(2.5px)" },
+          "0%": { opacity: "0", transform: "scale(0.94) translateY(3.5px)" },
           "100%": { opacity: "1", transform: "scale(1) translateY(0)" },
         },
         "pulse-subtle": {
@@ -86,10 +86,10 @@ export default {
       },
       animation: {
         "fade-in": "fade-in 0.15s ease-out",
-        "zoom-spring": "zoom-in-spring 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
-        "capsule-in": "capsule-in 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
-        "capsule-out": "capsule-out 100ms cubic-bezier(0.4, 0, 1, 1) forwards",
-        "spring-popup": "capsule-in 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "zoom-spring": "zoom-in-spring 160ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "capsule-in": "capsule-in 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "capsule-out": "capsule-out 90ms cubic-bezier(0.4, 0, 1, 1) forwards",
+        "spring-popup": "capsule-in 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "pulse-subtle": "pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         "glow-pulse": "glow-pulse 2.5s ease-in-out infinite",
       },
