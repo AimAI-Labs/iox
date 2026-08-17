@@ -42,9 +42,9 @@ export function useOverlayState(config: AppConfig | null) {
   // 调整窗口尺寸
   const updateWindowSize = useCallback(async (newMode: OverlayMode, allowFocus = false) => {
     if (newMode === 'bubble') {
-      await invoke('resize_overlay', { width: 280, height: 44, allowFocus: false });
+      await invoke('resize_overlay', { width: 440, height: 48, allowFocus: false });
     } else {
-      await invoke('resize_overlay', { width: 460, height: 380, allowFocus });
+      await invoke('resize_overlay', { width: 460, height: 400, allowFocus });
     }
   }, []);
 

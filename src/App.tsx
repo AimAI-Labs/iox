@@ -35,6 +35,21 @@ export function App() {
     }
   };
 
+  // 响应主题切换
+  useEffect(() => {
+    if (!config) return;
+    const root = document.documentElement;
+    const isDark =
+      config.general.theme === 'dark' ||
+      (config.general.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+    if (isDark) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [config]);
+
   // 全局 Esc 键监听
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -48,11 +63,11 @@ export function App() {
 
   if (loading || !config) {
     return (
-      <div className="loading-state" style={{ minHeight: '100vh', background: '#0f1117' }}>
-        <div className="pulse-dots">
-          <span />
-          <span />
-          <span />
+      <div className="flex items-center justify-center min-h-screen bg-zinc-950">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.3s]" />
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.15s]" />
+          <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" />
         </div>
       </div>
     );
@@ -65,6 +80,7 @@ export function App() {
         {overlayState.mode === 'bubble' ? (
           <BubbleBar
             actions={config.actions}
+            selectedText={overlayState.selectedText}
             onActionClick={overlayState.handleTriggerAction}
             onOpenSettings={handleOpenSettings}
           />

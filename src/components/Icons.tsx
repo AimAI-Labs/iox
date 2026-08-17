@@ -1,5 +1,6 @@
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 
 interface IconProps {
   name: string;
@@ -7,12 +8,36 @@ interface IconProps {
   size?: number;
 }
 
+/**
+ * 统一使用 Lucide 图标的动态映射组件
+ */
 export const DynamicIcon: React.FC<IconProps> = ({ name, className = '', size = 16 }) => {
-  // @ts-expect-error Lucide icons indexed by dynamic string name
-  const IconComponent = LucideIcons[name] || LucideIcons.Sparkles;
+  if (!name) {
+    return <Sparkles size={size} className={className} />;
+  }
+
+  // 映射常见中文/英文别名到 Lucide 官方图标名
+  const iconAliases: Record<string, string> = {
+    Search: 'Search',
+    Languages: 'Languages',
+    Translate: 'Languages',
+    FileText: 'FileText',
+    Summary: 'FileText',
+    Copy: 'Copy',
+    MessageSquare: 'MessageSquare',
+    Bot: 'Bot',
+    Chat: 'MessageSquare',
+    Sparkles: 'Sparkles',
+    HelpCircle: 'HelpCircle',
+    Settings: 'Settings',
+    Wand2: 'Wand2',
+  };
+
+  const resolvedName = iconAliases[name] || name;
+
+  // @ts-expect-error Lucide icons dynamically looked up
+  const IconComponent = LucideIcons[resolvedName] || LucideIcons[name] || Sparkles;
   return <IconComponent size={size} className={className} />;
 };
 
-export {
-  LucideIcons
-};
+export { LucideIcons };
