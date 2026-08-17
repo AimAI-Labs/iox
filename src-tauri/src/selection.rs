@@ -40,14 +40,12 @@ pub fn is_overlay_pinned() -> bool {
 /// 检查指定屏幕物理坐标 (x, y) 是否落在 Overlay 窗口内
 pub fn is_point_inside_overlay(app: &AppHandle, x: i32, y: i32) -> bool {
     if let Some(window) = app.get_webview_window("overlay") {
-        if let Ok(visible) = window.is_visible() {
-            if !visible {
-                return false;
-            }
-            if let Ok(hwnd) = window.hwnd() {
-                unsafe {
+        if let Ok(hwnd) = window.hwnd() {
+            unsafe {
+                let hwnd_raw = hwnd.0 as HWND;
+                if IsWindowVisible(hwnd_raw) != 0 {
                     let mut rect: RECT = std::mem::zeroed();
-                    if GetWindowRect(hwnd.0 as HWND, &mut rect) != 0 {
+                    if GetWindowRect(hwnd_raw, &mut rect) != 0 {
                         return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
                     }
                 }
@@ -63,11 +61,15 @@ pub fn hide_overlay_if_unpinned(app: &AppHandle) {
         return;
     }
     if let Some(window) = app.get_webview_window("overlay") {
-        if let Ok(visible) = window.is_visible() {
-            if visible {
-                let _ = window.hide();
+        if let Ok(hwnd) = window.hwnd() {
+            unsafe {
+                let hwnd_raw = hwnd.0 as HWND;
+                if IsWindowVisible(hwnd_raw) != 0 {
+                    ShowWindow(hwnd_raw, SW_HIDE);
+                }
             }
         }
+        let _ = window.hide();
     }
 }
 
@@ -254,8 +256,8 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                         hide_overlay_if_unpinned(handle);
                     }
                 }
-            } else if msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN {
-                // 右键或中键点击外部也自动隐藏
+            } else if msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN || msg == WM_MOUSEWHEEL {
+                // 右键、中键点击或滚轮滚动外部也自动隐藏
                 if let Some(ref handle) = app_handle {
                     if !is_point_inside_overlay(handle, x, y) {
                         hide_overlay_if_unpinned(handle);
@@ -313,6 +315,33 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                     if !inside_overlay {
                         // 异步处理选词与弹窗，不阻塞当前钩子链
                         trigger_selection_detection_async((x, y));
+                    }
+                }
+            }
+        }
+    });
+    CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param)
+}
+
+/// 键盘低级钩子回调（用于在未固定状态下按 Esc 或光标方向键时关闭悬浮窗）
+unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
+    let _ = std::panic::catch_unwind(|| {
+        if n_code >= 0 && l_param != 0 {
+            let kbd_struct = *(l_param as *const KBDLLHOOKSTRUCT);
+            let vk = kbd_struct.vkCode as u16;
+            let msg = w_param as u32;
+
+            if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
+                if vk == VK_ESCAPE || vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP || vk == VK_DOWN {
+                    let app_handle = {
+                        if let Ok(h) = APP_HANDLE.lock() {
+                            h.clone()
+                        } else {
+                            None
+                        }
+                    };
+                    if let Some(ref handle) = app_handle {
+                        hide_overlay_if_unpinned(handle);
                     }
                 }
             }
@@ -406,7 +435,7 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32)) {
     });
 }
 
-/// 启动全局鼠标监听线程
+/// 启动全局鼠标与键盘监听线程
 pub fn start_mouse_hook(handle: AppHandle) {
     set_app_handle(handle);
     if HOOK_ACTIVE.swap(true, Ordering::SeqCst) {
@@ -415,14 +444,20 @@ pub fn start_mouse_hook(handle: AppHandle) {
 
     thread::spawn(|| {
         unsafe {
-            let hook = SetWindowsHookExW(
+            let mouse_hook = SetWindowsHookExW(
                 WH_MOUSE_LL,
                 Some(mouse_hook_proc),
                 std::ptr::null_mut(),
                 0,
             );
+            let kbd_hook = SetWindowsHookExW(
+                WH_KEYBOARD_LL,
+                Some(keyboard_hook_proc),
+                std::ptr::null_mut(),
+                0,
+            );
 
-            if hook.is_null() {
+            if mouse_hook.is_null() && kbd_hook.is_null() {
                 HOOK_ACTIVE.store(false, Ordering::SeqCst);
                 return;
             }
@@ -433,7 +468,12 @@ pub fn start_mouse_hook(handle: AppHandle) {
                 DispatchMessageW(&msg);
             }
 
-            UnhookWindowsHookEx(hook);
+            if !mouse_hook.is_null() {
+                UnhookWindowsHookEx(mouse_hook);
+            }
+            if !kbd_hook.is_null() {
+                UnhookWindowsHookEx(kbd_hook);
+            }
             HOOK_ACTIVE.store(false, Ordering::SeqCst);
         }
     });

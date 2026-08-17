@@ -107,8 +107,10 @@ pub fn show_overlay_at(
                     phys_height,
                     SWP_NOACTIVATE | SWP_SHOWWINDOW,
                 );
+                ShowWindow(hwnd_raw, SW_SHOWNOACTIVATE);
             }
         }
+        let _ = window.show();
     }
 }
 
@@ -153,6 +155,11 @@ pub fn resize_overlay_window(
 
 /// 隐藏悬浮窗
 pub fn hide_overlay_window(window: &WebviewWindow) {
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe {
+            ShowWindow(hwnd.0 as HWND, SW_HIDE);
+        }
+    }
     let _ = window.hide();
 }
 
