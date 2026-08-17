@@ -168,101 +168,119 @@ pub fn extract_selected_text_safely() -> Option<String> {
 
 /// 鼠标低级钩子回调
 unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
-    if n_code >= 0 {
-        let hook_struct = *(l_param as *const MSLLHOOKSTRUCT);
-        let x = hook_struct.pt.x;
-        let y = hook_struct.pt.y;
+    let _ = std::panic::catch_unwind(|| {
+        if n_code >= 0 && l_param != 0 {
+            let hook_struct = *(l_param as *const MSLLHOOKSTRUCT);
+            let x = hook_struct.pt.x;
+            let y = hook_struct.pt.y;
 
-        if w_param as u32 == WM_LBUTTONDOWN {
-            let mut last_pos = LAST_DOWN_POS.lock().unwrap();
-            *last_pos = Some((x, y));
-        } else if w_param as u32 == WM_LBUTTONUP {
-            let start_pos = {
-                let mut last_pos = LAST_DOWN_POS.lock().unwrap();
-                last_pos.take()
-            };
+            if w_param as u32 == WM_LBUTTONDOWN {
+                if let Ok(mut last_pos) = LAST_DOWN_POS.lock() {
+                    *last_pos = Some((x, y));
+                }
+            } else if w_param as u32 == WM_LBUTTONUP {
+                let start_pos = {
+                    if let Ok(mut last_pos) = LAST_DOWN_POS.lock() {
+                        last_pos.take()
+                    } else {
+                        None
+                    }
+                };
 
-            if let Some(p1) = start_pos {
-                let p2 = (x, y);
-                // 拖拽距离阈值 6px
-                if is_drag_valid(p1, p2, 6.0) {
-                    // 异步处理选词与弹窗，不阻塞当前钩子链
-                    trigger_selection_detection_async(p2);
+                if let Some(p1) = start_pos {
+                    let p2 = (x, y);
+                    // 拖拽距离阈值 6px
+                    if is_drag_valid(p1, p2, 6.0) {
+                        // 异步处理选词与弹窗，不阻塞当前钩子链
+                        trigger_selection_detection_async(p2);
+                    }
                 }
             }
         }
-    }
+    });
     CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param)
 }
 
 static APP_HANDLE: std::sync::Mutex<Option<AppHandle>> = std::sync::Mutex::new(None);
 
 pub fn set_app_handle(handle: AppHandle) {
-    let mut h = APP_HANDLE.lock().unwrap();
-    *h = Some(handle);
+    if let Ok(mut h) = APP_HANDLE.lock() {
+        *h = Some(handle);
+    }
 }
 
 fn trigger_selection_detection_async(cursor_pos: (i32, i32)) {
     thread::spawn(move || {
-        // 短暂延时以等待宿主窗口选区稳定
-        thread::sleep(Duration::from_millis(60));
+        let _ = std::panic::catch_unwind(move || {
+            // 短暂延时以等待宿主窗口选区稳定
+            thread::sleep(Duration::from_millis(60));
 
-        let app_handle = {
-            let h = APP_HANDLE.lock().unwrap();
-            h.clone()
-        };
+            let app_handle = {
+                if let Ok(h) = APP_HANDLE.lock() {
+                    h.clone()
+                } else {
+                    None
+                }
+            };
 
-        let Some(handle) = app_handle else { return };
+            let Some(handle) = app_handle else { return };
 
-        // 检查配置
-        let (auto_popup, min_len, modifier, blacklist) = {
-            let state = handle.state::<crate::AppState>();
-            let config = state.config.lock().unwrap();
-            (
-                config.general.auto_popup_on_selection,
-                config.general.min_selection_length,
-                config.general.trigger_modifier.clone(),
-                config.blacklist.clone(),
-            )
-        };
+            // 检查配置
+            let (auto_popup, min_len, modifier, blacklist) = {
+                if let Some(state) = handle.try_state::<crate::AppState>() {
+                    if let Ok(config) = state.config.lock() {
+                        (
+                            config.general.auto_popup_on_selection,
+                            config.general.min_selection_length,
+                            config.general.trigger_modifier.clone(),
+                            config.blacklist.clone(),
+                        )
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            };
 
-        if !auto_popup {
-            return;
-        }
-
-        if !is_modifier_satisfied(&modifier) {
-            return;
-        }
-
-        if let Some(proc_name) = get_foreground_process_name() {
-            if blacklist.iter().any(|b: &String| b.eq_ignore_ascii_case(&proc_name)) {
+            if !auto_popup {
                 return;
             }
-        }
 
-        if let Some(text) = extract_selected_text_safely() {
-            if is_text_valid(&text, min_len) {
-                // 触发全局划词事件
-                #[derive(serde::Serialize, Clone)]
-                #[serde(rename_all = "camelCase")]
-                struct SelectionPayload {
-                    text: String,
-                    cursor_x: i32,
-                    cursor_y: i32,
-                }
-
-                let payload = SelectionPayload {
-                    text: text.clone(),
-                    cursor_x: cursor_pos.0,
-                    cursor_y: cursor_pos.1,
-                };
-
-                let _ = handle.emit("selection-triggered", payload);
-                
-                // 调度窗口定位与展示
-                crate::window_manager::show_overlay_at(&handle, cursor_pos.0, cursor_pos.1, 260, 42);
+            if !is_modifier_satisfied(&modifier) {
+                return;
             }
-        }
+
+            if let Some(proc_name) = get_foreground_process_name() {
+                if blacklist.iter().any(|b: &String| b.eq_ignore_ascii_case(&proc_name)) {
+                    return;
+                }
+            }
+
+            if let Some(text) = extract_selected_text_safely() {
+                if is_text_valid(&text, min_len) {
+                    // 触发全局划词事件
+                    #[derive(serde::Serialize, Clone)]
+                    #[serde(rename_all = "camelCase")]
+                    struct SelectionPayload {
+                        text: String,
+                        cursor_x: i32,
+                        cursor_y: i32,
+                    }
+
+                    let payload = SelectionPayload {
+                        text: text.clone(),
+                        cursor_x: cursor_pos.0,
+                        cursor_y: cursor_pos.1,
+                    };
+
+                    let _ = handle.emit("selection-triggered", payload);
+                    
+                    // 调度窗口定位与展示
+                    crate::window_manager::show_overlay_at(&handle, cursor_pos.0, cursor_pos.1, 280, 44);
+                }
+            }
+        });
     });
 }
 
