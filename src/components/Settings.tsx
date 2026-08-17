@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AppConfig, ProviderConfig, ActionConfig } from '../types/config';
 import { DynamicIcon } from './Icons';
+import { MacTitleBar } from './MacTitleBar';
 import {
   Cpu,
   Zap,
@@ -108,9 +109,12 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   };
 
   return (
-    <div className="settings-page">
-      {/* 侧边导航栏 */}
-      <div className="settings-sidebar">
+    <div className="settings-page-wrapper">
+      <div className="settings-page">
+        <MacTitleBar title="IOX 设置" />
+        <div className="settings-body">
+          {/* 侧边导航栏 */}
+          <div className="settings-sidebar">
         <div className="settings-brand">
           <div className="brand-logo">IOX</div>
           <span className="brand-subtitle">划词 AI 助手</span>
@@ -509,5 +513,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
         )}
       </div>
     </div>
-  );
+  </div>
+</div>
+);
 };

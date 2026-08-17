@@ -166,22 +166,133 @@
   padding: 0;
 }
 
-/* Settings 页面兼容样式保留 */
-.settings-page {
+/* Mac Style TitleBar - 无缝沉浸式 */
+.mac-titlebar {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  min-height: 38px;
+  background: transparent;
+  padding: 0 16px;
+  user-select: none;
+  z-index: 50;
+  box-sizing: border-box;
+}
+
+.mac-traffic-lights {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 70px;
+  pointer-events: auto;
+}
+
+.traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+  transition: filter 0.15s ease, transform 0.1s ease;
+  pointer-events: auto;
+}
+
+.traffic-light:hover {
+  filter: brightness(0.9);
+}
+
+.traffic-light:active {
+  transform: scale(0.92);
+  filter: brightness(0.8);
+}
+
+.traffic-light-close {
+  background-color: #ff5f56;
+  border-color: #e0443e;
+  color: #4c0000;
+}
+
+.traffic-light-minimize {
+  background-color: #ffbd2e;
+  border-color: #dea123;
+  color: #5c3b00;
+}
+
+.traffic-light-maximize {
+  background-color: #27c93f;
+  border-color: #1aab29;
+  color: #003e00;
+}
+
+.traffic-icon {
+  width: 7px;
+  height: 7px;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.mac-titlebar-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #9ca3af;
+  letter-spacing: -0.2px;
+  text-align: center;
+  flex: 1;
+}
+
+.mac-titlebar-placeholder {
+  width: 70px;
+}
+
+/* Settings 页面根容器 - 微透明边距保证圆角抗锯齿 */
+.settings-page-wrapper {
   width: 100vw;
   height: 100vh;
-  background: #0f1117;
+  padding: 2px;
+  background: transparent !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Settings 核心卡片 - 纯净 macOS 圆角无阴影 */
+.settings-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #13151f;
   color: #f3f4f6;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: none;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.settings-body {
+  display: flex;
+  flex: 1;
+  height: calc(100% - 38px);
+  overflow: hidden;
 }
 
 .settings-sidebar {
   width: 220px;
-  background: #141721;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.015);
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
   display: flex;
   flex-direction: column;
-  padding: 20px 14px;
+  padding: 12px 14px 16px 14px;
+  overflow-y: auto;
 }
 
 .settings-brand {

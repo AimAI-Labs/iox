@@ -30,6 +30,9 @@
         "width": 900,
         "height": 640,
         "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
         "visible": true
       }
     ],

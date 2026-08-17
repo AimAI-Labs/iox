@@ -121,9 +121,46 @@ fn resize_overlay(
 #[tauri::command]
 fn show_main_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
+        if let Ok(hwnd) = window.hwnd() {
+            window_manager::apply_main_window_native_style(hwnd.0 as _);
+        }
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        Ok(())
+    } else {
+        Err("Main window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn hide_main_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+        Ok(())
+    } else {
+        Err("Main window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn minimize_main_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.minimize();
+        Ok(())
+    } else {
+        Err("Main window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn toggle_maximize_main_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_maximized().unwrap_or(false) {
+            let _ = window.unmaximize();
+        } else {
+            let _ = window.maximize();
+        }
         Ok(())
     } else {
         Err("Main window not found".to_string())
@@ -170,6 +207,11 @@ pub fn run() {
         .manage(app_state)
         .setup(|app| {
             let handle = app.handle().clone();
+            if let Some(main_win) = app.get_webview_window("main") {
+                if let Ok(hwnd) = main_win.hwnd() {
+                    window_manager::apply_main_window_native_style(hwnd.0 as _);
+                }
+            }
             // 启动全局鼠标划词钩子
             selection::start_mouse_hook(handle);
             Ok(())
@@ -183,6 +225,9 @@ pub fn run() {
             resize_overlay,
             hide_overlay,
             show_main_window,
+            hide_main_window,
+            minimize_main_window,
+            toggle_maximize_main_window,
             set_pin_state,
             set_drag_state,
             start_overlay_dragging

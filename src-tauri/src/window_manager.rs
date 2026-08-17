@@ -2,9 +2,25 @@ use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, WebviewWindow};
 use windows_sys::Win32::Foundation::*;
+use windows_sys::Win32::Graphics::Dwm::*;
 use windows_sys::Win32::Graphics::Gdi::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
+
+/// 为主设置窗口启用 Windows 11/10 原生 DWM 硬件级抗锯齿圆角与平滑阴影
+pub fn apply_main_window_native_style(hwnd: HWND) {
+    unsafe {
+        // DWMWA_WINDOW_CORNER_PREFERENCE = 33
+        // DWMWCP_ROUND = 2 (圆角)
+        let corner_preference: u32 = 2;
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            33, // DWMWA_WINDOW_CORNER_PREFERENCE
+            &corner_preference as *const _ as *const _,
+            std::mem::size_of::<u32>() as u32,
+        );
+    }
+}
 
 /// 为指定窗口注入 WS_EX_NOACTIVATE 扩展样式
 pub fn apply_no_activate_style(hwnd: HWND) {
