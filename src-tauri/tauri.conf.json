@@ -12,9 +12,25 @@
   "app": {
     "windows": [
       {
-        "title": "iox",
-        "width": 800,
-        "height": 600
+        "label": "overlay",
+        "title": "IOX Overlay",
+        "width": 260,
+        "height": 42,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": false
+      },
+      {
+        "label": "main",
+        "title": "IOX - 划词 AI 助手",
+        "width": 900,
+        "height": 640,
+        "resizable": true,
+        "visible": true
       }
     ],
     "security": {
