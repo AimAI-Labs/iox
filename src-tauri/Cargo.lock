@@ -1938,6 +1938,7 @@ dependencies = [
  "arboard",
  "eventsource-stream",
  "futures-util",
+ "open",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -1946,6 +1947,7 @@ dependencies = [
  "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
  "tokio",
+ "tokio-util",
  "windows-sys 0.59.0",
 ]
 
