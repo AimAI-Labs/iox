@@ -11,6 +11,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 static HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
 static IS_PINNED: AtomicBool = AtomicBool::new(false);
+static IS_DRAGGING_OVERLAY: AtomicBool = AtomicBool::new(false);
 static SELECTION_SEQ: AtomicU64 = AtomicU64::new(0);
 static HIDE_SEQ: AtomicU64 = AtomicU64::new(0);
 static CLIPBOARD_LOCK: Mutex<()> = Mutex::new(());
@@ -29,6 +30,16 @@ static CLICK_STATE: Mutex<ClickState> = Mutex::new(ClickState {
     last_up_time: None,
     click_count: 0,
 });
+
+/// 设置 Overlay 的拖动状态
+pub fn set_dragging_overlay(dragging: bool) {
+    IS_DRAGGING_OVERLAY.store(dragging, Ordering::SeqCst);
+}
+
+/// 查询 Overlay 是否正在被拖动
+pub fn is_dragging_overlay() -> bool {
+    IS_DRAGGING_OVERLAY.load(Ordering::SeqCst)
+}
 
 /// 设置 Overlay 的 Pin 固定状态
 pub fn set_overlay_pinned(pinned: bool) {
@@ -358,7 +369,7 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                     }
                 }
 
-                if is_drag || is_double_or_triple {
+                if (is_drag || is_double_or_triple) && !is_dragging_overlay() {
                     // 若点击在悬浮窗内部，不触发选词逻辑
                     let inside_overlay = if let Some(ref handle) = app_handle {
                         is_point_inside_overlay(handle, x, y)

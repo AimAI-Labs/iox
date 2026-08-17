@@ -1,6 +1,9 @@
+use std::thread;
+use std::time::Duration;
 use tauri::{AppHandle, Manager, WebviewWindow};
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Gdi::*;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 /// 为指定窗口注入 WS_EX_NOACTIVATE 扩展样式
@@ -161,6 +164,45 @@ pub fn hide_overlay_window(window: &WebviewWindow) {
         }
     }
     let _ = window.hide();
+}
+
+/// 在独立阻塞线程中执行 120FPS 物理光标硬件级实时拖拽循环（0 IPC 开销，彻底消除卡顿）
+pub fn run_overlay_drag_loop(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("overlay") {
+        if let Ok(hwnd) = window.hwnd() {
+            let hwnd_raw = hwnd.0 as HWND;
+            unsafe {
+                crate::selection::set_dragging_overlay(true);
+                let mut cursor_start: POINT = std::mem::zeroed();
+                let mut win_rect: RECT = std::mem::zeroed();
+
+                if GetCursorPos(&mut cursor_start) != 0 && GetWindowRect(hwnd_raw, &mut win_rect) != 0 {
+                    let offset_x = cursor_start.x - win_rect.left;
+                    let offset_y = cursor_start.y - win_rect.top;
+
+                    while (GetAsyncKeyState(VK_LBUTTON as i32) as u16 & 0x8000) != 0 {
+                        let mut current_cursor: POINT = std::mem::zeroed();
+                        if GetCursorPos(&mut current_cursor) != 0 {
+                            let new_x = current_cursor.x - offset_x;
+                            let new_y = current_cursor.y - offset_y;
+                            SetWindowPos(
+                                hwnd_raw,
+                                std::ptr::null_mut(),
+                                new_x,
+                                new_y,
+                                0,
+                                0,
+                                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+                            );
+                        }
+                        thread::sleep(Duration::from_millis(8));
+                    }
+                }
+                thread::sleep(Duration::from_millis(40));
+                crate::selection::set_dragging_overlay(false);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

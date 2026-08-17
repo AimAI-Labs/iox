@@ -3,6 +3,7 @@ import { ActionConfig } from '../types/config';
 import { DynamicIcon } from './Icons';
 import { GripVertical, MoreHorizontal, Check, Copy, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useWindowDrag } from '../hooks/useWindowDrag';
 
 interface BubbleBarProps {
   actions: ActionConfig[];
@@ -20,6 +21,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   onOpenSettings,
 }) => {
   const [copied, setCopied] = useState(false);
+  const { handleMouseDown } = useWindowDrag();
   const enabledActions = actions.filter((a) => a.enabled);
 
   // 快捷复制当前选中文本
@@ -38,12 +40,13 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   return (
     <div className="flex items-center justify-center w-full h-full select-none">
       <div
+        onMouseDown={handleMouseDown}
         className={cn(
           "inline-flex items-center h-[30px] px-1.5 py-0.5 gap-0.5",
           "capsule-glass",
           "rounded-lg",
-          "shadow-md",
           "border border-zinc-200/80 dark:border-zinc-800/80",
+          "cursor-grab active:cursor-grabbing",
           isClosing ? "animate-capsule-out" : "animate-capsule-in"
         )}
       >
@@ -63,22 +66,23 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
 
         {/* 2. 品牌 AI Logo Badge */}
         <div
+          data-tauri-drag-region
           className={cn(
             "relative flex items-center justify-center w-5 h-5 rounded",
             "bg-gradient-to-tr from-blue-500/10 to-indigo-500/10 dark:from-blue-400/20 dark:to-indigo-400/20",
             "border border-blue-500/20 dark:border-blue-400/30",
-            "group cursor-default transition-all duration-200 hover:scale-105"
+            "group cursor-grab active:cursor-grabbing transition-all duration-200 hover:scale-105"
           )}
           title="IOX AI 划词助手"
         >
           <Sparkles
             size={11}
-            className="text-blue-600 dark:text-blue-400 transition-transform duration-200 group-hover:rotate-12 fill-blue-500/20"
+            className="text-blue-600 dark:text-blue-400 transition-transform duration-200 group-hover:rotate-12 fill-blue-500/20 pointer-events-none"
           />
         </div>
 
         {/* 3. 动作按钮组 */}
-        <div className="flex items-center gap-[2px]">
+        <div data-tauri-drag-region className="flex items-center gap-[2px]">
           {enabledActions.map((action) => {
             const isCopyAction = action.id === 'act_copy' || action.name === '复制';
 
@@ -87,6 +91,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                 <button
                   key={action.id}
                   onClick={handleQuickCopy}
+                  onMouseDown={(e) => e.stopPropagation()}
                   className={cn(
                     "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded",
                     "text-[11.5px] font-medium tracking-tight whitespace-nowrap cursor-pointer",
@@ -113,6 +118,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
               <button
                 key={action.id}
                 onClick={() => onActionClick(action)}
+                onMouseDown={(e) => e.stopPropagation()}
                 className={cn(
                   "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded",
                   "text-[11.5px] font-medium tracking-tight whitespace-nowrap cursor-pointer",
@@ -132,12 +138,13 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         </div>
 
         {/* 4. 精致渐变分割线 */}
-        <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5" />
+        <div data-tauri-drag-region className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5 cursor-grab active:cursor-grabbing" />
 
         {/* 5. 更多与设置按钮 */}
         {onOpenSettings && (
           <button
             onClick={onOpenSettings}
+            onMouseDown={(e) => e.stopPropagation()}
             className={cn(
               "group inline-flex items-center justify-center w-5 h-5 rounded",
               "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100",

@@ -145,6 +145,18 @@ fn set_pin_state(pinned: bool) {
     selection::set_overlay_pinned(pinned);
 }
 
+#[tauri::command]
+fn set_drag_state(dragging: bool) {
+    selection::set_dragging_overlay(dragging);
+}
+
+#[tauri::command]
+fn start_overlay_dragging(app: AppHandle) {
+    tauri::async_runtime::spawn_blocking(move || {
+        window_manager::run_overlay_drag_loop(&app);
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial_config = AppConfig::load();
@@ -171,7 +183,9 @@ pub fn run() {
             resize_overlay,
             hide_overlay,
             show_main_window,
-            set_pin_state
+            set_pin_state,
+            set_drag_state,
+            start_overlay_dragging
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ActionConfig, ProviderConfig } from '../types/config';
 import { DynamicIcon } from './Icons';
+import { useWindowDrag } from '../hooks/useWindowDrag';
 import {
   Pin,
   PinOff,
@@ -49,6 +50,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const [copied, setCopied] = useState(false);
   const [followUpInput, setFollowUpInput] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const { handleMouseDown } = useWindowDrag();
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const provider = providers.find((p) => p.id === action.providerId);
@@ -86,18 +88,20 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         "flex flex-col w-full h-full",
         "bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl",
         "border border-zinc-200/80 dark:border-zinc-800/80",
-        "rounded-2xl shadow-2xl overflow-hidden",
+        "rounded-2xl overflow-hidden",
         isClosing ? "animate-capsule-out" : "animate-in fade-in zoom-in-95 duration-150"
       )}
     >
       {/* 头部控制栏 */}
       <div
-        data-tauri-drag-region
+        onMouseDown={handleMouseDown}
         className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-950/20 select-none cursor-move"
       >
-        <div className="flex items-center gap-2">
-          <DynamicIcon name={action.icon} size={16} className="text-blue-600 dark:text-blue-400" />
-          <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">{action.name}</span>
+        <div data-tauri-drag-region className="flex items-center gap-2">
+          <DynamicIcon name={action.icon} size={16} className="text-blue-600 dark:text-blue-400 pointer-events-none" />
+          <span data-tauri-drag-region className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 cursor-move">
+            {action.name}
+          </span>
 
           {/* 模型选择下拉 */}
           {availableModels.length > 0 && (
@@ -105,6 +109,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
               <button
                 type="button"
                 onClick={() => setShowModelPicker((prev) => !prev)}
+                onMouseDown={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
                 title="切换模型"
               >
@@ -122,6 +127,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                         onModelChange(m);
                         setShowModelPicker(false);
                       }}
+                      onMouseDown={(e) => e.stopPropagation()}
                       className={cn(
                         "w-full text-left px-2.5 py-1.5 text-xs rounded-lg transition-colors cursor-pointer",
                         m === selectedModel
@@ -138,11 +144,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-1">
+        <div data-tauri-drag-region className="flex items-center gap-1">
           {streamText && (
             <button
               type="button"
               onClick={handleCopy}
+              onMouseDown={(e) => e.stopPropagation()}
               className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
               title="复制回答"
             >
@@ -153,6 +160,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           <button
             type="button"
             onClick={onPinToggle}
+            onMouseDown={(e) => e.stopPropagation()}
             className={cn(
               "inline-flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer",
               isPinned
@@ -167,6 +175,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           <button
             type="button"
             onClick={onClose}
+            onMouseDown={(e) => e.stopPropagation()}
             className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
             title="关闭 (Esc)"
           >
