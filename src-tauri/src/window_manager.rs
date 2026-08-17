@@ -87,7 +87,11 @@ pub fn show_overlay_at(
     height: i32,
 ) {
     if let Some(window) = app.get_webview_window("overlay") {
-        let (x, y) = calculate_overlay_position(cursor_x, cursor_y, width, height);
+        let scale_factor = window.scale_factor().unwrap_or(1.0);
+        let phys_width = (width as f64 * scale_factor).round() as i32;
+        let phys_height = (height as f64 * scale_factor).round() as i32;
+
+        let (x, y) = calculate_overlay_position(cursor_x, cursor_y, phys_width, phys_height);
 
         if let Ok(hwnd) = window.hwnd() {
             let hwnd_raw = hwnd.0 as HWND;
@@ -99,8 +103,8 @@ pub fn show_overlay_at(
                     HWND_TOPMOST,
                     x,
                     y,
-                    width,
-                    height,
+                    phys_width,
+                    phys_height,
                     SWP_NOACTIVATE | SWP_SHOWWINDOW,
                 );
             }
@@ -115,6 +119,10 @@ pub fn resize_overlay_window(
     height: i32,
     allow_focus: bool,
 ) {
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    let phys_width = (width as f64 * scale_factor).round() as i32;
+    let phys_height = (height as f64 * scale_factor).round() as i32;
+
     if let Ok(hwnd) = window.hwnd() {
         let hwnd_raw = hwnd.0 as HWND;
         if allow_focus {
@@ -135,8 +143,8 @@ pub fn resize_overlay_window(
                 HWND_TOPMOST,
                 0,
                 0,
-                width,
-                height,
+                phys_width,
+                phys_height,
                 flags,
             );
         }

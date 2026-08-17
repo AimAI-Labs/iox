@@ -76,6 +76,7 @@ export function App() {
       <div className="overlay-root">
         {overlayState.mode === 'bubble' ? (
           <BubbleBar
+            key={overlayState.animKey}
             actions={config.actions}
             selectedText={overlayState.selectedText}
             onActionClick={overlayState.handleTriggerAction}

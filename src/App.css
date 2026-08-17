@@ -93,8 +93,34 @@
   align-items: center;
   justify-content: flex-start;
   background: transparent;
-  padding: 4px;
+  padding: 8px 12px;
   box-sizing: border-box;
+}
+
+@layer utilities {
+  .capsule-glass {
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 
+      0 0 0 1px rgba(0, 0, 0, 0.07),
+      0 1px 2px 0 rgba(0, 0, 0, 0.03),
+      0 4px 12px -1px rgba(0, 0, 0, 0.05),
+      0 10px 20px -3px rgba(0, 0, 0, 0.04),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.95);
+  }
+
+  .dark .capsule-glass {
+    background: rgba(24, 24, 27, 0.88);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 
+      0 0 0 1px rgba(255, 255, 255, 0.12),
+      0 1px 3px 0 rgba(0, 0, 0, 0.3),
+      0 6px 18px -2px rgba(0, 0, 0, 0.45),
+      0 12px 28px -4px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.15);
+  }
 }
 
 /* Markdown 排版细节微调 */

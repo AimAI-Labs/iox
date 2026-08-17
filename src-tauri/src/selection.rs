@@ -279,7 +279,7 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32)) {
                     let _ = handle.emit("selection-triggered", payload);
                     
                     // 调度窗口定位与展示
-                    crate::window_manager::show_overlay_at(&handle, cursor_pos.0, cursor_pos.1, 440, 48);
+                    crate::window_manager::show_overlay_at(&handle, cursor_pos.0, cursor_pos.1, 640, 60);
                 }
             }
         });

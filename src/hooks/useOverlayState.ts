@@ -35,6 +35,7 @@ export function useOverlayState(config: AppConfig | null) {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isPinned, setIsPinned] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [animKey, setAnimKey] = useState<number>(0);
 
   const activeActionRef = useRef<ActionConfig | null>(null);
   activeActionRef.current = activeAction;
@@ -42,7 +43,7 @@ export function useOverlayState(config: AppConfig | null) {
   // 调整窗口尺寸
   const updateWindowSize = useCallback(async (newMode: OverlayMode, allowFocus = false) => {
     if (newMode === 'bubble') {
-      await invoke('resize_overlay', { width: 440, height: 48, allowFocus: false });
+      await invoke('resize_overlay', { width: 640, height: 60, allowFocus: false });
     } else {
       await invoke('resize_overlay', { width: 460, height: 400, allowFocus });
     }
@@ -56,6 +57,7 @@ export function useOverlayState(config: AppConfig | null) {
       setStreamText('');
       setError(null);
       setIsLoading(false);
+      setAnimKey((prev) => prev + 1);
       updateWindowSize('bubble', false);
     });
 
@@ -198,6 +200,7 @@ export function useOverlayState(config: AppConfig | null) {
 
   return {
     mode,
+    animKey,
     selectedText,
     activeAction,
     selectedModel,
