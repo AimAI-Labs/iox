@@ -79,7 +79,7 @@ fn trigger_api_action(
     let user_prompt = ai_service::render_prompt_template(&prompt_template, &text);
     let ai_manager = state.ai_manager.clone();
 
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         ai_service::execute_stream_request(
             app,
             ai_manager,
@@ -98,7 +98,7 @@ fn trigger_api_action(
 #[tauri::command]
 fn cancel_action(state: State<AppState>, action_id: String) {
     let ai_manager = state.ai_manager.clone();
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         ai_manager.cancel(&action_id).await;
     });
 }
@@ -115,6 +115,18 @@ fn resize_overlay(
         Ok(())
     } else {
         Err("Overlay window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn show_main_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        Ok(())
+    } else {
+        Err("Main window not found".to_string())
     }
 }
 
@@ -152,7 +164,8 @@ pub fn run() {
             trigger_web_action,
             cancel_action,
             resize_overlay,
-            hide_overlay
+            hide_overlay,
+            show_main_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

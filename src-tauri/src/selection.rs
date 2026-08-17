@@ -252,7 +252,9 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32)) {
             }
 
             if let Some(proc_name) = get_foreground_process_name() {
-                if blacklist.iter().any(|b: &String| b.eq_ignore_ascii_case(&proc_name)) {
+                if proc_name.eq_ignore_ascii_case("iox.exe")
+                    || blacklist.iter().any(|b: &String| b.eq_ignore_ascii_case(&proc_name))
+                {
                     return;
                 }
             }

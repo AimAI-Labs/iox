@@ -56,6 +56,7 @@ struct StreamDelta {
 struct StreamChoice {
     delta: Option<StreamDelta>,
     #[serde(rename = "finish_reason")]
+    #[allow(dead_code)]
     finish_reason: Option<String>,
 }
 
@@ -90,8 +91,10 @@ pub fn execute_web_action(
         }
     }
 
-    let url = render_url_template(url_template, text);
-    open::that(&url).map_err(|e| format!("Failed to open browser URL: {}", e))?;
+    if !url_template.trim().is_empty() {
+        let url = render_url_template(url_template, text);
+        open::that(&url).map_err(|e| format!("Failed to open browser URL: {}", e))?;
+    }
     Ok(())
 }
 

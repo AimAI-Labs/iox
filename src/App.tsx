@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { invoke } from '@tauri-apps/api/core';
 import { useConfig } from './hooks/useConfig';
 import { useOverlayState } from './hooks/useOverlayState';
 import { BubbleBar } from './components/BubbleBar';
@@ -25,13 +26,9 @@ export function App() {
 
   const handleOpenSettings = async () => {
     try {
-      const mainWindow = await WebviewWindow.getByLabel('main');
-      if (mainWindow) {
-        await mainWindow.show();
-        await mainWindow.setFocus();
-      }
-    } catch {
-      // ignore
+      await invoke('show_main_window');
+    } catch (e) {
+      console.error('Failed to open settings window:', e);
     }
   };
 

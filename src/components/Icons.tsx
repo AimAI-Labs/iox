@@ -35,8 +35,12 @@ export const DynamicIcon: React.FC<IconProps> = ({ name, className = '', size = 
 
   const resolvedName = iconAliases[name] || name;
 
-  // @ts-expect-error Lucide icons dynamically looked up
-  const IconComponent = LucideIcons[resolvedName] || LucideIcons[name] || Sparkles;
+  const iconRecord = LucideIcons as unknown as Record<string, React.ComponentType<{ size?: number; className?: string }>>;
+  const PotentialComponent = iconRecord[resolvedName] || iconRecord[name];
+  const IconComponent = typeof PotentialComponent === 'function' || (typeof PotentialComponent === 'object' && PotentialComponent !== null)
+    ? PotentialComponent
+    : Sparkles;
+
   return <IconComponent size={size} className={className} />;
 };
 
