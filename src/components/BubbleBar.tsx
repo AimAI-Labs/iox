@@ -7,6 +7,7 @@ import { cn } from '../lib/utils';
 interface BubbleBarProps {
   actions: ActionConfig[];
   selectedText?: string;
+  isClosing?: boolean;
   onActionClick: (action: ActionConfig) => void;
   onOpenSettings?: () => void;
 }
@@ -14,6 +15,7 @@ interface BubbleBarProps {
 export const BubbleBar: React.FC<BubbleBarProps> = ({
   actions,
   selectedText = '',
+  isClosing = false,
   onActionClick,
   onOpenSettings,
 }) => {
@@ -42,7 +44,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
           "rounded-lg",
           "shadow-md",
           "border border-zinc-200/80 dark:border-zinc-800/80",
-          "animate-spring-popup"
+          isClosing ? "animate-capsule-out" : "animate-capsule-in"
         )}
       >
         {/* 1. 左侧拖拽指示手柄 */}

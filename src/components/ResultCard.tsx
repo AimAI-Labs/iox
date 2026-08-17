@@ -22,6 +22,7 @@ interface ResultCardProps {
   streamText: string;
   isLoading: boolean;
   isPinned: boolean;
+  isClosing?: boolean;
   error: string | null;
   onModelChange: (model: string) => void;
   onSendFollowUp: (prompt: string) => void;
@@ -37,6 +38,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   streamText,
   isLoading,
   isPinned,
+  isClosing = false,
   error,
   onModelChange,
   onSendFollowUp,
@@ -85,7 +87,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         "bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl",
         "border border-zinc-200/80 dark:border-zinc-800/80",
         "rounded-2xl shadow-2xl overflow-hidden",
-        "animate-in fade-in zoom-in-95 duration-200"
+        isClosing ? "animate-capsule-out" : "animate-in fade-in zoom-in-95 duration-150"
       )}
     >
       {/* 头部控制栏 */}

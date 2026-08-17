@@ -73,6 +73,22 @@ pub fn hide_overlay_if_unpinned(app: &AppHandle) {
     }
 }
 
+/// 优雅请求隐藏 Overlay（向前端广播退场动画事件，并设置 150ms 超时强制兜底）
+pub fn request_hide_overlay_gracefully(app: &AppHandle) {
+    if is_overlay_pinned() {
+        return;
+    }
+    // 向前端广播退场动画事件
+    let _ = app.emit("request-overlay-hide", ());
+
+    // 启动 150ms 延时兜底线程，确保在前端未响应时依然安全隐藏
+    let app_handle = app.clone();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(150));
+        hide_overlay_if_unpinned(&app_handle);
+    });
+}
+
 /// 计算鼠标两点之间的欧氏位移距离
 pub fn calc_drag_distance(p1: (i32, i32), p2: (i32, i32)) -> f64 {
     let dx = (p2.0 - p1.0) as f64;
@@ -250,17 +266,17 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                     state.last_down_pos = Some((x, y));
                 }
 
-                // 若在悬浮窗外部按下左键，且悬浮窗非固定，立即隐藏悬浮窗
+                // 若在悬浮窗外部按下左键，且悬浮窗非固定，平滑请求隐藏悬浮窗
                 if let Some(ref handle) = app_handle {
                     if !is_point_inside_overlay(handle, x, y) {
-                        hide_overlay_if_unpinned(handle);
+                        request_hide_overlay_gracefully(handle);
                     }
                 }
             } else if msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN || msg == WM_MOUSEWHEEL {
-                // 右键、中键点击或滚轮滚动外部也自动隐藏
+                // 右键、中键点击或滚轮滚动外部也平滑请求隐藏
                 if let Some(ref handle) = app_handle {
                     if !is_point_inside_overlay(handle, x, y) {
-                        hide_overlay_if_unpinned(handle);
+                        request_hide_overlay_gracefully(handle);
                     }
                 }
             } else if msg == WM_LBUTTONUP {
@@ -323,7 +339,7 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
     CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param)
 }
 
-/// 键盘低级钩子回调（用于在未固定状态下按 Esc 或光标方向键时关闭悬浮窗）
+/// 键盘低级钩子回调（用于在未固定状态下按 Esc 或光标方向键时优雅关闭悬浮窗）
 unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     let _ = std::panic::catch_unwind(|| {
         if n_code >= 0 && l_param != 0 {
@@ -341,7 +357,7 @@ unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_par
                         }
                     };
                     if let Some(ref handle) = app_handle {
-                        hide_overlay_if_unpinned(handle);
+                        request_hide_overlay_gracefully(handle);
                     }
                 }
             }

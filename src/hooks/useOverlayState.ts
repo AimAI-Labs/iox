@@ -35,10 +35,14 @@ export function useOverlayState(config: AppConfig | null) {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isPinned, setIsPinned] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isClosing, setIsClosing] = useState<boolean>(false);
   const [animKey, setAnimKey] = useState<number>(0);
 
   const activeActionRef = useRef<ActionConfig | null>(null);
   activeActionRef.current = activeAction;
+  const isPinnedRef = useRef<boolean>(isPinned);
+  isPinnedRef.current = isPinned;
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 调整窗口尺寸
   const updateWindowSize = useCallback(async (newMode: OverlayMode, allowFocus = false) => {
@@ -49,9 +53,27 @@ export function useOverlayState(config: AppConfig | null) {
     }
   }, []);
 
-  // 监听后端划词触发事件
+  // 执行平滑退场并隐藏窗口
+  const executeGracefulHide = useCallback(() => {
+    if (isPinnedRef.current) return;
+    setIsClosing(true);
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = setTimeout(async () => {
+      await invoke('hide_overlay');
+      setIsClosing(false);
+    }, 100);
+  }, []);
+
+  // 监听后端划词触发事件与平滑隐藏请求
   useEffect(() => {
     const unlistenSelection = listen<SelectionEventPayload>('selection-triggered', (event) => {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      setIsClosing(false);
       setSelectedText(event.payload.text);
       setMode('bubble');
       setStreamText('');
@@ -61,6 +83,10 @@ export function useOverlayState(config: AppConfig | null) {
       invoke('set_pin_state', { pinned: false }).catch(() => {});
       setAnimKey((prev) => prev + 1);
       updateWindowSize('bubble', false);
+    });
+
+    const unlistenRequestHide = listen('request-overlay-hide', () => {
+      executeGracefulHide();
     });
 
     const unlistenToken = listen<StreamTokenPayload>('action-stream-token', (event) => {
@@ -84,11 +110,12 @@ export function useOverlayState(config: AppConfig | null) {
 
     return () => {
       unlistenSelection.then((fn) => fn());
+      unlistenRequestHide.then((fn) => fn());
       unlistenToken.then((fn) => fn());
       unlistenDone.then((fn) => fn());
       unlistenError.then((fn) => fn());
     };
-  }, [updateWindowSize]);
+  }, [updateWindowSize, executeGracefulHide]);
 
   // 执行 Action
   const handleTriggerAction = async (action: ActionConfig) => {
@@ -101,7 +128,7 @@ export function useOverlayState(config: AppConfig | null) {
           copyToClipboard: action.copyToClipboard || false,
         });
         if (!isPinned) {
-          await invoke('hide_overlay');
+          executeGracefulHide();
         }
       } catch (err) {
         setError(String(err));
@@ -193,7 +220,7 @@ export function useOverlayState(config: AppConfig | null) {
   const handleClose = async () => {
     setIsPinned(false);
     await invoke('set_pin_state', { pinned: false }).catch(() => {});
-    await invoke('hide_overlay');
+    executeGracefulHide();
   };
 
   // 固定/解绑 Pin
@@ -208,6 +235,7 @@ export function useOverlayState(config: AppConfig | null) {
   return {
     mode,
     animKey,
+    isClosing,
     selectedText,
     activeAction,
     selectedModel,

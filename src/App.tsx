@@ -79,6 +79,7 @@ export function App() {
             key={overlayState.animKey}
             actions={config.actions}
             selectedText={overlayState.selectedText}
+            isClosing={overlayState.isClosing}
             onActionClick={overlayState.handleTriggerAction}
             onOpenSettings={handleOpenSettings}
           />
@@ -90,6 +91,7 @@ export function App() {
             streamText={overlayState.streamText}
             isLoading={overlayState.isLoading}
             isPinned={overlayState.isPinned}
+            isClosing={overlayState.isClosing}
             error={overlayState.error}
             onModelChange={overlayState.handleModelChange}
             onSendFollowUp={overlayState.handleSendFollowUp}
