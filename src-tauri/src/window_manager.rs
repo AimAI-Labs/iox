@@ -198,7 +198,7 @@ pub fn run_overlay_drag_loop(app: &AppHandle) {
         if let Ok(hwnd) = window.hwnd() {
             let hwnd_raw = hwnd.0 as HWND;
             unsafe {
-                crate::selection::set_dragging_overlay(true);
+                crate::overlay_state::set_dragging_overlay(true);
                 let mut cursor_start: POINT = std::mem::zeroed();
                 let mut win_rect: RECT = std::mem::zeroed();
 
@@ -225,7 +225,7 @@ pub fn run_overlay_drag_loop(app: &AppHandle) {
                     }
                 }
                 thread::sleep(Duration::from_millis(40));
-                crate::selection::set_dragging_overlay(false);
+                crate::overlay_state::set_dragging_overlay(false);
             }
         }
     }

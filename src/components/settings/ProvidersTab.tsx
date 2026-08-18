@@ -1,18 +1,18 @@
 import React, { useState } from "react";
 import { Plus, Trash2, Eye, EyeOff, Box } from "lucide-react";
-import { ProviderConfig } from "../../types/config";
-import { Card, CardHeader, CardContent } from "../ui/card";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Select } from "../ui/select";
-import { Badge } from "../ui/badge";
+import { ProviderConfig } from "@/types/config";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
 interface ProvidersTabProps {
   providers: ProviderConfig[];
   onAddProvider: () => void;
-  onUpdateProvider: (index: number, updated: Partial<ProviderConfig>) => void;
-  onRemoveProvider: (index: number) => void;
+  onUpdateProvider: (id: string, updated: Partial<ProviderConfig>) => void;
+  onRemoveProvider: (id: string) => void;
 }
 
 export const ProvidersTab: React.FC<ProvidersTabProps> = ({
@@ -52,7 +52,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
 
       {/* Provider Card List */}
       <div className="space-y-3">
-        {providers.map((p, idx) => {
+        {providers.map((p) => {
           const isKeyVisible = showKeys[p.id] || false;
           return (
             <Card
@@ -66,7 +66,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                     type="text"
                     value={p.name}
                     onChange={(e) =>
-                      onUpdateProvider(idx, { name: e.target.value })
+                      onUpdateProvider(p.id, { name: e.target.value })
                     }
                     className="h-6 w-44 font-semibold text-xs bg-transparent border-transparent hover:border-border/60 focus-visible:bg-background/80 px-1.5"
                     placeholder="服务商名称"
@@ -75,7 +75,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  onClick={() => onRemoveProvider(idx)}
+                  onClick={() => onRemoveProvider(p.id)}
                   className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10"
                   title="删除此服务商"
                 >
@@ -93,7 +93,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                       value={p.baseUrl}
                       placeholder="https://api.deepseek.com/v1"
                       onChange={(e) =>
-                        onUpdateProvider(idx, { baseUrl: e.target.value })
+                        onUpdateProvider(p.id, { baseUrl: e.target.value })
                       }
                     />
                   </div>
@@ -123,7 +123,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                       value={p.apiKey}
                       placeholder="sk-xxxxxxxxxxxxxxxx"
                       onChange={(e) =>
-                        onUpdateProvider(idx, { apiKey: e.target.value })
+                        onUpdateProvider(p.id, { apiKey: e.target.value })
                       }
                       className="font-mono"
                     />
@@ -143,7 +143,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                           .split(",")
                           .map((m) => m.trim())
                           .filter(Boolean);
-                        onUpdateProvider(idx, {
+                        onUpdateProvider(p.id, {
                           models: newModels,
                           defaultModel:
                             newModels.includes(p.defaultModel) || newModels.length === 0
@@ -178,7 +178,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                       <Select
                         value={p.defaultModel}
                         onChange={(val) =>
-                          onUpdateProvider(idx, { defaultModel: val })
+                          onUpdateProvider(p.id, { defaultModel: val })
                         }
                         options={p.models.map((m) => ({
                           value: m,
@@ -192,7 +192,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                         value={p.defaultModel}
                         placeholder="例如: deepseek-chat"
                         onChange={(e) =>
-                          onUpdateProvider(idx, { defaultModel: e.target.value })
+                          onUpdateProvider(p.id, { defaultModel: e.target.value })
                         }
                       />
                     )}

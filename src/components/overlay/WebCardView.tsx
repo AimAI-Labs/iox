@@ -1,12 +1,9 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { ActionConfig } from '../types/config';
-import { DynamicIcon } from './Icons';
-import { useWindowDrag } from '../hooks/useWindowDrag';
+import { ActionConfig } from '@/types/config';
+import { CardHeader } from '@/components/overlay/CardHeader';
+import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { invoke } from '@tauri-apps/api/core';
 import {
-  Pin,
-  PinOff,
-  X,
   Copy,
   Check,
   RotateCw,
@@ -14,9 +11,9 @@ import {
   Globe,
   AlertCircle,
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn } from '@/lib/utils';
 
-interface WebCardViewProps {
+export interface WebCardViewProps {
   action: ActionConfig;
   selectedText: string;
   isPinned: boolean;
@@ -33,10 +30,9 @@ export const WebCardView: React.FC<WebCardViewProps> = ({
   onPinToggle,
   onClose,
 }) => {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyFeedback(1500);
   const [isLoading, setIsLoading] = useState(true);
   const [iframeKey, setIframeKey] = useState(0);
-  const { handleMouseDown } = useWindowDrag();
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // 动态渲染 URL 模板
@@ -68,14 +64,9 @@ export const WebCardView: React.FC<WebCardViewProps> = ({
   };
 
   // 复制当前 URL
-  const handleCopyUrl = async () => {
-    if (!finalUrl) return;
-    try {
-      await navigator.clipboard.writeText(finalUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // ignore
+  const handleCopyUrl = () => {
+    if (finalUrl) {
+      copy(finalUrl);
     }
   };
 
@@ -103,103 +94,65 @@ export const WebCardView: React.FC<WebCardViewProps> = ({
         isClosing ? "animate-capsule-out" : "animate-in fade-in zoom-in-95 duration-150"
       )}
     >
-      {/* 顶部控制栏 */}
-      <div
-        onMouseDown={handleMouseDown}
-        className="flex items-center justify-between px-3.5 py-2 border-b border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/70 dark:bg-zinc-950/40 select-none cursor-move shrink-0"
-      >
-        {/* 左侧：图标、名称与域名徽标 */}
-        <div data-tauri-drag-region className="flex items-center gap-2 min-w-0">
-          <DynamicIcon
-            name={action.icon || 'Globe'}
-            size={15}
-            className="text-blue-600 dark:text-blue-400 pointer-events-none shrink-0"
-          />
-          <span
-            data-tauri-drag-region
-            className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate cursor-move"
-          >
-            {action.name}
-          </span>
-
-          {domain && (
+      {/* 统一头部控制栏 */}
+      <CardHeader
+        icon={action.icon || 'Globe'}
+        title={action.name}
+        badge={
+          domain ? (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/70 border border-zinc-200/60 dark:border-zinc-700/50 truncate max-w-[150px]">
               <Globe size={9} className="shrink-0" />
               <span className="truncate">{domain}</span>
             </span>
-          )}
-        </div>
+          ) : undefined
+        }
+        tools={
+          <>
+            {/* 刷新 */}
+            <button
+              type="button"
+              onClick={handleRefresh}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="inline-flex items-center justify-center w-6 h-6 rounded-md text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="刷新页面"
+            >
+              <RotateCw size={12} className={cn(isLoading && "animate-spin text-blue-500")} />
+            </button>
 
-        {/* 右侧：工具按钮 */}
-        <div data-tauri-drag-region className="flex items-center gap-0.5 shrink-0">
-          {/* 刷新 */}
-          <button
-            type="button"
-            onClick={handleRefresh}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="inline-flex items-center justify-center w-6 h-6 rounded-md text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-            title="刷新页面"
-          >
-            <RotateCw size={12} className={cn(isLoading && "animate-spin text-blue-500")} />
-          </button>
+            {/* 复制链接 */}
+            <button
+              type="button"
+              onClick={handleCopyUrl}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="inline-flex items-center justify-center w-6 h-6 rounded-md text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="复制网页链接"
+            >
+              {copied ? (
+                <Check size={12} className="text-emerald-500" />
+              ) : (
+                <Copy size={12} />
+              )}
+            </button>
 
-          {/* 复制链接 */}
-          <button
-            type="button"
-            onClick={handleCopyUrl}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="inline-flex items-center justify-center w-6 h-6 rounded-md text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-            title="复制网页链接"
-          >
-            {copied ? (
-              <Check size={12} className="text-emerald-500" />
-            ) : (
-              <Copy size={12} />
-            )}
-          </button>
+            {/* 外部浏览器打开 */}
+            <button
+              type="button"
+              onClick={handleOpenExternal}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="inline-flex items-center justify-center w-6 h-6 rounded-md text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="在系统默认浏览器中打开"
+            >
+              <ExternalLink size={12} />
+            </button>
 
-          {/* 外部浏览器打开 */}
-          <button
-            type="button"
-            onClick={handleOpenExternal}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="inline-flex items-center justify-center w-6 h-6 rounded-md text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-            title="在系统默认浏览器中打开"
-          >
-            <ExternalLink size={12} />
-          </button>
-
-          {/* 分隔线 */}
-          <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
-
-          {/* Pin 固定 */}
-          <button
-            type="button"
-            onClick={onPinToggle}
-            onMouseDown={(e) => e.stopPropagation()}
-            className={cn(
-              "inline-flex items-center justify-center w-6 h-6 rounded-md transition-colors cursor-pointer",
-              isPinned
-                ? "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 font-semibold"
-                : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800"
-            )}
-            title={isPinned ? '取消固定' : '固定悬浮窗'}
-          >
-            {isPinned ? <PinOff size={12} /> : <Pin size={12} />}
-          </button>
-
-          {/* 关闭 */}
-          <button
-            type="button"
-            onClick={onClose}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="inline-flex items-center justify-center w-6 h-6 rounded-md text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
-            title="关闭 (Esc)"
-          >
-            <X size={13} />
-          </button>
-        </div>
-      </div>
+            {/* 分隔线 */}
+            <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
+          </>
+        }
+        isPinned={isPinned}
+        onPinToggle={onPinToggle}
+        onClose={onClose}
+      />
 
       {/* 正文 iframe 容器 */}
       <div className="relative flex-1 w-full h-full bg-background overflow-hidden">

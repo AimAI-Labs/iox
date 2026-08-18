@@ -1,38 +1,10 @@
+use super::AiManager;
 use crate::config::ProviderConfig;
-use arboard::Clipboard;
 use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::Mutex as TokioMutex;
 use tokio_util::sync::CancellationToken;
-
-#[derive(Clone)]
-pub struct AiManager {
-    cancel_tokens: Arc<TokioMutex<HashMap<String, CancellationToken>>>,
-}
-
-impl AiManager {
-    pub fn new() -> Self {
-        Self {
-            cancel_tokens: Arc::new(TokioMutex::new(HashMap::new())),
-        }
-    }
-
-    pub async fn cancel(&self, action_id: &str) {
-        let mut tokens: tokio::sync::MutexGuard<'_, HashMap<String, CancellationToken>> = self.cancel_tokens.lock().await;
-        if let Some(token) = tokens.remove(action_id) {
-            token.cancel();
-        }
-    }
-
-    pub async fn register_token(&self, action_id: String, token: CancellationToken) {
-        let mut tokens: tokio::sync::MutexGuard<'_, HashMap<String, CancellationToken>> = self.cancel_tokens.lock().await;
-        tokens.insert(action_id, token);
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ChatMessage {
@@ -63,39 +35,6 @@ struct StreamChoice {
 #[derive(Debug, Deserialize)]
 struct StreamResponse {
     choices: Option<Vec<StreamChoice>>,
-}
-
-/// 渲染 URL 模板，将 `{text}` 替换为 URL 编码的字符串
-pub fn render_url_template(template: &str, text: &str) -> String {
-    let encoded_text = urlencoding::encode(text);
-    template
-        .replace("{text}", &encoded_text)
-        .replace("{query}", &encoded_text)
-        .replace("{raw_text}", text)
-}
-
-/// 渲染提示词模板，将 `{text}` 替换为实际选中的文本
-pub fn render_prompt_template(template: &str, text: &str) -> String {
-    template.replace("{text}", text)
-}
-
-/// 执行 Web 跳转动作
-pub fn execute_web_action(
-    url_template: &str,
-    text: &str,
-    copy_to_clipboard: bool,
-) -> Result<(), String> {
-    if copy_to_clipboard {
-        if let Ok(mut clipboard) = Clipboard::new() {
-            let _ = clipboard.set_text(text);
-        }
-    }
-
-    if !url_template.trim().is_empty() {
-        let url = render_url_template(url_template, text);
-        open::that(&url).map_err(|e| format!("Failed to open browser URL: {}", e))?;
-    }
-    Ok(())
 }
 
 /// 异步执行 OpenAI 兼容协议流式请求
@@ -232,43 +171,5 @@ pub async fn execute_stream_request(
                 }
             }
         }
-    }
-}
-
-// 辅助 URL 编码
-mod urlencoding {
-    pub fn encode(data: &str) -> String {
-        let mut result = String::new();
-        for byte in data.bytes() {
-            match byte {
-                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                    result.push(byte as char);
-                }
-                _ => {
-                    result.push_str(&format!("%{:02X}", byte));
-                }
-            }
-        }
-        result
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_render_url_template() {
-        let tmpl = "https://tongyi.aliyun.com/qianwen/?q={text}";
-        let text = "你好 世界";
-        let rendered = render_url_template(tmpl, text);
-        assert_eq!(rendered, "https://tongyi.aliyun.com/qianwen/?q=%E4%BD%A0%E5%A5%BD%20%E4%B8%96%E7%95%8C");
-    }
-
-    #[test]
-    fn test_render_prompt_template() {
-        let tmpl = "翻译：{text}";
-        let text = "Hello";
-        assert_eq!(render_prompt_template(tmpl, text), "翻译：Hello");
     }
 }

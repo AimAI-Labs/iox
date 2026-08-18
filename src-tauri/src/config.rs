@@ -43,7 +43,7 @@ pub struct ActionConfig {
     pub id: String,
     pub name: String,
     pub icon: String,
-    pub action_type: String, // "api" | "web" | "web_card"
+    pub action_type: String, // "api" | "web" | "web_card" | "copy"
     pub provider_id: Option<String>,
     pub prompt_template: Option<String>,
     pub url_template: Option<String>,
@@ -137,7 +137,7 @@ impl Default for AppConfig {
                     id: "act_copy".to_string(),
                     name: "复制".to_string(),
                     icon: "Copy".to_string(),
-                    action_type: "web".to_string(),
+                    action_type: "copy".to_string(),
                     provider_id: None,
                     prompt_template: None,
                     url_template: None,
@@ -213,8 +213,10 @@ mod tests {
         let config = AppConfig::default();
         let api_action = config.actions.iter().find(|a| a.action_type == "api");
         let web_action = config.actions.iter().find(|a| a.action_type == "web");
+        let copy_action = config.actions.iter().find(|a| a.action_type == "copy");
         assert!(api_action.is_some());
         assert!(web_action.is_some());
+        assert!(copy_action.is_some());
     }
 
     #[test]

@@ -1,6 +1,7 @@
+use crate::overlay_state::*;
 use arboard::Clipboard;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
@@ -10,11 +11,14 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 static HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
-static IS_PINNED: AtomicBool = AtomicBool::new(false);
-static IS_DRAGGING_OVERLAY: AtomicBool = AtomicBool::new(false);
 static SELECTION_SEQ: AtomicU64 = AtomicU64::new(0);
 static HIDE_SEQ: AtomicU64 = AtomicU64::new(0);
 static CLIPBOARD_LOCK: Mutex<()> = Mutex::new(());
+static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
+
+pub fn set_app_handle(handle: AppHandle) {
+    let _ = APP_HANDLE.set(handle);
+}
 
 /// 鼠标点击状态跟踪器（用于识别双击与三击）
 struct ClickState {
@@ -30,26 +34,6 @@ static CLICK_STATE: Mutex<ClickState> = Mutex::new(ClickState {
     last_up_time: None,
     click_count: 0,
 });
-
-/// 设置 Overlay 的拖动状态
-pub fn set_dragging_overlay(dragging: bool) {
-    IS_DRAGGING_OVERLAY.store(dragging, Ordering::SeqCst);
-}
-
-/// 查询 Overlay 是否正在被拖动
-pub fn is_dragging_overlay() -> bool {
-    IS_DRAGGING_OVERLAY.load(Ordering::SeqCst)
-}
-
-/// 设置 Overlay 的 Pin 固定状态
-pub fn set_overlay_pinned(pinned: bool) {
-    IS_PINNED.store(pinned, Ordering::SeqCst);
-}
-
-/// 查询 Overlay 的 Pin 固定状态
-pub fn is_overlay_pinned() -> bool {
-    IS_PINNED.load(Ordering::SeqCst)
-}
 
 /// 检查指定屏幕物理坐标 (x, y) 是否落在 Overlay 窗口内
 pub fn is_point_inside_overlay(app: &AppHandle, x: i32, y: i32) -> bool {
@@ -289,13 +273,7 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
             let y = hook_struct.pt.y;
             let msg = w_param as u32;
 
-            let app_handle = {
-                if let Ok(h) = APP_HANDLE.lock() {
-                    h.clone()
-                } else {
-                    None
-                }
-            };
+            let app_handle = APP_HANDLE.get().cloned();
 
             if msg == WM_LBUTTONDOWN {
                 let mut is_potential_dbl_click = false;
@@ -399,13 +377,7 @@ unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_par
 
             if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
                 if vk == VK_ESCAPE || vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP || vk == VK_DOWN {
-                    let app_handle = {
-                        if let Ok(h) = APP_HANDLE.lock() {
-                            h.clone()
-                        } else {
-                            None
-                        }
-                    };
+                    let app_handle = APP_HANDLE.get().cloned();
                     if let Some(ref handle) = app_handle {
                         request_hide_overlay_gracefully(handle);
                     }
@@ -414,14 +386,6 @@ unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_par
         }
     });
     CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param)
-}
-
-static APP_HANDLE: std::sync::Mutex<Option<AppHandle>> = std::sync::Mutex::new(None);
-
-pub fn set_app_handle(handle: AppHandle) {
-    if let Ok(mut h) = APP_HANDLE.lock() {
-        *h = Some(handle);
-    }
 }
 
 fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_double_or_triple: bool) {
@@ -436,14 +400,7 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
                 return;
             }
 
-            let app_handle = {
-                if let Ok(h) = APP_HANDLE.lock() {
-                    h.clone()
-                } else {
-                    None
-                }
-            };
-
+            let app_handle = APP_HANDLE.get().cloned();
             let Some(handle) = app_handle else { return };
 
             // 检查配置

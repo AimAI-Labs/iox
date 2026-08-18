@@ -1,7 +1,7 @@
 import React from "react";
 import { Cpu, Zap, Sliders, Shield, Save, Check, Loader2 } from "lucide-react";
-import { Button } from "../ui/button";
-import { cn } from "../../lib/utils";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type SettingsTab = "providers" | "actions" | "general" | "blacklist";
 
@@ -36,12 +36,9 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
             <span className="text-base font-bold tracking-tight bg-gradient-to-br from-blue-500 via-indigo-400 to-violet-400 bg-clip-text text-transparent">
               IOX
             </span>
-            <span className="text-[10px] uppercase font-mono tracking-widest text-muted-foreground/70 px-1 py-0.2 rounded bg-muted/60">
-              v0.1
-            </span>
           </div>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            全局划词 AI 助手
+            划词 AI
           </p>
         </div>
 

@@ -1,9 +1,10 @@
-pub mod ai_service;
+pub mod ai;
 pub mod config;
+pub mod overlay_state;
 pub mod selection;
 pub mod window_manager;
 
-use ai_service::AiManager;
+use ai::AiManager;
 use config::AppConfig;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -34,7 +35,7 @@ fn trigger_web_action(
     text: String,
     copy_to_clipboard: Option<bool>,
 ) -> Result<(), String> {
-    ai_service::execute_web_action(&url_template, &text, copy_to_clipboard.unwrap_or(false))
+    ai::execute_web_action(&url_template, &text, copy_to_clipboard.unwrap_or(false))
 }
 
 #[tauri::command]
@@ -77,11 +78,11 @@ fn trigger_api_action(
         (provider, model, template)
     };
 
-    let user_prompt = ai_service::render_prompt_template(&prompt_template, &text);
+    let user_prompt = ai::render_prompt_template(&prompt_template, &text);
     let ai_manager = state.ai_manager.clone();
 
     tauri::async_runtime::spawn(async move {
-        ai_service::execute_stream_request(
+        ai::execute_stream_request(
             app,
             ai_manager,
             action_id,
@@ -180,12 +181,12 @@ fn hide_overlay(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn set_pin_state(pinned: bool) {
-    selection::set_overlay_pinned(pinned);
+    overlay_state::set_overlay_pinned(pinned);
 }
 
 #[tauri::command]
 fn set_drag_state(dragging: bool) {
-    selection::set_dragging_overlay(dragging);
+    overlay_state::set_dragging_overlay(dragging);
 }
 
 #[tauri::command]

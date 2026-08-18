@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
-import { useConfig } from './hooks/useConfig';
-import { useOverlayState } from './hooks/useOverlayState';
-import { BubbleBar } from './components/BubbleBar';
-import { ResultCard } from './components/ResultCard';
-import { Settings } from './components/Settings';
+import { useConfig } from '@/hooks/useConfig';
+import { useTheme } from '@/hooks/useTheme';
+import { useOverlayState } from '@/hooks/useOverlayState';
+import { BubbleBar, ResultCard, WebCardView } from '@/components/overlay';
+import { Settings } from '@/components/settings';
 import './App.css';
 
 export function App() {
@@ -24,6 +24,9 @@ export function App() {
 
   const overlayState = useOverlayState(config);
 
+  // 统一应用与监听主题
+  useTheme(config?.general.theme);
+
   const handleOpenSettings = async () => {
     try {
       await invoke('show_main_window');
@@ -31,37 +34,6 @@ export function App() {
       console.error('Failed to open settings window:', e);
     }
   };
-
-  // 响应主题切换（支持 light / dark / system 实时监听）
-  useEffect(() => {
-    if (!config) return;
-    const root = document.documentElement;
-    const theme = config.general.theme || 'system';
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
-    const applyTheme = () => {
-      const isDark =
-        theme === 'dark' ||
-        (theme === 'system' && mediaQuery.matches);
-
-      if (isDark) {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
-      }
-    };
-
-    // 立即应用计算出的主题
-    applyTheme();
-
-    // 当配置为跟随系统时，监听系统深浅色切换事件
-    if (theme === 'system') {
-      mediaQuery.addEventListener('change', applyTheme);
-      return () => {
-        mediaQuery.removeEventListener('change', applyTheme);
-      };
-    }
-  }, [config?.general.theme]);
 
   // 全局 Esc 键监听
   useEffect(() => {
@@ -100,22 +72,32 @@ export function App() {
             onOpenSettings={handleOpenSettings}
           />
         ) : overlayState.activeAction ? (
-          <ResultCard
-            action={overlayState.activeAction}
-            providers={config.providers}
-            selectedModel={overlayState.selectedModel}
-            selectedText={overlayState.selectedText}
-            streamText={overlayState.streamText}
-            isLoading={overlayState.isLoading}
-            isPinned={overlayState.isPinned}
-            isClosing={overlayState.isClosing}
-            error={overlayState.error}
-            onModelChange={overlayState.handleModelChange}
-            onSendFollowUp={overlayState.handleSendFollowUp}
-            onCancel={overlayState.handleCancel}
-            onPinToggle={overlayState.handlePinToggle}
-            onClose={overlayState.handleClose}
-          />
+          overlayState.activeAction.actionType === 'web_card' ? (
+            <WebCardView
+              action={overlayState.activeAction}
+              selectedText={overlayState.selectedText}
+              isPinned={overlayState.isPinned}
+              isClosing={overlayState.isClosing}
+              onPinToggle={overlayState.handlePinToggle}
+              onClose={overlayState.handleClose}
+            />
+          ) : (
+            <ResultCard
+              action={overlayState.activeAction}
+              providers={config.providers}
+              selectedModel={overlayState.selectedModel}
+              streamText={overlayState.streamText}
+              isLoading={overlayState.isLoading}
+              isPinned={overlayState.isPinned}
+              isClosing={overlayState.isClosing}
+              error={overlayState.error}
+              onModelChange={overlayState.handleModelChange}
+              onSendFollowUp={overlayState.handleSendFollowUp}
+              onCancel={overlayState.handleCancel}
+              onPinToggle={overlayState.handlePinToggle}
+              onClose={overlayState.handleClose}
+            />
+          )
         ) : null}
       </div>
     );

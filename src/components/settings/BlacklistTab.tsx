@@ -1,14 +1,14 @@
 import React, { useState } from "react";
 import { Plus, X, ShieldAlert, ShieldCheck } from "lucide-react";
-import { Card, CardContent } from "../ui/card";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Badge } from "../ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 interface BlacklistTabProps {
   blacklist: string[];
   onAddBlacklist: (processName: string) => void;
-  onRemoveBlacklist: (index: number) => void;
+  onRemoveBlacklist: (processName: string) => void;
 }
 
 export const BlacklistTab: React.FC<BlacklistTabProps> = ({
@@ -82,9 +82,9 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
                   <span className="text-[10px]">点击 × 即可取消屏蔽</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 p-2.5 rounded-lg bg-muted/20 border border-border/30 max-h-56 overflow-y-auto">
-                  {blacklist.map((item, idx) => (
+                  {blacklist.map((item) => (
                     <Badge
-                      key={idx}
+                      key={item}
                       variant="secondary"
                       className="group/badge pl-2.5 pr-1.5 py-1 text-xs font-mono bg-background/80 hover:bg-background border-border/60 flex items-center gap-1.5 transition-all shadow-xs"
                     >
@@ -92,7 +92,7 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
                       <span>{item}</span>
                       <button
                         type="button"
-                        onClick={() => onRemoveBlacklist(idx)}
+                        onClick={() => onRemoveBlacklist(item)}
                         className="rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive text-muted-foreground/60 transition-colors outline-none"
                         title={`移除 ${item}`}
                       >

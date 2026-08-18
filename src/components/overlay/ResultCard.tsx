@@ -1,13 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { ActionConfig, ProviderConfig } from '../types/config';
-import { DynamicIcon } from './Icons';
-import { useWindowDrag } from '../hooks/useWindowDrag';
-import { WebCardView } from './WebCardView';
+import { ActionConfig, ProviderConfig } from '@/types/config';
+import { CardHeader } from '@/components/overlay/CardHeader';
+import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import {
-  Pin,
-  PinOff,
-  X,
   Copy,
   Check,
   Send,
@@ -15,13 +11,12 @@ import {
   ChevronDown,
   AlertCircle,
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn } from '@/lib/utils';
 
-interface ResultCardProps {
+export interface ResultCardProps {
   action: ActionConfig;
   providers: ProviderConfig[];
   selectedModel: string;
-  selectedText?: string;
   streamText: string;
   isLoading: boolean;
   isPinned: boolean;
@@ -38,7 +33,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   action,
   providers,
   selectedModel,
-  selectedText = '',
   streamText,
   isLoading,
   isPinned,
@@ -50,24 +44,9 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   onPinToggle,
   onClose,
 }) => {
-  // 若当前动作为 Web 官网卡片模式，渲染专用 Web 视图容器
-  if (action.actionType === 'web_card') {
-    return (
-      <WebCardView
-        action={action}
-        selectedText={selectedText}
-        isPinned={isPinned}
-        isClosing={isClosing}
-        onPinToggle={onPinToggle}
-        onClose={onClose}
-      />
-    );
-  }
-
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyFeedback(2000);
   const [followUpInput, setFollowUpInput] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);
-  const { handleMouseDown } = useWindowDrag();
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const provider = providers.find((p) => p.id === action.providerId);
@@ -79,18 +58,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
     }
   }, [streamText, isLoading]);
-
-  // 复制结果
-  const handleCopy = async () => {
-    if (!streamText) return;
-    try {
-      await navigator.clipboard.writeText(streamText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore
-    }
-  };
 
   const handleFollowUpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,19 +76,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         isClosing ? "animate-capsule-out" : "animate-in fade-in zoom-in-95 duration-150"
       )}
     >
-      {/* 头部控制栏 */}
-      <div
-        onMouseDown={handleMouseDown}
-        className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-950/20 select-none cursor-move"
-      >
-        <div data-tauri-drag-region className="flex items-center gap-2">
-          <DynamicIcon name={action.icon} size={16} className="text-blue-600 dark:text-blue-400 pointer-events-none" />
-          <span data-tauri-drag-region className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 cursor-move">
-            {action.name}
-          </span>
-
-          {/* 模型选择下拉 */}
-          {availableModels.length > 0 && (
+      {/* 统一卡片头部 */}
+      <CardHeader
+        icon={action.icon}
+        title={action.name}
+        badge={
+          availableModels.length > 0 ? (
             <div className="relative">
               <button
                 type="button"
@@ -158,48 +118,25 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 </div>
               )}
             </div>
-          )}
-        </div>
-
-        <div data-tauri-drag-region className="flex items-center gap-1">
-          {streamText && (
+          ) : undefined
+        }
+        tools={
+          streamText ? (
             <button
               type="button"
-              onClick={handleCopy}
+              onClick={() => copy(streamText)}
               onMouseDown={(e) => e.stopPropagation()}
-              className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center w-6 h-6 rounded-md text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors cursor-pointer mr-0.5"
               title="复制回答"
             >
-              {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+              {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
             </button>
-          )}
-
-          <button
-            type="button"
-            onClick={onPinToggle}
-            onMouseDown={(e) => e.stopPropagation()}
-            className={cn(
-              "inline-flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer",
-              isPinned
-                ? "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 font-semibold"
-                : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            )}
-            title={isPinned ? '取消固定' : '固定悬浮窗'}
-          >
-            {isPinned ? <PinOff size={14} /> : <Pin size={14} />}
-          </button>
-
-          <button
-            type="button"
-            onClick={onClose}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
-            title="关闭 (Esc)"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      </div>
+          ) : undefined
+        }
+        isPinned={isPinned}
+        onPinToggle={onPinToggle}
+        onClose={onClose}
+      />
 
       {/* 渲染正文区 */}
       <div

@@ -1,12 +1,12 @@
 import React from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
-import { GeneralConfig } from "../../types/config";
-import { Card, CardContent } from "../ui/card";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Select } from "../ui/select";
-import { Switch } from "../ui/switch";
-import { Separator } from "../ui/separator";
+import { GeneralConfig } from "@/types/config";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 
 interface GeneralTabProps {
   general: GeneralConfig;

@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { ActionConfig } from '../types/config';
-import { DynamicIcon } from './Icons';
+import React from 'react';
+import { ActionConfig } from '@/types/config';
+import { DynamicIcon } from '@/components/Icons';
 import { GripVertical, MoreHorizontal, Check, Copy, Sparkles } from 'lucide-react';
-import { cn } from '../lib/utils';
-import { useWindowDrag } from '../hooks/useWindowDrag';
+import { cn } from '@/lib/utils';
+import { useWindowDrag } from '@/hooks/useWindowDrag';
+import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 
-interface BubbleBarProps {
+export interface BubbleBarProps {
   actions: ActionConfig[];
   selectedText?: string;
   isClosing?: boolean;
@@ -20,21 +21,14 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   onActionClick,
   onOpenSettings,
 }) => {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyFeedback(1500);
   const { handleMouseDown } = useWindowDrag();
   const enabledActions = actions.filter((a) => a.enabled);
 
   // 快捷复制当前选中文本
-  const handleQuickCopy = async (e: React.MouseEvent) => {
+  const handleQuickCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!selectedText) return;
-    try {
-      await navigator.clipboard.writeText(selectedText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // ignore
-    }
+    copy(selectedText);
   };
 
   return (
@@ -81,7 +75,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         {/* 3. 动作按钮组 */}
         <div className="flex items-center gap-[2px]">
           {enabledActions.map((action) => {
-            const isCopyAction = action.id === 'act_copy' || action.name === '复制';
+            const isCopyAction = action.actionType === 'copy';
 
             if (isCopyAction) {
               return (
@@ -157,4 +151,3 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
     </div>
   );
 };
-

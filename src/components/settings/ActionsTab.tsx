@@ -1,21 +1,21 @@
 import React from "react";
-import { Plus, Trash2, Bot, Globe, Cpu, LayoutTemplate } from "lucide-react";
-import { ActionConfig, ProviderConfig } from "../../types/config";
-import { DynamicIcon } from "../Icons";
-import { Card, CardHeader, CardContent } from "../ui/card";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Textarea } from "../ui/textarea";
-import { Label } from "../ui/label";
-import { Select } from "../ui/select";
-import { Switch } from "../ui/switch";
+import { Plus, Trash2, Bot, Globe, Cpu, LayoutTemplate, Copy } from "lucide-react";
+import { ActionConfig, ActionType, ProviderConfig } from "@/types/config";
+import { DynamicIcon } from "@/components/Icons";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 interface ActionsTabProps {
   actions: ActionConfig[];
   providers: ProviderConfig[];
   onAddAction: () => void;
-  onUpdateAction: (index: number, updated: Partial<ActionConfig>) => void;
-  onRemoveAction: (index: number) => void;
+  onUpdateAction: (id: string, updated: Partial<ActionConfig>) => void;
+  onRemoveAction: (id: string) => void;
 }
 
 export const ActionsTab: React.FC<ActionsTabProps> = ({
@@ -44,13 +44,13 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
           className="gap-1 text-xs border-border/80 hover:border-primary/50"
         >
           <Plus size={13} />
-          <span>新建动作</span>
+          <span>添加动作</span>
         </Button>
       </div>
 
       {/* Action Cards */}
       <div className="space-y-3">
-        {actions.map((act, idx) => (
+        {actions.map((act) => (
           <Card
             key={act.id}
             className="group border-border/60 bg-card/60 hover:border-border/90 transition-all"
@@ -64,7 +64,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                   type="text"
                   value={act.name}
                   onChange={(e) =>
-                    onUpdateAction(idx, { name: e.target.value })
+                    onUpdateAction(act.id, { name: e.target.value })
                   }
                   className="h-6 w-40 font-semibold text-xs bg-transparent border-transparent hover:border-border/60 focus-visible:bg-background/80 px-1.5"
                   placeholder="动作名称"
@@ -74,7 +74,9 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                     ? "API 流式"
                     : act.actionType === "web_card"
                     ? "Web 卡片"
-                    : "Web 直达"}
+                    : act.actionType === "web"
+                    ? "Web 直达"
+                    : "快捷复制"}
                 </span>
               </div>
 
@@ -87,14 +89,14 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                     id={`act-enable-${act.id}`}
                     checked={act.enabled}
                     onCheckedChange={(checked) =>
-                      onUpdateAction(idx, { enabled: checked })
+                      onUpdateAction(act.id, { enabled: checked })
                     }
                   />
                 </div>
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  onClick={() => onRemoveAction(idx)}
+                  onClick={() => onRemoveAction(act.id)}
                   className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10"
                   title="删除此动作"
                 >
@@ -111,8 +113,8 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                   <Select
                     value={act.actionType}
                     onChange={(val) =>
-                      onUpdateAction(idx, {
-                        actionType: val as "api" | "web" | "web_card",
+                      onUpdateAction(act.id, {
+                        actionType: val as ActionType,
                       })
                     }
                     options={[
@@ -134,6 +136,12 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                         icon: Globe,
                         description: "调起浏览器访问官网",
                       },
+                      {
+                        value: "copy",
+                        label: "快捷复制",
+                        icon: Copy,
+                        description: "直接复制选中文本至剪贴板",
+                      },
                     ]}
                   />
                 </div>
@@ -147,7 +155,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                       value={act.icon}
                       placeholder="Sparkles, Bot, Globe, Languages..."
                       onChange={(e) =>
-                        onUpdateAction(idx, { icon: e.target.value })
+                        onUpdateAction(act.id, { icon: e.target.value })
                       }
                       className="pr-8"
                     />
@@ -166,7 +174,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                     <Select
                       value={act.providerId || ""}
                       onChange={(val) =>
-                        onUpdateAction(idx, { providerId: val })
+                        onUpdateAction(act.id, { providerId: val })
                       }
                       options={providers.map((p) => ({
                         value: p.id,
@@ -190,7 +198,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                       value={act.promptTemplate || ""}
                       placeholder="请翻译以下内容为中文：&#10;&#10;{text}"
                       onChange={(e) =>
-                        onUpdateAction(idx, { promptTemplate: e.target.value })
+                        onUpdateAction(act.id, { promptTemplate: e.target.value })
                       }
                     />
                   </div>
@@ -218,7 +226,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                           : "https://tongyi.aliyun.com/qianwen/?q={text}"
                       }
                       onChange={(e) =>
-                        onUpdateAction(idx, { urlTemplate: e.target.value })
+                        onUpdateAction(act.id, { urlTemplate: e.target.value })
                       }
                     />
                   </div>
@@ -238,7 +246,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                     <Switch
                       checked={act.copyToClipboard || false}
                       onCheckedChange={(checked) =>
-                        onUpdateAction(idx, { copyToClipboard: checked })
+                        onUpdateAction(act.id, { copyToClipboard: checked })
                       }
                     />
                   </div>

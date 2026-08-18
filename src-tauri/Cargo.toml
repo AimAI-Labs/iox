@@ -30,6 +30,7 @@ futures-util = "0.3"
 eventsource-stream = "0.2"
 open = "5"
 arboard = "3"
+urlencoding = "2"
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",

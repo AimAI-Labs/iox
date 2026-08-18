@@ -1,13 +1,14 @@
 import React, { useState } from "react";
-import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig } from "../types/config";
-import { MacTitleBar } from "./MacTitleBar";
-import { SettingsSidebar, SettingsTab } from "./settings/SettingsSidebar";
-import { ProvidersTab } from "./settings/ProvidersTab";
-import { ActionsTab } from "./settings/ActionsTab";
-import { GeneralTab } from "./settings/GeneralTab";
-import { BlacklistTab } from "./settings/BlacklistTab";
+import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig } from "@/types/config";
+import { useTheme } from "@/hooks/useTheme";
+import { MacTitleBar } from "@/components/MacTitleBar";
+import { SettingsSidebar, SettingsTab } from "@/components/settings/SettingsSidebar";
+import { ProvidersTab } from "@/components/settings/ProvidersTab";
+import { ActionsTab } from "@/components/settings/ActionsTab";
+import { GeneralTab } from "@/components/settings/GeneralTab";
+import { BlacklistTab } from "@/components/settings/BlacklistTab";
 
-interface SettingsProps {
+export interface SettingsProps {
   config: AppConfig;
   onSave: (newConfig: AppConfig) => Promise<boolean>;
 }
@@ -17,6 +18,9 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   const [formData, setFormData] = useState<AppConfig>(config);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // 主题即时预览
+  useTheme(formData.general.theme);
 
   const handleSave = async () => {
     setSaving(true);
@@ -28,11 +32,12 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     }
   };
 
-  // Provider 更新
-  const updateProvider = (index: number, updated: Partial<ProviderConfig>) => {
-    const list = [...formData.providers];
-    list[index] = { ...list[index], ...updated };
-    setFormData({ ...formData, providers: list });
+  // Provider 更新 (基于 ID)
+  const updateProvider = (id: string, updated: Partial<ProviderConfig>) => {
+    setFormData((prev) => ({
+      ...prev,
+      providers: prev.providers.map((p) => (p.id === id ? { ...p, ...updated } : p)),
+    }));
   };
 
   // 添加 Provider
@@ -45,100 +50,87 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
       models: ["gpt-4o-mini", "gpt-4o"],
       defaultModel: "gpt-4o-mini",
     };
-    setFormData({ ...formData, providers: [...formData.providers, newP] });
+    setFormData((prev) => ({
+      ...prev,
+      providers: [...prev.providers, newP],
+    }));
   };
 
-  // 删除 Provider
-  const removeProvider = (index: number) => {
-    const list = formData.providers.filter((_, i) => i !== index);
-    setFormData({ ...formData, providers: list });
+  // 删除 Provider (基于 ID)
+  const removeProvider = (id: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      providers: prev.providers.filter((p) => p.id !== id),
+    }));
   };
 
-  // Action 更新
-  const updateAction = (index: number, updated: Partial<ActionConfig>) => {
-    const list = [...formData.actions];
-    list[index] = { ...list[index], ...updated };
-    setFormData({ ...formData, actions: list });
+  // Action 更新 (基于 ID)
+  const updateAction = (id: string, updated: Partial<ActionConfig>) => {
+    setFormData((prev) => ({
+      ...prev,
+      actions: prev.actions.map((a) => (a.id === id ? { ...a, ...updated } : a)),
+    }));
   };
 
   // 添加 Action
   const addAction = () => {
+    const defaultProviderId = formData.providers[0]?.id || "deepseek";
     const newA: ActionConfig = {
       id: `act_${Date.now()}`,
       name: "新动作",
       icon: "Sparkles",
       actionType: "api",
-      providerId: formData.providers[0]?.id || "deepseek",
+      providerId: defaultProviderId,
       promptTemplate: "请分析以下内容：\n\n{text}",
       urlTemplate: "",
       copyToClipboard: false,
       enabled: true,
     };
-    setFormData({ ...formData, actions: [...formData.actions, newA] });
+    setFormData((prev) => ({
+      ...prev,
+      actions: [...prev.actions, newA],
+    }));
   };
 
-  // 删除 Action
-  const removeAction = (index: number) => {
-    const list = formData.actions.filter((_, i) => i !== index);
-    setFormData({ ...formData, actions: list });
+  // 删除 Action (基于 ID)
+  const removeAction = (id: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      actions: prev.actions.filter((a) => a.id !== id),
+    }));
   };
 
   // 更新 General 配置
   const updateGeneral = (updated: Partial<GeneralConfig>) => {
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       general: {
-        ...formData.general,
+        ...prev.general,
         ...updated,
       },
-    });
+    }));
   };
 
   // 添加黑名单
   const addBlacklist = (processName: string) => {
-    if (!processName.trim()) return;
-    if (formData.blacklist.includes(processName.trim())) return;
-    setFormData({
-      ...formData,
-      blacklist: [...formData.blacklist, processName.trim()],
-    });
-  };
-
-  // 移除黑名单
-  const removeBlacklist = (index: number) => {
-    setFormData({
-      ...formData,
-      blacklist: formData.blacklist.filter((_, i) => i !== index),
-    });
-  };
-
-  // 主题即时预览
-  React.useEffect(() => {
-    const root = document.documentElement;
-    const theme = formData.general.theme || "system";
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-
-    const applyTheme = () => {
-      const isDark =
-        theme === "dark" ||
-        (theme === "system" && mediaQuery.matches);
-
-      if (isDark) {
-        root.classList.add("dark");
-      } else {
-        root.classList.remove("dark");
-      }
-    };
-
-    applyTheme();
-
-    if (theme === "system") {
-      mediaQuery.addEventListener("change", applyTheme);
-      return () => {
-        mediaQuery.removeEventListener("change", applyTheme);
+    const name = processName.trim();
+    if (!name) return;
+    setFormData((prev) => {
+      if (prev.blacklist.includes(name)) return prev;
+      return {
+        ...prev,
+        blacklist: [...prev.blacklist, name],
       };
-    }
-  }, [formData.general.theme]);
+    });
+  };
+
+  // 移除黑名单 (基于进程名)
+  const removeBlacklist = (processName: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      blacklist: prev.blacklist.filter((item) => item !== processName),
+    }));
+  };
 
   return (
     <div className="w-screen h-screen p-0.5 bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
@@ -157,7 +149,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
             savedSuccess={savedSuccess}
           />
 
-          {/* 右侧主工作区 (与侧边栏共享完全相同的统一页面背景) */}
+          {/* 右侧主工作区 */}
           <main className="flex-1 p-5 overflow-y-auto user-select-text bg-transparent">
             {activeTab === "providers" && (
               <ProvidersTab

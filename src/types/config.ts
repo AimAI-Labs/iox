@@ -16,7 +16,7 @@ export interface ProviderConfig {
   defaultModel: string;
 }
 
-export type ActionType = 'api' | 'web';
+export type ActionType = 'api' | 'web' | 'web_card' | 'copy';
 
 export interface ActionConfig {
   id: string;
