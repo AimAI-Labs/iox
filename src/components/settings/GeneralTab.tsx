@@ -229,10 +229,10 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <Label className="text-xs text-foreground font-medium">
-                  悬浮窗背景透明度
+                  界面背景透明度
                 </Label>
                 <p className="text-[11px] text-muted-foreground">
-                  调节划词胶囊条与 AI 结果卡片的毛玻璃背景透光度
+                  调节设置页面、划词胶囊条与悬浮卡片的毛玻璃背景透光度
                 </p>
               </div>
               <div className="w-52 flex items-center gap-3">

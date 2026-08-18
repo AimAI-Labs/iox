@@ -93,7 +93,7 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = ({
 
   return (
     <div className="w-screen h-screen bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
-      <div className="w-full h-full flex flex-col bg-white/85 dark:bg-zinc-950/85 text-foreground rounded-t-xl border-t border-l border-r border-b border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl">
+      <div className="w-full h-full flex flex-col bg-[var(--bg-overlay-card)] text-foreground rounded-t-xl border-t border-l border-r border-b border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl">
         <MacTitleBar
           title={displayTitle}
           onClose={handleClose}
