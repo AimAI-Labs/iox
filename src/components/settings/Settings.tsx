@@ -133,8 +133,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   };
 
   return (
-    <div className="w-screen h-screen p-0.5 bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
-      <div className="w-full h-full flex flex-col bg-white/85 dark:bg-zinc-950/85 text-foreground rounded-xl border border-black/10 dark:border-white/10 shadow-2xl overflow-hidden backdrop-blur-2xl">
+    <div className="w-screen h-screen bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
+      <div className="w-full h-full flex flex-col bg-white/85 dark:bg-zinc-950/85 text-foreground rounded-xl border border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl">
         {/* macOS 沉浸式标题栏 */}
         <MacTitleBar title="IOX 设置" />
 

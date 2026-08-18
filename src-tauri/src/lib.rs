@@ -206,6 +206,55 @@ fn start_overlay_dragging(app: AppHandle) {
     });
 }
 
+#[tauri::command]
+fn close_web_window(app: AppHandle, label: String) -> Result<(), String> {
+    if let Some(window) = app.get_window(&label) {
+        let _ = window.close();
+        Ok(())
+    } else {
+        Err("Window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn minimize_web_window(app: AppHandle, label: String) -> Result<(), String> {
+    if let Some(window) = app.get_window(&label) {
+        let _ = window.minimize();
+        Ok(())
+    } else {
+        Err("Window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn toggle_maximize_web_window(app: AppHandle, label: String) -> Result<(), String> {
+    if let Some(window) = app.get_window(&label) {
+        if window.is_maximized().unwrap_or(false) {
+            let _ = window.unminimize();
+        } else {
+            let _ = window.maximize();
+        }
+        Ok(())
+    } else {
+        Err("Window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn reload_web_webview(app: AppHandle, content_label: String) -> Result<(), String> {
+    if let Some(wv) = app.get_webview(&content_label) {
+        let _ = wv.eval("window.location.reload()");
+        Ok(())
+    } else {
+        Err("Webview not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn open_in_browser(url: String) -> Result<(), String> {
+    open::that(&url).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial_config = AppConfig::load();
@@ -240,6 +289,11 @@ pub fn run() {
             hide_main_window,
             minimize_main_window,
             toggle_maximize_main_window,
+            close_web_window,
+            minimize_web_window,
+            toggle_maximize_web_window,
+            reload_web_webview,
+            open_in_browser,
             set_pin_state,
             set_drag_state,
             start_overlay_dragging

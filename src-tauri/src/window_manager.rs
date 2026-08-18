@@ -7,7 +7,7 @@ use windows_sys::Win32::Graphics::Gdi::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
-/// 为主设置窗口启用 Windows 11/10 原生 DWM 硬件级抗锯齿圆角、平滑阴影与亚克力材质
+/// 为主设置窗口与浮窗启用 Windows 11/10 原生 DWM 硬件级抗锯齿圆角与亚克力材质
 pub fn apply_main_window_native_style(hwnd: HWND) {
     unsafe {
         // DWMWA_WINDOW_CORNER_PREFERENCE = 33
@@ -29,6 +29,75 @@ pub fn apply_main_window_native_style(hwnd: HWND) {
             &backdrop_type as *const _ as *const _,
             std::mem::size_of::<u32>() as u32,
         );
+    }
+}
+
+/// 为外部 Content Webview 的 child HWND 设置底部圆角物理裁切（仅裁切 child webview，绝不影响主窗口 DWM 帧）
+pub fn apply_content_webview_bottom_round(parent_hwnd: HWND, radius: i32) {
+    unsafe {
+        let mut children: Vec<HWND> = Vec::new();
+        unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+            let list = &mut *(lparam as *mut Vec<HWND>);
+            list.push(hwnd);
+            1
+        }
+        EnumChildWindows(
+            parent_hwnd,
+            Some(enum_proc),
+            &mut children as *mut _ as isize,
+        );
+
+        let mut parent_rect: RECT = std::mem::zeroed();
+        GetWindowRect(parent_hwnd, &mut parent_rect);
+
+        for child in children {
+            let mut child_rect: RECT = std::mem::zeroed();
+            GetWindowRect(child, &mut child_rect);
+
+            let width = child_rect.right - child_rect.left;
+            let height = child_rect.bottom - child_rect.top;
+
+            // 仅对 content webview 的 HWND 进行底部圆角裁切（高度大于 50px 且位于窗口下方）
+            if height > 50 && child_rect.top > parent_rect.top + 20 {
+                let diameter = radius * 2;
+                // 创建从 -diameter 到 height 的圆角区域：顶部为直角平齐，仅底部两侧产生圆角
+                let hrgn = CreateRoundRectRgn(0, -diameter, width + 1, height + 1, diameter, diameter);
+                if !hrgn.is_null() {
+                    if SetWindowRgn(child, hrgn, 1) == 0 {
+                        DeleteObject(hrgn as _);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 移除 content webview 的 Region 限制（还原为直角矩形，如最大化状态）
+pub fn remove_content_webview_round(parent_hwnd: HWND) {
+    unsafe {
+        let mut children: Vec<HWND> = Vec::new();
+        unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+            let list = &mut *(lparam as *mut Vec<HWND>);
+            list.push(hwnd);
+            1
+        }
+        EnumChildWindows(
+            parent_hwnd,
+            Some(enum_proc),
+            &mut children as *mut _ as isize,
+        );
+
+        let mut parent_rect: RECT = std::mem::zeroed();
+        GetWindowRect(parent_hwnd, &mut parent_rect);
+
+        for child in children {
+            let mut child_rect: RECT = std::mem::zeroed();
+            GetWindowRect(child, &mut child_rect);
+            let height = child_rect.bottom - child_rect.top;
+            if height > 50 && child_rect.top > parent_rect.top + 20 {
+                SetWindowRgn(child, std::ptr::null_mut(), 1);
+            }
+        }
     }
 }
 

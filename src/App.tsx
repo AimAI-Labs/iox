@@ -6,11 +6,14 @@ import { useTheme } from '@/hooks/useTheme';
 import { useOverlayState } from '@/hooks/useOverlayState';
 import { BubbleBar, ResultCard } from '@/components/overlay';
 import { Settings } from '@/components/settings';
+import { WebTitleBar } from '@/components/web';
 import './App.css';
 
 export function App() {
   const { config, loading, updateConfig } = useConfig();
   const [windowLabel, setWindowLabel] = useState<string>('main');
+  const urlParams = new URLSearchParams(window.location.search);
+  const isWebTitleBar = urlParams.get('view') === 'web_titlebar' || windowLabel.endsWith('_bar');
 
   useEffect(() => {
     try {
@@ -56,6 +59,11 @@ export function App() {
         </div>
       </div>
     );
+  }
+
+  // 0. Web 官网浮窗标题栏视图
+  if (isWebTitleBar) {
+    return <WebTitleBar />;
   }
 
   // 1. Overlay 悬浮窗视图

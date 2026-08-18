@@ -93,8 +93,9 @@
   align-items: center;
   justify-content: center;
   background: transparent;
-  padding: 2px 4px;
+  padding: 4px;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 @layer utilities {

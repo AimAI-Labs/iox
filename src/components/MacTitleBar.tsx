@@ -1,17 +1,33 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { MacTrafficLights } from '@/components/MacTrafficLights';
+import { cn } from '@/lib/utils';
 
-interface MacTitleBarProps {
-  title?: string;
+export interface MacTitleBarProps {
+  title?: React.ReactNode;
+  onClose?: () => void;
+  onMinimize?: () => void;
+  onMaximize?: () => void;
+  badge?: React.ReactNode;
+  tools?: React.ReactNode;
+  className?: string;
 }
 
-export const MacTitleBar: React.FC<MacTitleBarProps> = ({ title = 'IOX 设置' }) => {
-  const [isHovered, setIsHovered] = useState(false);
-
-  const handleClose = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
+export const MacTitleBar: React.FC<MacTitleBarProps> = ({
+  title = 'IOX 设置',
+  onClose,
+  onMinimize,
+  onMaximize,
+  badge,
+  tools,
+  className,
+}) => {
+  const handleClose = async () => {
+    if (onClose) {
+      onClose();
+      return;
+    }
     try {
       await invoke('hide_main_window');
     } catch {
@@ -24,9 +40,11 @@ export const MacTitleBar: React.FC<MacTitleBarProps> = ({ title = 'IOX 设置' }
     }
   };
 
-  const handleMinimize = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
+  const handleMinimize = async () => {
+    if (onMinimize) {
+      onMinimize();
+      return;
+    }
     try {
       await invoke('minimize_main_window');
     } catch {
@@ -39,9 +57,11 @@ export const MacTitleBar: React.FC<MacTitleBarProps> = ({ title = 'IOX 设置' }
     }
   };
 
-  const handleMaximize = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
+  const handleMaximize = async () => {
+    if (onMaximize) {
+      onMaximize();
+      return;
+    }
     try {
       await invoke('toggle_maximize_main_window');
     } catch {
@@ -55,8 +75,7 @@ export const MacTitleBar: React.FC<MacTitleBarProps> = ({ title = 'IOX 设置' }
   };
 
   const handleMouseDown = async (e: React.MouseEvent) => {
-    // 若点击的是交通灯按钮则忽略，防止劫持点击
-    if ((e.target as HTMLElement).closest('button, .traffic-light')) {
+    if ((e.target as HTMLElement).closest('button, .traffic-light, input, select')) {
       return;
     }
     if (e.button === 0) {
@@ -70,93 +89,26 @@ export const MacTitleBar: React.FC<MacTitleBarProps> = ({ title = 'IOX 设置' }
   };
 
   const handleDoubleClick = async (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button, .traffic-light')) {
+    if ((e.target as HTMLElement).closest('button, .traffic-light, input, select')) {
       return;
     }
-    try {
-      await invoke('toggle_maximize_main_window');
-    } catch {
-      try {
-        const appWindow = getCurrentWebviewWindow();
-        await appWindow.toggleMaximize();
-      } catch (err) {
-        console.warn('Toggle maximize on double click failed:', err);
-      }
-    }
+    await handleMaximize();
   };
 
   return (
     <header
-      className="mac-titlebar"
+      className={cn("mac-titlebar", className)}
       data-tauri-drag-region
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
     >
-      <div
-        className="mac-traffic-lights"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          className="traffic-light traffic-light-close"
-          onClick={handleClose}
-          onMouseDown={(e) => e.stopPropagation()}
-          title="关闭 (隐藏至后台)"
-          tabIndex={-1}
-        >
-          {isHovered && (
-            <svg viewBox="0 0 24 24" className="traffic-icon" aria-hidden="true">
-              <path
-                d="M6 6L18 18M6 18L18 6"
-                stroke="currentColor"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          )}
-        </button>
-        <button
-          type="button"
-          className="traffic-light traffic-light-minimize"
-          onClick={handleMinimize}
-          onMouseDown={(e) => e.stopPropagation()}
-          title="最小化"
-          tabIndex={-1}
-        >
-          {isHovered && (
-            <svg viewBox="0 0 24 24" className="traffic-icon" aria-hidden="true">
-              <path
-                d="M4 12H20"
-                stroke="currentColor"
-                strokeWidth="4"
-                strokeLinecap="round"
-              />
-            </svg>
-          )}
-        </button>
-        <button
-          type="button"
-          className="traffic-light traffic-light-maximize"
-          onClick={handleMaximize}
-          onMouseDown={(e) => e.stopPropagation()}
-          title="最大化 / 还原"
-          tabIndex={-1}
-        >
-          {isHovered && (
-            <svg viewBox="0 0 24 24" className="traffic-icon" aria-hidden="true">
-              <path
-                d="M7 17L17 7M7 7H17V17"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          )}
-        </button>
+      <div className="flex items-center gap-2">
+        <MacTrafficLights
+          onClose={handleClose}
+          onMinimize={handleMinimize}
+          onMaximize={handleMaximize}
+        />
+        {badge}
       </div>
 
       <div
@@ -166,7 +118,10 @@ export const MacTitleBar: React.FC<MacTitleBarProps> = ({ title = 'IOX 设置' }
         {title}
       </div>
 
-      <div className="mac-titlebar-placeholder" />
+      <div className="flex items-center justify-end gap-1 min-w-[70px]">
+        {tools}
+      </div>
     </header>
   );
 };
+

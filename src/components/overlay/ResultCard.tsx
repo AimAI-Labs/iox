@@ -70,9 +70,9 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     <div
       className={cn(
         "flex flex-col w-full h-full",
-        "bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl",
-        "border border-zinc-200/80 dark:border-zinc-800/80",
-        "rounded-2xl overflow-hidden",
+        "bg-white/85 dark:bg-zinc-950/85 text-foreground backdrop-blur-2xl",
+        "border border-black/10 dark:border-white/10",
+        "rounded-xl overflow-hidden",
         isClosing ? "animate-capsule-out" : "animate-in fade-in zoom-in-95 duration-150"
       )}
     >
@@ -87,15 +87,15 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 type="button"
                 onClick={() => setShowModelPicker((prev) => !prev)}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-black/5 dark:bg-white/5 text-muted-foreground hover:text-foreground border border-black/5 dark:border-white/10 transition-colors cursor-pointer"
                 title="切换模型"
               >
                 <span>{selectedModel || '默认模型'}</span>
-                <ChevronDown size={11} className="text-zinc-400" />
+                <ChevronDown size={11} className="opacity-60" />
               </button>
 
               {showModelPicker && (
-                <div className="absolute top-full mt-1.5 left-0 z-50 min-w-[150px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl p-1 animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute top-full mt-1.5 left-0 z-50 min-w-[150px] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-xl shadow-xl p-1 animate-in fade-in zoom-in-95 duration-100">
                   {availableModels.map((m) => (
                     <button
                       key={m}
@@ -108,8 +108,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                       className={cn(
                         "w-full text-left px-2.5 py-1.5 text-xs rounded-lg transition-colors cursor-pointer",
                         m === selectedModel
-                          ? "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 font-medium"
-                          : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "text-foreground hover:bg-black/5 dark:hover:bg-white/5"
                       )}
                     >
                       {m}
@@ -126,7 +126,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
               type="button"
               onClick={() => copy(streamText)}
               onMouseDown={(e) => e.stopPropagation()}
-              className="inline-flex items-center justify-center w-6 h-6 rounded-md text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors cursor-pointer mr-0.5"
+              className="inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer mr-0.5"
               title="复制回答"
             >
               {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
@@ -141,20 +141,20 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       {/* 渲染正文区 */}
       <div
         ref={bodyRef}
-        className="flex-1 p-4 overflow-y-auto select-text text-zinc-800 dark:text-zinc-200 text-xs leading-relaxed"
+        className="flex-1 p-4 overflow-y-auto select-text text-foreground text-xs leading-relaxed bg-transparent"
       >
         {error ? (
-          <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-xl text-red-600 dark:text-red-400 text-xs">
+          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs">
             <AlertCircle size={15} className="shrink-0" />
             <span>{error}</span>
           </div>
         ) : streamText ? (
           <div className="markdown-body">
             <ReactMarkdown>{streamText}</ReactMarkdown>
-            {isLoading && <span className="inline-block w-1.5 h-4 ml-0.5 bg-blue-600 dark:bg-blue-400 animate-pulse" />}
+            {isLoading && <span className="inline-block w-1.5 h-4 ml-0.5 bg-primary animate-pulse" />}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-400 dark:text-zinc-500">
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.3s]" />
               <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.15s]" />
@@ -166,7 +166,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       </div>
 
       {/* 底部追问栏 */}
-      <div className="p-2.5 px-3 border-t border-zinc-100 dark:border-zinc-800/60 bg-zinc-50/60 dark:bg-zinc-950/40">
+      <div className="p-2.5 px-3 border-t border-black/10 dark:border-white/10 bg-transparent">
         <form onSubmit={handleFollowUpSubmit} className="flex items-center gap-2">
           <input
             type="text"
@@ -174,7 +174,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             value={followUpInput}
             onChange={(e) => setFollowUpInput(e.target.value)}
             disabled={isLoading}
-            className="flex-1 h-8 px-3 text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-400 transition-all select-text"
+            className="flex-1 h-8 px-3 text-xs bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all select-text"
           />
           {isLoading ? (
             <button
@@ -189,7 +189,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             <button
               type="submit"
               disabled={!followUpInput.trim()}
-              className="inline-flex items-center justify-center w-8 h-8 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg transition-all active:scale-95 cursor-pointer"
+              className="inline-flex items-center justify-center w-8 h-8 bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-primary-foreground rounded-lg transition-all active:scale-95 cursor-pointer"
               title="发送追问"
             >
               <Send size={13} />
