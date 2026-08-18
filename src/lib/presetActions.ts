@@ -1,0 +1,179 @@
+import { ActionConfig } from '@/types/config';
+
+export interface PresetActionTemplate {
+  category: 'web' | 'api' | 'utility';
+  categoryLabel: string;
+  template: Omit<ActionConfig, 'id'> & { defaultIdPrefix: string };
+  description: string;
+}
+
+export const PRESET_ACTIONS: PresetActionTemplate[] = [
+  // --- Web 官网直达 (支持 URL 传参) ---
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
+    description: '国内知名的 AI 结构化搜索与文献检索',
+    template: {
+      defaultIdPrefix: 'act_web_metaso',
+      name: '秘塔AI',
+      icon: 'Compass',
+      actionType: 'web',
+      urlTemplate: 'https://metaso.cn/?q={text}',
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
+    description: 'OpenAI 官方 ChatGPT 网页版，自动填入问题',
+    template: {
+      defaultIdPrefix: 'act_web_chatgpt',
+      name: 'ChatGPT',
+      icon: 'Bot',
+      actionType: 'web',
+      urlTemplate: 'https://chatgpt.com/?q={text}',
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
+    description: '全球知名的 AI 搜索引擎，快速提供权威引用',
+    template: {
+      defaultIdPrefix: 'act_web_search',
+      name: 'AI搜索 (Perplexity)',
+      icon: 'Search',
+      actionType: 'web',
+      urlTemplate: 'https://www.perplexity.ai/search?q={text}',
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
+    description: '阿里云通义千问官方网页，支持智能问答',
+    template: {
+      defaultIdPrefix: 'act_web_qwen',
+      name: '问千问',
+      icon: 'MessageSquare',
+      actionType: 'web',
+      urlTemplate: 'https://tongyi.aliyun.com/qianwen/?q={text}',
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
+    description: '专为程序员打造的代码与技术搜索引擎',
+    template: {
+      defaultIdPrefix: 'act_web_phind',
+      name: 'Phind (代码搜索)',
+      icon: 'Code',
+      actionType: 'web',
+      urlTemplate: 'https://www.phind.com/search?q={text}',
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
+    description: '支持多语言检索与跨语种信息整合的 AI 搜索引擎',
+    template: {
+      defaultIdPrefix: 'act_web_felo',
+      name: 'Felo AI 搜索',
+      icon: 'Globe',
+      actionType: 'web',
+      urlTemplate: 'https://felo.ai/search?q={text}',
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
+    description: '360 纯净 AI 搜索直达',
+    template: {
+      defaultIdPrefix: 'act_web_360',
+      name: '360 AI 搜索',
+      icon: 'Search',
+      actionType: 'web',
+      urlTemplate: 'https://ai.360.com/search?q={text}',
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
+
+  // --- API 原地卡片模式 ---
+  {
+    category: 'api',
+    categoryLabel: 'API 流式卡片',
+    description: '中英互译专业翻译官，原地输出地道译文',
+    template: {
+      defaultIdPrefix: 'act_translate',
+      name: '翻译',
+      icon: 'Languages',
+      actionType: 'api',
+      promptTemplate: '你是一位专业翻译官。请将以下内容翻译为地道流畅的语言（中文转英文，外语转中文），直接输出译文：\n\n{text}',
+      enabled: true,
+    },
+  },
+  {
+    category: 'api',
+    categoryLabel: 'API 流式卡片',
+    description: '提炼要点与关键结论',
+    template: {
+      defaultIdPrefix: 'act_summarize',
+      name: '总结',
+      icon: 'FileText',
+      actionType: 'api',
+      promptTemplate: '请简明扼要地总结以下内容的核心要点与关键结论：\n\n{text}',
+      enabled: true,
+    },
+  },
+  {
+    category: 'api',
+    categoryLabel: 'API 流式卡片',
+    description: '对文本进行语句润色与表达优化',
+    template: {
+      defaultIdPrefix: 'act_polish',
+      name: '润色',
+      icon: 'Sparkles',
+      actionType: 'api',
+      promptTemplate: '请对以下文本进行润色优化，使其表达更清晰、专业、流畅，保留原文核心语义：\n\n{text}',
+      enabled: true,
+    },
+  },
+  {
+    category: 'api',
+    categoryLabel: 'API 流式卡片',
+    description: '深入分析代码逻辑、潜在 Bug 与优化建议',
+    template: {
+      defaultIdPrefix: 'act_explain_code',
+      name: '代码解释',
+      icon: 'Terminal',
+      actionType: 'api',
+      promptTemplate: '请作为资深软件工程师，为我详细解释以下代码的逻辑、关键步骤并指出可能的改进点：\n\n```\n{text}\n```',
+      enabled: true,
+    },
+  },
+
+  // --- 工具类 ---
+  {
+    category: 'utility',
+    categoryLabel: '实用工具',
+    description: '快速将划选的文本复制到系统剪贴板',
+    template: {
+      defaultIdPrefix: 'act_copy',
+      name: '复制',
+      icon: 'Copy',
+      actionType: 'copy',
+      copyToClipboard: true,
+      enabled: true,
+    },
+  },
+];

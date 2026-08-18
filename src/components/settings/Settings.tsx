@@ -72,19 +72,24 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     }));
   };
 
-  // 添加 Action
-  const addAction = () => {
+  // 添加 Action（支持直接传入预设模板）
+  const addAction = (preset?: Partial<ActionConfig> & { defaultIdPrefix?: string }) => {
     const defaultProviderId = formData.providers[0]?.id || "deepseek";
+    const baseId = preset?.defaultIdPrefix || "act_custom";
+    // 检查是否存在重复 id，若存在则追加随机时间戳
+    const isIdTaken = formData.actions.some((a) => a.id === baseId);
+    const finalId = isIdTaken ? `${baseId}_${Date.now()}` : (preset?.defaultIdPrefix ? baseId : `act_${Date.now()}`);
+
     const newA: ActionConfig = {
-      id: `act_${Date.now()}`,
-      name: "新动作",
-      icon: "Sparkles",
-      actionType: "api",
-      providerId: defaultProviderId,
-      promptTemplate: "请分析以下内容：\n\n{text}",
-      urlTemplate: "",
-      copyToClipboard: false,
-      enabled: true,
+      id: finalId,
+      name: preset?.name || "新动作",
+      icon: preset?.icon || "Sparkles",
+      actionType: preset?.actionType || "api",
+      providerId: preset?.actionType === "api" ? (preset?.providerId || defaultProviderId) : undefined,
+      promptTemplate: preset?.promptTemplate || (preset?.actionType === "api" ? "请分析以下内容：\n\n{text}" : undefined),
+      urlTemplate: preset?.urlTemplate || "",
+      copyToClipboard: preset?.copyToClipboard ?? false,
+      enabled: preset?.enabled ?? true,
     };
     setFormData((prev) => ({
       ...prev,

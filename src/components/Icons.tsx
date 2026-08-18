@@ -115,6 +115,10 @@ const ALIAS_MAP: Record<string, string> = {
   Web: 'Globe',
   Model: 'Cpu',
   Prompt: 'FileText',
+  Metaso: 'Compass',
+  ChatGPT: 'Bot',
+  Phind: 'Code',
+  Felo: 'Globe',
 };
 
 /**

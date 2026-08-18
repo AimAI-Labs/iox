@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Plus,
   Trash2,
@@ -10,8 +10,11 @@ import {
   GripVertical,
   ChevronRight,
   ChevronsUpDown,
+  Zap,
+  ChevronDown,
 } from "lucide-react";
 import { ActionConfig, ActionType, ProviderConfig } from "@/types/config";
+import { PRESET_ACTIONS } from "@/lib/presetActions";
 import { DynamicIcon } from "@/components/Icons";
 import { BubbleBar } from "@/components/overlay";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -26,7 +29,7 @@ import { cn } from "@/lib/utils";
 interface ActionsTabProps {
   actions: ActionConfig[];
   providers: ProviderConfig[];
-  onAddAction: () => void;
+  onAddAction: (preset?: Partial<ActionConfig> & { defaultIdPrefix?: string }) => void;
   onUpdateAction: (id: string, updated: Partial<ActionConfig>) => void;
   onRemoveAction: (id: string) => void;
   onReorderActions: (newActions: ActionConfig[]) => void;
@@ -43,10 +46,27 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set(actions.map(a => a.id)));
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [showPresetMenu, setShowPresetMenu] = useState(false);
+  const presetMenuRef = useRef<HTMLDivElement>(null);
   // 同步持有当前拖拽源 id：HTML5 拖拽事件间间隔极短，
   // setState 异步更新会让 dragOver/drop 闭包读到陈旧的 null。
   // 用 ref 在 onDragStart 内立刻写入，事件回调即可同步读取。
   const draggingIdRef = React.useRef<string | null>(null);
+
+  // 点击外部关闭预设下拉菜单
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (presetMenuRef.current && !presetMenuRef.current.contains(e.target as Node)) {
+        setShowPresetMenu(false);
+      }
+    };
+    if (showPresetMenu) {
+      document.addEventListener("pointerdown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("pointerdown", handleClickOutside);
+    };
+  }, [showPresetMenu]);
 
   const enabledCount = actions.filter((a) => a.enabled).length;
   const allCollapsed =
@@ -152,14 +172,129 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                 <span>{allCollapsed ? "全部展开" : "全部折叠"}</span>
               </Button>
             )}
+
+            {/* 预设模板下拉菜单 */}
+            <div className="relative" ref={presetMenuRef}>
+              <Button
+                onClick={() => setShowPresetMenu((prev) => !prev)}
+                size="sm"
+                variant="outline"
+                className="gap-1 text-xs border-border/80 hover:border-primary/50 text-foreground h-7"
+              >
+                <Zap size={13} className="text-amber-500" />
+                <span>预设模板</span>
+                <ChevronDown size={11} className={cn("transition-transform duration-200", showPresetMenu && "rotate-180")} />
+              </Button>
+
+              {showPresetMenu && (
+                <div className="absolute right-0 top-full mt-1.5 w-72 max-h-[360px] overflow-y-auto rounded-xl border border-border/80 bg-popover/95 backdrop-blur-md shadow-xl p-1.5 z-40 space-y-2 animate-in fade-in zoom-in-95 duration-100">
+                  {/* 分组：Web 官网直达 */}
+                  <div>
+                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      🌐 Web 官网直达 (URL传参)
+                    </div>
+                    <div className="space-y-0.5 mt-0.5">
+                      {PRESET_ACTIONS.filter((p) => p.category === "web").map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            onAddAction(preset.template);
+                            setShowPresetMenu(false);
+                          }}
+                          className="w-full flex items-start gap-2.5 px-2 py-1.5 rounded-lg text-left hover:bg-accent/80 transition-colors group cursor-pointer"
+                        >
+                          <div className="mt-0.5 p-1 rounded-md bg-muted/60 text-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                            <DynamicIcon name={preset.template.icon} size={13} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-foreground truncate">
+                              {preset.template.name}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground truncate leading-tight">
+                              {preset.description}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 分组：API 流式卡片 */}
+                  <div className="border-t border-border/30 pt-1.5">
+                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      🤖 API 流式卡片
+                    </div>
+                    <div className="space-y-0.5 mt-0.5">
+                      {PRESET_ACTIONS.filter((p) => p.category === "api").map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            onAddAction(preset.template);
+                            setShowPresetMenu(false);
+                          }}
+                          className="w-full flex items-start gap-2.5 px-2 py-1.5 rounded-lg text-left hover:bg-accent/80 transition-colors group cursor-pointer"
+                        >
+                          <div className="mt-0.5 p-1 rounded-md bg-muted/60 text-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                            <DynamicIcon name={preset.template.icon} size={13} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-foreground truncate">
+                              {preset.template.name}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground truncate leading-tight">
+                              {preset.description}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 分组：实用工具 */}
+                  <div className="border-t border-border/30 pt-1.5">
+                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      📋 实用工具
+                    </div>
+                    <div className="space-y-0.5 mt-0.5">
+                      {PRESET_ACTIONS.filter((p) => p.category === "utility").map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            onAddAction(preset.template);
+                            setShowPresetMenu(false);
+                          }}
+                          className="w-full flex items-start gap-2.5 px-2 py-1.5 rounded-lg text-left hover:bg-accent/80 transition-colors group cursor-pointer"
+                        >
+                          <div className="mt-0.5 p-1 rounded-md bg-muted/60 text-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                            <DynamicIcon name={preset.template.icon} size={13} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-foreground truncate">
+                              {preset.template.name}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground truncate leading-tight">
+                              {preset.description}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <Button
-              onClick={onAddAction}
+              onClick={() => onAddAction()}
               size="sm"
               variant="outline"
               className="gap-1 text-xs border-border/80 hover:border-primary/50 h-7"
             >
               <Plus size={13} />
-              <span>添加动作</span>
+              <span>自定义动作</span>
             </Button>
           </div>
         </div>
