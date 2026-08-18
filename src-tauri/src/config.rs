@@ -66,6 +66,12 @@ pub struct ActionConfig {
     pub url_template: Option<String>,
     pub copy_to_clipboard: Option<bool>,
     pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub submit_selector: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_submit: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -124,6 +130,9 @@ impl Default for AppConfig {
                     ),
                     url_template: None,
                     copy_to_clipboard: None,
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
                     enabled: true,
                 },
                 ActionConfig {
@@ -137,7 +146,38 @@ impl Default for AppConfig {
                     ),
                     url_template: None,
                     copy_to_clipboard: None,
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
                     enabled: true,
+                },
+                ActionConfig {
+                    id: "act_web_deepseek".to_string(),
+                    name: "DeepSeek".to_string(),
+                    icon: "Bot".to_string(),
+                    action_type: "web".to_string(),
+                    provider_id: None,
+                    prompt_template: None,
+                    url_template: Some("https://chat.deepseek.com/".to_string()),
+                    copy_to_clipboard: Some(false),
+                    input_selector: Some("textarea#chat-input, textarea".to_string()),
+                    submit_selector: Some("div[role='button']:not([aria-disabled='true']), button[type='submit']".to_string()),
+                    auto_submit: Some(true),
+                    enabled: true,
+                },
+                ActionConfig {
+                    id: "act_web_kimi".to_string(),
+                    name: "Kimi".to_string(),
+                    icon: "Sparkles".to_string(),
+                    action_type: "web".to_string(),
+                    provider_id: None,
+                    prompt_template: None,
+                    url_template: Some("https://kimi.moonshot.cn/".to_string()),
+                    copy_to_clipboard: Some(false),
+                    input_selector: Some("div[contenteditable='true'], textarea".to_string()),
+                    submit_selector: Some("button[data-testid*='send'], button.send-button".to_string()),
+                    auto_submit: Some(true),
+                    enabled: false,
                 },
                 ActionConfig {
                     id: "act_web_search".to_string(),
@@ -148,6 +188,9 @@ impl Default for AppConfig {
                     prompt_template: None,
                     url_template: Some("https://www.perplexity.ai/search?q={text}".to_string()),
                     copy_to_clipboard: Some(false),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
                     enabled: true,
                 },
                 ActionConfig {
@@ -159,6 +202,9 @@ impl Default for AppConfig {
                     prompt_template: None,
                     url_template: Some("https://metaso.cn/?q={text}".to_string()),
                     copy_to_clipboard: Some(false),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
                     enabled: true,
                 },
                 ActionConfig {
@@ -170,6 +216,9 @@ impl Default for AppConfig {
                     prompt_template: None,
                     url_template: Some("https://chatgpt.com/?q={text}".to_string()),
                     copy_to_clipboard: Some(false),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
                     enabled: true,
                 },
                 ActionConfig {
@@ -181,6 +230,9 @@ impl Default for AppConfig {
                     prompt_template: None,
                     url_template: Some("https://tongyi.aliyun.com/qianwen/?q={text}".to_string()),
                     copy_to_clipboard: Some(false),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
                     enabled: true,
                 },
                 ActionConfig {
@@ -192,6 +244,9 @@ impl Default for AppConfig {
                     prompt_template: None,
                     url_template: Some("https://www.phind.com/search?q={text}".to_string()),
                     copy_to_clipboard: Some(false),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
                     enabled: false,
                 },
                 ActionConfig {
@@ -203,6 +258,9 @@ impl Default for AppConfig {
                     prompt_template: None,
                     url_template: Some("https://felo.ai/search?q={text}".to_string()),
                     copy_to_clipboard: Some(false),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
                     enabled: false,
                 },
                 ActionConfig {
@@ -214,6 +272,9 @@ impl Default for AppConfig {
                     prompt_template: None,
                     url_template: Some("https://ai.360.com/search?q={text}".to_string()),
                     copy_to_clipboard: Some(false),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
                     enabled: false,
                 },
                 ActionConfig {
@@ -225,6 +286,9 @@ impl Default for AppConfig {
                     prompt_template: None,
                     url_template: None,
                     copy_to_clipboard: Some(true),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
                     enabled: true,
                 },
             ],
@@ -245,12 +309,46 @@ impl AppConfig {
         if path.exists() {
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Ok(mut config) = serde_json::from_str::<AppConfig>(&content) {
-                    // 自动向前兼容：将旧版本遗留的 web_card 动作无缝迁移为 web 动作
+                    let mut modified = false;
+
+                    // 1. 自动向前兼容：将旧版本遗留的 web_card 动作无缝迁移为 web 动作
                     for action in &mut config.actions {
                         if action.action_type == "web_card" {
                             action.action_type = "web".to_string();
+                            modified = true;
+                        }
+
+                        // 2. 自动向前兼容：补齐已知 SPA 官网的 DOM 注入与自动提交配置
+                        if action.action_type == "web" && action.input_selector.is_none() {
+                            let url = action.url_template.as_deref().unwrap_or("");
+                            if url.contains("deepseek.com") || action.id == "act_web_deepseek" {
+                                action.input_selector = Some("textarea#chat-input, textarea".to_string());
+                                action.submit_selector = Some("div[role='button']:not([aria-disabled='true']), button[type='submit']".to_string());
+                                action.auto_submit = Some(true);
+                                modified = true;
+                            } else if url.contains("kimi.moonshot.cn") || action.id == "act_web_kimi" {
+                                action.input_selector = Some("div[contenteditable='true'], textarea".to_string());
+                                action.submit_selector = Some("button[data-testid*='send'], button.send-button".to_string());
+                                action.auto_submit = Some(true);
+                                modified = true;
+                            } else if url.contains("claude.ai") || action.id == "act_web_claude" {
+                                action.input_selector = Some("div[contenteditable='true'], fieldset textarea".to_string());
+                                action.submit_selector = Some("button[aria-label='Send Message']".to_string());
+                                action.auto_submit = Some(true);
+                                modified = true;
+                            } else if url.contains("doubao.com") || action.id == "act_web_doubao" {
+                                action.input_selector = Some("textarea[data-testid*='input'], textarea".to_string());
+                                action.submit_selector = Some("button[data-testid*='send']".to_string());
+                                action.auto_submit = Some(true);
+                                modified = true;
+                            }
                         }
                     }
+
+                    if modified {
+                        let _ = config.save();
+                    }
+
                     return config;
                 }
             }
@@ -354,5 +452,29 @@ mod tests {
             }
         }
         assert_eq!(config.actions[0].action_type, "web");
+    }
+
+    #[test]
+    fn test_action_config_dom_injection() {
+        let config = AppConfig::default();
+        let deepseek_action = config.actions.iter().find(|a| a.id == "act_web_deepseek").expect("DeepSeek action exists");
+        assert_eq!(deepseek_action.action_type, "web");
+        assert_eq!(deepseek_action.url_template.as_deref(), Some("https://chat.deepseek.com/"));
+        assert_eq!(deepseek_action.input_selector.as_deref(), Some("textarea#chat-input, textarea"));
+        assert_eq!(deepseek_action.auto_submit, Some(true));
+
+        // 测试旧版本 JSON 反序列化时新增字段默认解析为 None
+        let legacy_json = r#"{
+            "id": "act_custom_web",
+            "name": "Custom AI",
+            "icon": "Bot",
+            "actionType": "web",
+            "urlTemplate": "https://example.com/chat",
+            "enabled": true
+        }"#;
+        let action: ActionConfig = serde_json::from_str(legacy_json).expect("Deserialize legacy action config");
+        assert_eq!(action.input_selector, None);
+        assert_eq!(action.submit_selector, None);
+        assert_eq!(action.auto_submit, None);
     }
 }

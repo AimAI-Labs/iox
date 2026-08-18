@@ -89,6 +89,9 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
       promptTemplate: preset?.promptTemplate || (preset?.actionType === "api" ? "请分析以下内容：\n\n{text}" : undefined),
       urlTemplate: preset?.urlTemplate || "",
       copyToClipboard: preset?.copyToClipboard ?? false,
+      inputSelector: preset?.inputSelector,
+      submitSelector: preset?.submitSelector,
+      autoSubmit: preset?.autoSubmit,
       enabled: preset?.enabled ?? true,
     };
     setFormData((prev) => ({

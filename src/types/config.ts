@@ -33,6 +33,9 @@ export interface ActionConfig {
   urlTemplate?: string;
   copyToClipboard?: boolean;
   enabled: boolean;
+  inputSelector?: string;
+  submitSelector?: string;
+  autoSubmit?: boolean;
 }
 
 export interface AppConfig {

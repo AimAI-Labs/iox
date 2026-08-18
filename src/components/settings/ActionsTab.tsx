@@ -556,19 +556,27 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                         {/* Web URL Template */}
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between">
-                            <Label>URL 网址与参数模板</Label>
+                            <Label>URL 网址与模板</Label>
                             <span className="text-[10px] text-muted-foreground">
-                              支持{" "}
-                              <code className="bg-muted px-1 rounded font-mono">
-                                {"{text}"}
-                              </code>{" "}
-                              传参
+                              {act.urlTemplate?.includes("{text}") ? (
+                                <span className="text-primary font-medium">
+                                  🔗 URL 传参模式 (
+                                  <code className="bg-muted px-1 rounded font-mono">
+                                    {"{text}"}
+                                  </code>
+                                  )
+                                </span>
+                              ) : (
+                                <span className="text-amber-500 font-medium">
+                                  🤖 DOM 智能注入模式
+                                </span>
+                              )}
                             </span>
                           </div>
                           <Input
                             type="text"
                             value={act.urlTemplate || ""}
-                            placeholder="https://tongyi.aliyun.com/qianwen/?q={text}"
+                            placeholder="https://chat.deepseek.com/ 或 https://metaso.cn/?q={text}"
                             onChange={(e) =>
                               onUpdateAction(act.id, {
                                 urlTemplate: e.target.value,
@@ -577,6 +585,76 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                           />
                         </div>
 
+                        {/* DOM Injection Config (当 URL 不含 {text} 或已配置选择器时展示) */}
+                        {!act.urlTemplate?.includes("{text}") && (
+                          <div className="p-3 rounded-lg bg-muted/30 border border-border/40 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                                智能 DOM 模拟填入与发送 (SPA 适配)
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                适用于 DeepSeek、Kimi 等无 URL 传参页面
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <Label className="text-[11px] text-muted-foreground">
+                                  输入框选择器 (CSS Selector)
+                                </Label>
+                                <Input
+                                  type="text"
+                                  className="h-8 text-xs font-mono"
+                                  value={act.inputSelector || ""}
+                                  placeholder="textarea#chat-input, textarea"
+                                  onChange={(e) =>
+                                    onUpdateAction(act.id, {
+                                      inputSelector: e.target.value,
+                                    })
+                                  }
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <Label className="text-[11px] text-muted-foreground">
+                                  发送按钮选择器 (CSS Selector，可选)
+                                </Label>
+                                <Input
+                                  type="text"
+                                  className="h-8 text-xs font-mono"
+                                  value={act.submitSelector || ""}
+                                  placeholder="button[type='submit'], div[role='button']"
+                                  onChange={(e) =>
+                                    onUpdateAction(act.id, {
+                                      submitSelector: e.target.value,
+                                    })
+                                  }
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-1 border-t border-border/20">
+                              <div className="space-y-0.5">
+                                <Label className="text-xs text-foreground cursor-pointer">
+                                  填入后自动提交对话
+                                </Label>
+                                <p className="text-[10px] text-muted-foreground">
+                                  注入文本后自动点击发送按钮或模拟 Enter 回车
+                                </p>
+                              </div>
+                              <Switch
+                                checked={act.autoSubmit ?? true}
+                                onCheckedChange={(checked) =>
+                                  onUpdateAction(act.id, {
+                                    autoSubmit: checked,
+                                  })
+                                }
+                              />
+                            </div>
+                          </div>
+                        )}
+
                         {/* Copy to Clipboard option */}
                         <div className="flex items-center justify-between p-2 rounded-lg bg-muted/20 border border-border/30">
                           <div className="space-y-0.5">
@@ -584,7 +662,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                               自动复制划选文本到剪贴板
                             </Label>
                             <p className="text-[10px] text-muted-foreground">
-                              打开网页前将划选内容写入剪贴板（便于在不支持 URL 传参的官网中直接粘贴）
+                              打开网页前将划选内容写入剪贴板（作为后备粘贴手段）
                             </p>
                           </div>
                           <Switch

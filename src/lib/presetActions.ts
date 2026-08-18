@@ -8,7 +8,75 @@ export interface PresetActionTemplate {
 }
 
 export const PRESET_ACTIONS: PresetActionTemplate[] = [
-  // --- Web 官网直达 (支持 URL 传参) ---
+  // --- Web 官网直达 ---
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
+    description: 'DeepSeek 官方大模型对话，全自动注入并提交',
+    template: {
+      defaultIdPrefix: 'act_web_deepseek',
+      name: 'DeepSeek',
+      icon: 'Bot',
+      actionType: 'web',
+      urlTemplate: 'https://chat.deepseek.com/',
+      inputSelector: 'textarea#chat-input, textarea',
+      submitSelector: "div[role='button']:not([aria-disabled='true']), button[type='submit']",
+      autoSubmit: true,
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
+    description: '月之暗面 Kimi 智能助手，全自动填入并发送',
+    template: {
+      defaultIdPrefix: 'act_web_kimi',
+      name: 'Kimi',
+      icon: 'Sparkles',
+      actionType: 'web',
+      urlTemplate: 'https://kimi.moonshot.cn/',
+      inputSelector: "div[contenteditable='true'], textarea",
+      submitSelector: "button[data-testid*='send'], button.send-button",
+      autoSubmit: true,
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
+    description: 'Anthropic 官方 Claude 网页版，自动填入与提交',
+    template: {
+      defaultIdPrefix: 'act_web_claude',
+      name: 'Claude',
+      icon: 'Bot',
+      actionType: 'web',
+      urlTemplate: 'https://claude.ai/new',
+      inputSelector: "div[contenteditable='true'], fieldset textarea",
+      submitSelector: "button[aria-label='Send Message']",
+      autoSubmit: true,
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
+    description: '字节跳动 豆包 AI 对话官网',
+    template: {
+      defaultIdPrefix: 'act_web_doubao',
+      name: '豆包',
+      icon: 'MessageSquare',
+      actionType: 'web',
+      urlTemplate: 'https://www.doubao.com/chat/',
+      inputSelector: "textarea[data-testid*='input'], textarea",
+      submitSelector: "button[data-testid*='send']",
+      autoSubmit: true,
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
   {
     category: 'web',
     categoryLabel: 'Web 官网直达',
