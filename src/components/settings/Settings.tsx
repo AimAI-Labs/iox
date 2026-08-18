@@ -100,6 +100,14 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     }));
   };
 
+  // 动作重新排序
+  const reorderActions = (newActions: ActionConfig[]) => {
+    setFormData((prev) => ({
+      ...prev,
+      actions: newActions,
+    }));
+  };
+
   // 更新 General 配置
   const updateGeneral = (updated: Partial<GeneralConfig>) => {
     setFormData((prev) => ({
@@ -170,6 +178,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
                   onAddAction={addAction}
                   onUpdateAction={updateAction}
                   onRemoveAction={removeAction}
+                  onReorderActions={reorderActions}
                 />
               </div>
             )}

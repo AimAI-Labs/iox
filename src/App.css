@@ -118,6 +118,30 @@
     backface-visibility: hidden;
     box-shadow: inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.15);
   }
+
+  /* 丝滑卡片折叠展开动效 (Grid Row 1fr -> 0fr) */
+  .card-collapse-wrapper {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s ease;
+    opacity: 1;
+  }
+
+  .card-collapse-wrapper.is-collapsed {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .card-collapse-inner {
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  [draggable="true"] {
+    -webkit-user-drag: element;
+    user-select: none;
+  }
 }
 
 /* Markdown 排版细节微调 */

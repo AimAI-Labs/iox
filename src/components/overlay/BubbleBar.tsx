@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ActionConfig } from '@/types/config';
 import { DynamicIcon } from '@/components/Icons';
 import { IOXLogo } from '@/components/common';
@@ -13,6 +13,7 @@ export interface BubbleBarProps {
   isClosing?: boolean;
   onActionClick: (action: ActionConfig) => void;
   onOpenSettings?: () => void;
+  onReorderActions?: (newActions: ActionConfig[]) => void;
   isPreview?: boolean;
 }
 
@@ -22,16 +23,43 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   isClosing = false,
   onActionClick,
   onOpenSettings,
+  onReorderActions,
   isPreview = false,
 }) => {
   const { copied, copy } = useCopyFeedback(1500);
   const { handleMouseDown } = useWindowDrag();
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
   const enabledActions = actions.filter((a) => a.enabled);
+  const isDraggable = Boolean(onReorderActions);
 
   // 快捷复制当前选中文本
   const handleQuickCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
     copy(selectedText || '选中文本示例');
+  };
+
+  // 拖拽完成排序处理
+  const handleDropAction = (targetActionId: string) => {
+    if (!draggedId || draggedId === targetActionId || !onReorderActions) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    const srcIndex = actions.findIndex((a) => a.id === draggedId);
+    const dstIndex = actions.findIndex((a) => a.id === targetActionId);
+
+    if (srcIndex !== -1 && dstIndex !== -1) {
+      const newActions = [...actions];
+      const [moved] = newActions.splice(srcIndex, 1);
+      newActions.splice(dstIndex, 0, moved);
+      onReorderActions(newActions);
+    }
+
+    setDraggedId(null);
+    setDragOverId(null);
   };
 
   return (
@@ -76,10 +104,41 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
           />
         </div>
 
-        {/* 3. 动作按钮组 */}
+        {/* 3. 动作按钮组 (支持拖拽位置排序) */}
         <div className="flex items-center gap-[2px]">
           {enabledActions.map((action) => {
             const isCopyAction = action.actionType === 'copy';
+            const isActionDragging = draggedId === action.id;
+            const isActionDragOver = dragOverId === action.id && draggedId !== action.id;
+
+            const dragHandlers = isDraggable
+              ? {
+                  draggable: true,
+                  onDragStart: (e: React.DragEvent) => {
+                    e.stopPropagation();
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', action.id);
+                    setDraggedId(action.id);
+                  },
+                  onDragOver: (e: React.DragEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverId !== action.id) {
+                      setDragOverId(action.id);
+                    }
+                  },
+                  onDragEnd: () => {
+                    setDraggedId(null);
+                    setDragOverId(null);
+                  },
+                  onDrop: (e: React.DragEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDropAction(action.id);
+                  },
+                }
+              : {};
 
             if (isCopyAction) {
               return (
@@ -87,24 +146,28 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                   key={action.id}
                   onClick={handleQuickCopy}
                   onMouseDown={(e) => e.stopPropagation()}
+                  {...dragHandlers}
                   className={cn(
                     "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded",
-                    "text-[11.5px] font-medium tracking-tight whitespace-nowrap cursor-pointer",
+                    "text-[11.5px] font-medium tracking-tight whitespace-nowrap",
+                    isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                     "transition-all duration-150 ease-out active:scale-95",
+                    isActionDragging && "opacity-25 scale-90 border border-dashed border-blue-500",
+                    isActionDragOver && "bg-blue-500/20 ring-1 ring-blue-500/50 scale-105",
                     copied
                       ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
                       : "text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90"
                   )}
-                  title="快捷复制选中文本"
+                  title={isDraggable ? `按住拖拽调整「${action.name}」排列顺序` : "快捷复制选中文本"}
                 >
-                  <span className="flex items-center justify-center transition-transform duration-150 group-hover:scale-110">
+                  <span className="flex items-center justify-center transition-transform duration-150 group-hover:scale-110 pointer-events-none">
                     {copied ? (
                       <Check size={11} className="text-emerald-500 stroke-[2.5] animate-in zoom-in-75 duration-150" />
                     ) : (
                       <Copy size={11} strokeWidth={2} />
                     )}
                   </span>
-                  <span>{copied ? '已复制' : action.name}</span>
+                  <span className="pointer-events-none">{copied ? '已复制' : action.name}</span>
                 </button>
               );
             }
@@ -114,19 +177,23 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                 key={action.id}
                 onClick={() => onActionClick(action)}
                 onMouseDown={(e) => e.stopPropagation()}
+                {...dragHandlers}
                 className={cn(
                   "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded",
-                  "text-[11.5px] font-medium tracking-tight whitespace-nowrap cursor-pointer",
+                  "text-[11.5px] font-medium tracking-tight whitespace-nowrap",
+                  isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                   "text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400",
                   "hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90",
-                  "transition-all duration-150 ease-out active:scale-95"
+                  "transition-all duration-150 ease-out active:scale-95",
+                  isActionDragging && "opacity-25 scale-90 border border-dashed border-blue-500",
+                  isActionDragOver && "bg-blue-500/20 ring-1 ring-blue-500/50 scale-105"
                 )}
-                title={action.name}
+                title={isDraggable ? `按住拖拽调整「${action.name}」排列顺序` : action.name}
               >
-                <span className="flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-transform duration-150 group-hover:scale-110">
+                <span className="flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-transform duration-150 group-hover:scale-110 pointer-events-none">
                   <DynamicIcon name={action.icon} size={11.5} />
                 </span>
-                <span>{action.name}</span>
+                <span className="pointer-events-none">{action.name}</span>
               </button>
             );
           })}
