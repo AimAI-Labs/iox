@@ -7,7 +7,7 @@ use windows_sys::Win32::Graphics::Gdi::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
-/// 为主设置窗口启用 Windows 11/10 原生 DWM 硬件级抗锯齿圆角与平滑阴影
+/// 为主设置窗口启用 Windows 11/10 原生 DWM 硬件级抗锯齿圆角、平滑阴影与亚克力材质
 pub fn apply_main_window_native_style(hwnd: HWND) {
     unsafe {
         // DWMWA_WINDOW_CORNER_PREFERENCE = 33
@@ -17,6 +17,16 @@ pub fn apply_main_window_native_style(hwnd: HWND) {
             hwnd,
             33, // DWMWA_WINDOW_CORNER_PREFERENCE
             &corner_preference as *const _ as *const _,
+            std::mem::size_of::<u32>() as u32,
+        );
+
+        // DWMWA_SYSTEMBACKDROP_TYPE = 38
+        // 3 = DWMSBT_ACRYLIC (亚克力), 2 = DWMSBT_MICA (云母)
+        let backdrop_type: u32 = 3;
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            38, // DWMWA_SYSTEMBACKDROP_TYPE
+            &backdrop_type as *const _ as *const _,
             std::mem::size_of::<u32>() as u32,
         );
     }

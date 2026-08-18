@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { AppConfig } from '../types/config';
 
 export function useConfig() {
@@ -33,6 +34,19 @@ export function useConfig() {
 
   useEffect(() => {
     fetchConfig();
+
+    let unlisten: (() => void) | undefined;
+    listen<AppConfig>('config_updated', (event) => {
+      setConfig(event.payload);
+    }).then((fn) => {
+      unlisten = fn;
+    }).catch((err) => {
+      console.warn('Failed to listen to config_updated:', err);
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, [fetchConfig]);
 
   return {

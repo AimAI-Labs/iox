@@ -32,20 +32,36 @@ export function App() {
     }
   };
 
-  // 响应主题切换
+  // 响应主题切换（支持 light / dark / system 实时监听）
   useEffect(() => {
     if (!config) return;
     const root = document.documentElement;
-    const isDark =
-      config.general.theme === 'dark' ||
-      (config.general.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const theme = config.general.theme || 'system';
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-    if (isDark) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
+    const applyTheme = () => {
+      const isDark =
+        theme === 'dark' ||
+        (theme === 'system' && mediaQuery.matches);
+
+      if (isDark) {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+    };
+
+    // 立即应用计算出的主题
+    applyTheme();
+
+    // 当配置为跟随系统时，监听系统深浅色切换事件
+    if (theme === 'system') {
+      mediaQuery.addEventListener('change', applyTheme);
+      return () => {
+        mediaQuery.removeEventListener('change', applyTheme);
+      };
     }
-  }, [config]);
+  }, [config?.general.theme]);
 
   // 全局 Esc 键监听
   useEffect(() => {

@@ -112,9 +112,37 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     });
   };
 
+  // 主题即时预览
+  React.useEffect(() => {
+    const root = document.documentElement;
+    const theme = formData.general.theme || "system";
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const applyTheme = () => {
+      const isDark =
+        theme === "dark" ||
+        (theme === "system" && mediaQuery.matches);
+
+      if (isDark) {
+        root.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+      }
+    };
+
+    applyTheme();
+
+    if (theme === "system") {
+      mediaQuery.addEventListener("change", applyTheme);
+      return () => {
+        mediaQuery.removeEventListener("change", applyTheme);
+      };
+    }
+  }, [formData.general.theme]);
+
   return (
     <div className="w-screen h-screen p-0.5 bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
-      <div className="w-full h-full flex flex-col bg-zinc-950/95 text-foreground rounded-xl border border-white/10 shadow-2xl overflow-hidden backdrop-blur-xl">
+      <div className="w-full h-full flex flex-col bg-white/85 dark:bg-zinc-950/85 text-foreground rounded-xl border border-black/10 dark:border-white/10 shadow-2xl overflow-hidden backdrop-blur-2xl">
         {/* macOS 沉浸式标题栏 */}
         <MacTitleBar title="IOX 设置" />
 
@@ -129,8 +157,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
             savedSuccess={savedSuccess}
           />
 
-          {/* 右侧主工作区 */}
-          <main className="flex-1 p-5 overflow-y-auto user-select-text">
+          {/* 右侧主工作区 (与侧边栏共享完全相同的统一页面背景) */}
+          <main className="flex-1 p-5 overflow-y-auto user-select-text bg-transparent">
             {activeTab === "providers" && (
               <ProvidersTab
                 providers={formData.providers}

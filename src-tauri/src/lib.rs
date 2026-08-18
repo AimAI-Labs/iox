@@ -6,7 +6,7 @@ pub mod window_manager;
 use ai_service::AiManager;
 use config::AppConfig;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct AppState {
     pub config: Mutex<AppConfig>,
@@ -20,10 +20,11 @@ fn get_config(state: State<AppState>) -> AppConfig {
 }
 
 #[tauri::command]
-fn save_config(new_config: AppConfig, state: State<AppState>) -> Result<(), String> {
+fn save_config(app: AppHandle, new_config: AppConfig, state: State<AppState>) -> Result<(), String> {
     new_config.save()?;
     let mut config = state.config.lock().unwrap();
-    *config = new_config;
+    *config = new_config.clone();
+    let _ = app.emit("config_updated", &new_config);
     Ok(())
 }
 

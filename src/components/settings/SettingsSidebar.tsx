@@ -28,7 +28,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   savedSuccess,
 }) => {
   return (
-    <aside className="w-48 shrink-0 flex flex-col justify-between border-r border-border/40 bg-zinc-950/40 backdrop-blur-md p-3.5 select-none">
+    <aside className="w-48 shrink-0 flex flex-col justify-between border-r border-border/40 bg-transparent p-3.5 select-none">
       {/* Brand Header */}
       <div>
         <div className="px-2 py-1 mb-5">
@@ -59,7 +59,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
                   "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 text-left outline-none",
                   isActive
                     ? "bg-primary/12 text-primary dark:text-blue-400 font-semibold shadow-xs"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                    : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
                 )}
               >
                 <Icon

@@ -240,10 +240,14 @@
 .mac-titlebar-title {
   font-size: 13px;
   font-weight: 500;
-  color: #9ca3af;
+  color: #4b5563;
   letter-spacing: -0.2px;
   text-align: center;
   flex: 1;
+}
+
+.dark .mac-titlebar-title {
+  color: #9ca3af;
 }
 
 .mac-titlebar-placeholder {
@@ -264,11 +268,20 @@ main::-webkit-scrollbar-track {
 }
 
 main::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.15);
   border-radius: 4px;
 }
 
+.dark main::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 main::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.dark main::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
 
