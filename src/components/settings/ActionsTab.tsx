@@ -1,7 +1,8 @@
 import React from "react";
-import { Plus, Trash2, Bot, Globe, Cpu, Copy } from "lucide-react";
+import { Plus, Trash2, Bot, Globe, Cpu, Copy, Eye } from "lucide-react";
 import { ActionConfig, ActionType, ProviderConfig } from "@/types/config";
 import { DynamicIcon } from "@/components/Icons";
+import { BubbleBar } from "@/components/overlay";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,31 +26,64 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
   onUpdateAction,
   onRemoveAction,
 }) => {
+  const enabledCount = actions.filter((a) => a.enabled).length;
+
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-1 border-b border-border/30">
-        <div>
-          <h2 className="text-sm font-semibold tracking-tight text-foreground">
-            动作管理与模板
-          </h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            配置划词气泡上展示的 AI 动作、Prompt 提示词及网页直达/内嵌卡片规则
-          </p>
+    <div className="flex flex-col h-full overflow-hidden gap-3.5">
+      {/* 顶部固定区域：Header + 实时预览展台 */}
+      <div className="shrink-0 space-y-3">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-1 border-b border-border/30">
+          <div>
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">
+              动作管理与模板
+            </h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              配置划词气泡上展示的 AI 动作、Prompt 提示词及网页直达/内嵌卡片规则
+            </p>
+          </div>
+          <Button
+            onClick={onAddAction}
+            size="sm"
+            variant="outline"
+            className="gap-1 text-xs border-border/80 hover:border-primary/50"
+          >
+            <Plus size={13} />
+            <span>添加动作</span>
+          </Button>
         </div>
-        <Button
-          onClick={onAddAction}
-          size="sm"
-          variant="outline"
-          className="gap-1 text-xs border-border/80 hover:border-primary/50"
-        >
-          <Plus size={13} />
-          <span>添加动作</span>
-        </Button>
+
+        {/* 胶囊条实时效果预览展台 (固定不随滚轮滚动) */}
+        <div className="relative flex flex-col items-center justify-center py-4 px-4 rounded-xl border border-border/70 bg-gradient-to-b from-muted/40 via-muted/20 to-muted/5 shadow-xs overflow-hidden">
+          {/* 左上角说明徽标 */}
+          <div className="absolute top-2.5 left-3.5 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/80">
+            <Eye size={12} className="text-primary/70" />
+            <span>划词气泡实时预览</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-mono ml-0.5 leading-none">
+              {enabledCount} 项已启用
+            </span>
+          </div>
+
+          {/* 胶囊居中展示区域 */}
+          <div className="w-full flex items-center justify-center pt-3.5 pb-0.5 min-h-[40px]">
+            {enabledCount > 0 ? (
+              <BubbleBar
+                actions={actions}
+                selectedText="IOX 划词助手"
+                isPreview={true}
+                onActionClick={() => {}}
+              />
+            ) : (
+              <div className="text-xs text-muted-foreground/60 italic flex items-center gap-1 py-1">
+                <span>未启用任何动作，请在下方勾选启用至少一个动作以预览气泡</span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Action Cards */}
-      <div className="space-y-3">
+      {/* Action Cards (独立滚动区域) */}
+      <div className="flex-1 overflow-y-auto space-y-3 pr-1.5 -mr-1.5">
         {actions.map((act) => (
           <Card
             key={act.id}

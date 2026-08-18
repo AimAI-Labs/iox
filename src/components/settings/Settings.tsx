@@ -150,39 +150,47 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
           />
 
           {/* 右侧主工作区 */}
-          <main className="flex-1 p-5 overflow-y-auto user-select-text bg-transparent">
+          <main className="flex-1 h-full overflow-hidden user-select-text bg-transparent flex flex-col">
             {activeTab === "providers" && (
-              <ProvidersTab
-                providers={formData.providers}
-                onAddProvider={addProvider}
-                onUpdateProvider={updateProvider}
-                onRemoveProvider={removeProvider}
-              />
+              <div className="flex-1 overflow-y-auto p-5">
+                <ProvidersTab
+                  providers={formData.providers}
+                  onAddProvider={addProvider}
+                  onUpdateProvider={updateProvider}
+                  onRemoveProvider={removeProvider}
+                />
+              </div>
             )}
 
             {activeTab === "actions" && (
-              <ActionsTab
-                actions={formData.actions}
-                providers={formData.providers}
-                onAddAction={addAction}
-                onUpdateAction={updateAction}
-                onRemoveAction={removeAction}
-              />
+              <div className="flex-1 h-full overflow-hidden p-5 flex flex-col">
+                <ActionsTab
+                  actions={formData.actions}
+                  providers={formData.providers}
+                  onAddAction={addAction}
+                  onUpdateAction={updateAction}
+                  onRemoveAction={removeAction}
+                />
+              </div>
             )}
 
             {activeTab === "general" && (
-              <GeneralTab
-                general={formData.general}
-                onUpdateGeneral={updateGeneral}
-              />
+              <div className="flex-1 overflow-y-auto p-5">
+                <GeneralTab
+                  general={formData.general}
+                  onUpdateGeneral={updateGeneral}
+                />
+              </div>
             )}
 
             {activeTab === "blacklist" && (
-              <BlacklistTab
-                blacklist={formData.blacklist}
-                onAddBlacklist={addBlacklist}
-                onRemoveBlacklist={removeBlacklist}
-              />
+              <div className="flex-1 overflow-y-auto p-5">
+                <BlacklistTab
+                  blacklist={formData.blacklist}
+                  onAddBlacklist={addBlacklist}
+                  onRemoveBlacklist={removeBlacklist}
+                />
+              </div>
             )}
           </main>
         </div>

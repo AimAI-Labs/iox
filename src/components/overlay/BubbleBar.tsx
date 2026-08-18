@@ -13,6 +13,7 @@ export interface BubbleBarProps {
   isClosing?: boolean;
   onActionClick: (action: ActionConfig) => void;
   onOpenSettings?: () => void;
+  isPreview?: boolean;
 }
 
 export const BubbleBar: React.FC<BubbleBarProps> = ({
@@ -21,6 +22,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   isClosing = false,
   onActionClick,
   onOpenSettings,
+  isPreview = false,
 }) => {
   const { copied, copy } = useCopyFeedback(1500);
   const { handleMouseDown } = useWindowDrag();
@@ -29,7 +31,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   // 快捷复制当前选中文本
   const handleQuickCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    copy(selectedText);
+    copy(selectedText || '选中文本示例');
   };
 
   return (
@@ -40,19 +42,20 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
           "capsule-glass",
           "rounded-lg",
           "border border-zinc-200/80 dark:border-zinc-800/80",
-          isClosing ? "animate-capsule-out" : "animate-capsule-in"
+          !isPreview && (isClosing ? "animate-capsule-out" : "animate-capsule-in")
         )}
       >
-        {/* 1. 左侧拖拽指示手柄 — 唯一可拖拽区域 */}
+        {/* 1. 左侧拖拽指示手柄 */}
         <div
-          onMouseDown={handleMouseDown}
+          onMouseDown={!isPreview ? handleMouseDown : undefined}
           className={cn(
             "flex items-center justify-center w-4 h-5 rounded",
             "text-zinc-400 dark:text-zinc-500",
-            "hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60",
-            "cursor-grab active:cursor-grabbing transition-all duration-150"
+            !isPreview && "hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60 cursor-grab active:cursor-grabbing",
+            isPreview && "cursor-default opacity-80",
+            "transition-all duration-150"
           )}
-          title="按住拖拽移动"
+          title={isPreview ? "气泡拖拽手柄（划词时可按此拖拽）" : "按住拖拽移动"}
         >
           <GripVertical size={11} strokeWidth={2.2} />
         </div>
@@ -130,22 +133,25 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         </div>
 
         {/* 4. 精致渐变分割线 */}
-        <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5" />
+        {(onOpenSettings || isPreview) && (
+          <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5" />
+        )}
 
         {/* 5. 更多与设置按钮 */}
-        {onOpenSettings && (
+        {(onOpenSettings || isPreview) && (
           <button
-            onClick={onOpenSettings}
+            onClick={!isPreview ? onOpenSettings : undefined}
             onMouseDown={(e) => e.stopPropagation()}
             className={cn(
               "group inline-flex items-center justify-center w-5 h-5 rounded",
-              "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100",
-              "hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90",
-              "active:scale-95 transition-all duration-150 cursor-pointer"
+              "text-zinc-500 dark:text-zinc-400",
+              !isPreview && "hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90 active:scale-95 cursor-pointer",
+              isPreview && "cursor-default opacity-80",
+              "transition-all duration-150"
             )}
             title="更多与设置"
           >
-            <MoreHorizontal size={12} className="transition-transform duration-200 group-hover:rotate-45" />
+            <MoreHorizontal size={12} className={cn("transition-transform duration-200", !isPreview && "group-hover:rotate-45")} />
           </button>
         )}
       </div>
