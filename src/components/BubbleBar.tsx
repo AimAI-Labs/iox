@@ -40,19 +40,17 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   return (
     <div className="flex items-center justify-center w-full h-full select-none">
       <div
-        onMouseDown={handleMouseDown}
         className={cn(
           "inline-flex items-center h-[30px] px-1.5 py-0.5 gap-0.5",
           "capsule-glass",
           "rounded-lg",
           "border border-zinc-200/80 dark:border-zinc-800/80",
-          "cursor-grab active:cursor-grabbing",
           isClosing ? "animate-capsule-out" : "animate-capsule-in"
         )}
       >
-        {/* 1. 左侧拖拽指示手柄 */}
+        {/* 1. 左侧拖拽指示手柄 — 唯一可拖拽区域 */}
         <div
-          data-tauri-drag-region
+          onMouseDown={handleMouseDown}
           className={cn(
             "flex items-center justify-center w-4 h-5 rounded",
             "text-zinc-400 dark:text-zinc-500",
@@ -66,12 +64,11 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
 
         {/* 2. 品牌 AI Logo Badge */}
         <div
-          data-tauri-drag-region
           className={cn(
             "relative flex items-center justify-center w-5 h-5 rounded",
             "bg-gradient-to-tr from-blue-500/10 to-indigo-500/10 dark:from-blue-400/20 dark:to-indigo-400/20",
             "border border-blue-500/20 dark:border-blue-400/30",
-            "group cursor-grab active:cursor-grabbing transition-all duration-200 hover:scale-105"
+            "group transition-all duration-200 hover:scale-105"
           )}
           title="IOX AI 划词助手"
         >
@@ -82,7 +79,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         </div>
 
         {/* 3. 动作按钮组 */}
-        <div data-tauri-drag-region className="flex items-center gap-[2px]">
+        <div className="flex items-center gap-[2px]">
           {enabledActions.map((action) => {
             const isCopyAction = action.id === 'act_copy' || action.name === '复制';
 
@@ -138,7 +135,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         </div>
 
         {/* 4. 精致渐变分割线 */}
-        <div data-tauri-drag-region className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5 cursor-grab active:cursor-grabbing" />
+        <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5" />
 
         {/* 5. 更多与设置按钮 */}
         {onOpenSettings && (
