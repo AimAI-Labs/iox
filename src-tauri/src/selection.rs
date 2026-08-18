@@ -367,7 +367,9 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
     CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param)
 }
 
-/// 键盘低级钩子回调（用于在未固定状态下按 Esc 或光标方向键时优雅关闭悬浮窗）
+/// 键盘低级钩子回调
+/// - Bubble 模式下：任意按键都优雅隐藏胶囊条
+/// - Card 模式下：仅 Esc 键触发隐藏
 unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     let _ = std::panic::catch_unwind(|| {
         if n_code >= 0 && l_param != 0 {
@@ -376,7 +378,15 @@ unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_par
             let msg = w_param as u32;
 
             if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
-                if vk == VK_ESCAPE || vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP || vk == VK_DOWN {
+                let should_hide = if is_overlay_bubble_mode() {
+                    // Bubble 模式下，任意按键都触发隐藏
+                    true
+                } else {
+                    // Card 模式下，仅 Esc 键触发隐藏
+                    vk == VK_ESCAPE
+                };
+
+                if should_hide {
                     let app_handle = APP_HANDLE.get().cloned();
                     if let Some(ref handle) = app_handle {
                         request_hide_overlay_gracefully(handle);

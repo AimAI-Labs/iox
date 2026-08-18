@@ -200,6 +200,11 @@ fn set_drag_state(dragging: bool) {
 }
 
 #[tauri::command]
+fn set_overlay_mode(mode: String) {
+    overlay_state::set_overlay_bubble_mode(mode == "bubble");
+}
+
+#[tauri::command]
 fn start_overlay_dragging(app: AppHandle) {
     tauri::async_runtime::spawn_blocking(move || {
         window_manager::run_overlay_drag_loop(&app);
@@ -298,6 +303,7 @@ pub fn run() {
             open_in_browser,
             set_pin_state,
             set_drag_state,
+            set_overlay_mode,
             start_overlay_dragging
         ])
         .run(tauri::generate_context!())

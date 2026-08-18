@@ -17,13 +17,15 @@ export function useOverlayLifecycle({
   isPinnedRef.current = isPinned;
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 调整窗口尺寸
+  // 调整窗口尺寸并同步模式到 Rust 端
   const updateWindowSize = useCallback(
     async (
       newMode: OverlayMode,
       allowFocus = false,
       customSize?: { width: number; height: number }
     ) => {
+      // 同步模式到 Rust 端，供键盘钩子判断消失逻辑
+      invoke('set_overlay_mode', { mode: newMode }).catch(() => {});
       if (newMode === 'bubble') {
         await invoke('resize_overlay', { width: 500, height: 46, allowFocus: false });
       } else {
