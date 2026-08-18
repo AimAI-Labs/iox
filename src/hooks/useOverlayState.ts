@@ -51,8 +51,8 @@ export function useOverlayState(config: AppConfig | null) {
     selectedModel: state.selectedModel,
     streamText: state.streamText,
     isPinned: state.isPinned,
-    onStartAction: (action, model, isWebCard) =>
-      dispatch({ type: 'START_ACTION', action, model, isWebCard }),
+    onStartAction: (action, model) =>
+      dispatch({ type: 'START_ACTION', action, model }),
     onAppendToken: (token) => dispatch({ type: 'APPEND_STREAM_TOKEN', token }),
     onStreamDone: () => dispatch({ type: 'STREAM_DONE' }),
     onStreamError: (error) => dispatch({ type: 'STREAM_ERROR', error }),

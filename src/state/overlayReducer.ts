@@ -31,7 +31,7 @@ export const initialOverlayState: OverlayState = {
 export type OverlayAction =
   | { type: 'SELECTION_TRIGGERED'; text: string }
   | { type: 'SET_MODE'; mode: OverlayMode }
-  | { type: 'START_ACTION'; action: ActionConfig; model?: string; isWebCard?: boolean }
+  | { type: 'START_ACTION'; action: ActionConfig; model?: string }
   | { type: 'APPEND_STREAM_TOKEN'; token: string }
   | { type: 'STREAM_DONE' }
   | { type: 'STREAM_ERROR'; error: string }
@@ -72,7 +72,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         mode: 'card',
         streamText: '',
         error: null,
-        isLoading: !action.isWebCard,
+        isLoading: true,
         selectedModel: action.model || state.selectedModel,
       };
 

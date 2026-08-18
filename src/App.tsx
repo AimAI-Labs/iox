@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useConfig } from '@/hooks/useConfig';
 import { useTheme } from '@/hooks/useTheme';
 import { useOverlayState } from '@/hooks/useOverlayState';
-import { BubbleBar, ResultCard, WebCardView } from '@/components/overlay';
+import { BubbleBar, ResultCard } from '@/components/overlay';
 import { Settings } from '@/components/settings';
 import './App.css';
 
@@ -72,32 +72,21 @@ export function App() {
             onOpenSettings={handleOpenSettings}
           />
         ) : overlayState.activeAction ? (
-          overlayState.activeAction.actionType === 'web_card' ? (
-            <WebCardView
-              action={overlayState.activeAction}
-              selectedText={overlayState.selectedText}
-              isPinned={overlayState.isPinned}
-              isClosing={overlayState.isClosing}
-              onPinToggle={overlayState.handlePinToggle}
-              onClose={overlayState.handleClose}
-            />
-          ) : (
-            <ResultCard
-              action={overlayState.activeAction}
-              providers={config.providers}
-              selectedModel={overlayState.selectedModel}
-              streamText={overlayState.streamText}
-              isLoading={overlayState.isLoading}
-              isPinned={overlayState.isPinned}
-              isClosing={overlayState.isClosing}
-              error={overlayState.error}
-              onModelChange={overlayState.handleModelChange}
-              onSendFollowUp={overlayState.handleSendFollowUp}
-              onCancel={overlayState.handleCancel}
-              onPinToggle={overlayState.handlePinToggle}
-              onClose={overlayState.handleClose}
-            />
-          )
+          <ResultCard
+            action={overlayState.activeAction}
+            providers={config.providers}
+            selectedModel={overlayState.selectedModel}
+            streamText={overlayState.streamText}
+            isLoading={overlayState.isLoading}
+            isPinned={overlayState.isPinned}
+            isClosing={overlayState.isClosing}
+            error={overlayState.error}
+            onModelChange={overlayState.handleModelChange}
+            onSendFollowUp={overlayState.handleSendFollowUp}
+            onCancel={overlayState.handleCancel}
+            onPinToggle={overlayState.handlePinToggle}
+            onClose={overlayState.handleClose}
+          />
         ) : null}
       </div>
     );

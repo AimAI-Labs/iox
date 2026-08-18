@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+fn default_web_window_mode() -> String {
+    "multi_window".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GeneralConfig {
@@ -11,6 +15,10 @@ pub struct GeneralConfig {
     pub global_hotkey: String,    // e.g. "Alt+Space"
     pub theme: String,            // "system" | "dark" | "light"
     pub auto_start: bool,
+    #[serde(default = "default_web_window_mode")]
+    pub web_window_mode: String,  // "multi_window" | "tabbed"
+    #[serde(default)]
+    pub auto_copy_on_web_action: bool,
 }
 
 impl Default for GeneralConfig {
@@ -22,6 +30,8 @@ impl Default for GeneralConfig {
             global_hotkey: "Alt+Space".to_string(),
             theme: "system".to_string(),
             auto_start: false,
+            web_window_mode: "multi_window".to_string(),
+            auto_copy_on_web_action: false,
         }
     }
 }
@@ -43,7 +53,7 @@ pub struct ActionConfig {
     pub id: String,
     pub name: String,
     pub icon: String,
-    pub action_type: String, // "api" | "web" | "web_card" | "copy"
+    pub action_type: String, // "api" | "web" | "copy" (web_card auto-migrated)
     pub provider_id: Option<String>,
     pub prompt_template: Option<String>,
     pub url_template: Option<String>,
@@ -172,7 +182,13 @@ impl AppConfig {
         let path = Self::config_path();
         if path.exists() {
             if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
+                if let Ok(mut config) = serde_json::from_str::<AppConfig>(&content) {
+                    // 自动向前兼容：将旧版本遗留的 web_card 动作无缝迁移为 web 动作
+                    for action in &mut config.actions {
+                        if action.action_type == "web_card" {
+                            action.action_type = "web".to_string();
+                        }
+                    }
                     return config;
                 }
             }
@@ -204,6 +220,7 @@ mod tests {
         let json = serde_json::to_string_pretty(&config).expect("Serialize default config");
         let deserialized: AppConfig = serde_json::from_str(&json).expect("Deserialize default config");
         assert_eq!(config.general.global_hotkey, deserialized.general.global_hotkey);
+        assert_eq!(deserialized.general.web_window_mode, "multi_window");
         assert_eq!(config.providers.len(), deserialized.providers.len());
         assert_eq!(config.actions.len(), deserialized.actions.len());
     }
@@ -220,21 +237,37 @@ mod tests {
     }
 
     #[test]
-    fn test_web_card_action_serialization() {
-        let action = ActionConfig {
-            id: "act_metaso".to_string(),
-            name: "秘塔搜索".to_string(),
-            icon: "Globe".to_string(),
-            action_type: "web_card".to_string(),
-            provider_id: None,
-            prompt_template: None,
-            url_template: Some("https://metaso.cn/?q={text}".to_string()),
-            copy_to_clipboard: Some(true),
-            enabled: true,
-        };
-        let json = serde_json::to_string(&action).expect("Serialize web_card action");
-        let deserialized: ActionConfig = serde_json::from_str(&json).expect("Deserialize web_card action");
-        assert_eq!(deserialized.action_type, "web_card");
-        assert_eq!(deserialized.url_template, Some("https://metaso.cn/?q={text}".to_string()));
+    fn test_legacy_web_card_migration() {
+        let raw_json = r#"{
+            "general": {
+                "autoPopupOnSelection": true,
+                "minSelectionLength": 1,
+                "triggerModifier": "None",
+                "globalHotkey": "Alt+Space",
+                "theme": "system",
+                "autoStart": false
+            },
+            "blacklist": [],
+            "providers": [],
+            "actions": [
+                {
+                    "id": "act_metaso",
+                    "name": "秘塔搜索",
+                    "icon": "Globe",
+                    "actionType": "web_card",
+                    "urlTemplate": "https://metaso.cn/?q={text}",
+                    "copyToClipboard": true,
+                    "enabled": true
+                }
+            ]
+        }"#;
+        let mut config: AppConfig = serde_json::from_str(raw_json).expect("Deserialize legacy config");
+        assert_eq!(config.general.web_window_mode, "multi_window");
+        for action in &mut config.actions {
+            if action.action_type == "web_card" {
+                action.action_type = "web".to_string();
+            }
+        }
+        assert_eq!(config.actions[0].action_type, "web");
     }
 }

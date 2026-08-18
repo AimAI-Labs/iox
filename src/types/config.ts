@@ -1,3 +1,5 @@
+export type WebWindowMode = 'multi_window' | 'tabbed';
+
 export interface GeneralConfig {
   autoPopupOnSelection: boolean;
   minSelectionLength: number;
@@ -5,6 +7,8 @@ export interface GeneralConfig {
   globalHotkey: string;
   theme: 'system' | 'dark' | 'light';
   autoStart: boolean;
+  webWindowMode: WebWindowMode;
+  autoCopyOnWebAction: boolean;
 }
 
 export interface ProviderConfig {
@@ -16,7 +20,7 @@ export interface ProviderConfig {
   defaultModel: string;
 }
 
-export type ActionType = 'api' | 'web' | 'web_card' | 'copy';
+export type ActionType = 'api' | 'web' | 'copy';
 
 export interface ActionConfig {
   id: string;

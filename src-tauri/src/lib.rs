@@ -30,12 +30,22 @@ fn save_config(app: AppHandle, new_config: AppConfig, state: State<AppState>) ->
 }
 
 #[tauri::command]
-fn trigger_web_action(
-    url_template: String,
+async fn trigger_web_action(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    action_id: String,
     text: String,
     copy_to_clipboard: Option<bool>,
 ) -> Result<(), String> {
-    ai::execute_web_action(&url_template, &text, copy_to_clipboard.unwrap_or(false))
+    let config = state.config.lock().unwrap().clone();
+    let action = config
+        .actions
+        .iter()
+        .find(|a| a.id == action_id)
+        .cloned()
+        .ok_or_else(|| format!("Action '{}' not found", action_id))?;
+
+    ai::execute_web_action(&app, &config, &action, &text, copy_to_clipboard)
 }
 
 #[tauri::command]

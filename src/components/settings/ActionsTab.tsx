@@ -1,5 +1,5 @@
 import React from "react";
-import { Plus, Trash2, Bot, Globe, Cpu, LayoutTemplate, Copy } from "lucide-react";
+import { Plus, Trash2, Bot, Globe, Cpu, Copy } from "lucide-react";
 import { ActionConfig, ActionType, ProviderConfig } from "@/types/config";
 import { DynamicIcon } from "@/components/Icons";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -72,10 +72,8 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                 <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted/40 font-mono">
                   {act.actionType === "api"
                     ? "API 流式"
-                    : act.actionType === "web_card"
-                    ? "Web 卡片"
                     : act.actionType === "web"
-                    ? "Web 直达"
+                    ? "Web 浮窗"
                     : "快捷复制"}
                 </span>
               </div>
@@ -125,16 +123,10 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                         description: "原地逐字流式渲染",
                       },
                       {
-                        value: "web_card",
-                        label: "Web 官网卡片",
-                        icon: LayoutTemplate,
-                        description: "原地内嵌网页卡片",
-                      },
-                      {
                         value: "web",
-                        label: "Web 官网直达",
+                        label: "Web 官网浮窗",
                         icon: Globe,
-                        description: "调起浏览器访问官网",
+                        description: "原生 Webview 浮窗访问官网",
                       },
                       {
                         value: "copy",
@@ -208,11 +200,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                   {/* Web URL Template */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <Label>
-                        {act.actionType === "web_card"
-                          ? "网页地址 / 内嵌模板"
-                          : "URL 跳转模板"}
-                      </Label>
+                      <Label>URL 网址与参数模板</Label>
                       <span className="text-[10px] text-muted-foreground">
                         支持 <code className="bg-muted px-1 rounded font-mono">{"{text}"}</code> 传参
                       </span>
@@ -220,11 +208,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                     <Input
                       type="text"
                       value={act.urlTemplate || ""}
-                      placeholder={
-                        act.actionType === "web_card"
-                          ? "https://metaso.cn/?q={text}"
-                          : "https://tongyi.aliyun.com/qianwen/?q={text}"
-                      }
+                      placeholder="https://tongyi.aliyun.com/qianwen/?q={text}"
                       onChange={(e) =>
                         onUpdateAction(act.id, { urlTemplate: e.target.value })
                       }
@@ -238,9 +222,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                         自动复制划选文本到剪贴板
                       </Label>
                       <p className="text-[10px] text-muted-foreground">
-                        {act.actionType === "web_card"
-                          ? "展开卡片时将划选内容写入剪贴板（便于在网页内快速粘贴）"
-                          : "打开网页前将划选内容写入剪贴板（适用于不支持 URL 参数提问的官网）"}
+                        打开网页前将划选内容写入剪贴板（便于在不支持 URL 传参的官网中直接粘贴）
                       </p>
                     </div>
                     <Switch

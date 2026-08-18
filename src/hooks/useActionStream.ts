@@ -26,7 +26,7 @@ interface UseActionStreamProps {
   selectedModel: string;
   streamText: string;
   isPinned: boolean;
-  onStartAction: (action: ActionConfig, model?: string, isWebCard?: boolean) => void;
+  onStartAction: (action: ActionConfig, model?: string) => void;
   onAppendToken: (token: string) => void;
   onStreamDone: () => void;
   onStreamError: (error: string) => void;
@@ -105,11 +105,19 @@ export function useActionStream({
         return;
       }
 
-      // 2. 网页直达模式
+      // 2. Web 官网原生浮窗模式
       if (action.actionType === 'web') {
+        if (action.copyToClipboard && selectedText) {
+          try {
+            await navigator.clipboard.writeText(selectedText);
+          } catch {
+            // ignore
+          }
+        }
+
         try {
           await invoke('trigger_web_action', {
-            urlTemplate: action.urlTemplate || '',
+            actionId: action.id,
             text: selectedText,
             copyToClipboard: action.copyToClipboard || false,
           });
@@ -122,27 +130,11 @@ export function useActionStream({
         return;
       }
 
-      // 3. Web 官网内嵌卡片模式
-      if (action.actionType === 'web_card') {
-        onStartAction(action, undefined, true);
-
-        if (action.copyToClipboard && selectedText) {
-          try {
-            await navigator.clipboard.writeText(selectedText);
-          } catch {
-            // ignore
-          }
-        }
-
-        await updateWindowSize('card', true, { width: 560, height: 500 });
-        return;
-      }
-
-      // 4. API 流式卡片模式
+      // 3. API 流式卡片模式
       const provider = config?.providers.find((p) => p.id === action.providerId);
       const defaultModel = provider?.defaultModel || 'default';
 
-      onStartAction(action, defaultModel, false);
+      onStartAction(action, defaultModel);
       await updateWindowSize('card', true);
 
       try {
