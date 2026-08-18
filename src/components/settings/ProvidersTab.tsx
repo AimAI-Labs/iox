@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Trash2, Eye, EyeOff } from "lucide-react";
+import { Plus, Trash2, Eye, EyeOff, Box } from "lucide-react";
 import { ProviderConfig } from "../../types/config";
 import { Card, CardHeader, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
@@ -177,16 +177,15 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                     {p.models.length > 0 ? (
                       <Select
                         value={p.defaultModel}
-                        onChange={(e) =>
-                          onUpdateProvider(idx, { defaultModel: e.target.value })
+                        onChange={(val) =>
+                          onUpdateProvider(idx, { defaultModel: val })
                         }
-                      >
-                        {p.models.map((m) => (
-                          <option key={m} value={m}>
-                            {m}
-                          </option>
-                        ))}
-                      </Select>
+                        options={p.models.map((m) => ({
+                          value: m,
+                          label: m,
+                          icon: Box,
+                        }))}
+                      />
                     ) : (
                       <Input
                         type="text"

@@ -1,4 +1,5 @@
 import React from "react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { GeneralConfig } from "../../types/config";
 import { Card, CardContent } from "../ui/card";
 import { Input } from "../ui/input";
@@ -63,17 +64,18 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
             <div className="w-52">
               <Select
                 value={general.triggerModifier}
-                onChange={(e) =>
+                onChange={(val) =>
                   onUpdateGeneral({
-                    triggerModifier: e.target.value as GeneralConfig["triggerModifier"],
+                    triggerModifier: val as GeneralConfig["triggerModifier"],
                   })
                 }
-              >
-                <option value="None">无 (鼠标划选直接触发)</option>
-                <option value="Ctrl">按住 Ctrl 划选</option>
-                <option value="Alt">按住 Alt 划选</option>
-                <option value="Shift">按住 Shift 划选</option>
-              </Select>
+                options={[
+                  { value: "None", label: "无 (鼠标划选直接触发)" },
+                  { value: "Ctrl", label: "按住 Ctrl 划选" },
+                  { value: "Alt", label: "按住 Alt 划选" },
+                  { value: "Shift", label: "按住 Shift 划选" },
+                ]}
+              />
             </div>
           </div>
 
@@ -145,16 +147,17 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
             <div className="w-52">
               <Select
                 value={general.theme}
-                onChange={(e) =>
+                onChange={(val) =>
                   onUpdateGeneral({
-                    theme: e.target.value as GeneralConfig["theme"],
+                    theme: val as GeneralConfig["theme"],
                   })
                 }
-              >
-                <option value="system">跟随系统 (System)</option>
-                <option value="dark">深色模式 (Dark)</option>
-                <option value="light">浅色模式 (Light)</option>
-              </Select>
+                options={[
+                  { value: "system", label: "跟随系统 (System)", icon: Monitor },
+                  { value: "dark", label: "深色模式 (Dark)", icon: Moon },
+                  { value: "light", label: "浅色模式 (Light)", icon: Sun },
+                ]}
+              />
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Bot, Globe, Cpu } from "lucide-react";
 import { ActionConfig, ProviderConfig } from "../../types/config";
 import { DynamicIcon } from "../Icons";
 import { Card, CardHeader, CardContent } from "../ui/card";
@@ -106,15 +106,26 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                   <Label>动作类型</Label>
                   <Select
                     value={act.actionType}
-                    onChange={(e) =>
+                    onChange={(val) =>
                       onUpdateAction(idx, {
-                        actionType: e.target.value as "api" | "web",
+                        actionType: val as "api" | "web",
                       })
                     }
-                  >
-                    <option value="api">API 流式卡片 (原地逐字渲染)</option>
-                    <option value="web">Web 官网直达 (打开浏览器)</option>
-                  </Select>
+                    options={[
+                      {
+                        value: "api",
+                        label: "API 流式卡片",
+                        icon: Bot,
+                        description: "原地逐字流式渲染",
+                      },
+                      {
+                        value: "web",
+                        label: "Web 官网直达",
+                        icon: Globe,
+                        description: "调起浏览器访问官网",
+                      },
+                    ]}
+                  />
                 </div>
 
                 {/* Lucide Icon */}
@@ -144,16 +155,16 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                     <Label>绑定模型服务商</Label>
                     <Select
                       value={act.providerId || ""}
-                      onChange={(e) =>
-                        onUpdateAction(idx, { providerId: e.target.value })
+                      onChange={(val) =>
+                        onUpdateAction(idx, { providerId: val })
                       }
-                    >
-                      {providers.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.defaultModel})
-                        </option>
-                      ))}
-                    </Select>
+                      options={providers.map((p) => ({
+                        value: p.id,
+                        label: p.name,
+                        icon: Cpu,
+                        description: `默认: ${p.defaultModel}`,
+                      }))}
+                    />
                   </div>
 
                   {/* Prompt Template */}
