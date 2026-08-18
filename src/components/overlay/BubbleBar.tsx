@@ -1,7 +1,8 @@
 import React from 'react';
 import { ActionConfig } from '@/types/config';
 import { DynamicIcon } from '@/components/Icons';
-import { GripVertical, MoreHorizontal, Check, Copy, Sparkles } from 'lucide-react';
+import { IOXLogo } from '@/components/common';
+import { GripVertical, MoreHorizontal, Check, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWindowDrag } from '@/hooks/useWindowDrag';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
@@ -59,16 +60,16 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         {/* 2. 品牌 AI Logo Badge */}
         <div
           className={cn(
-            "relative flex items-center justify-center w-5 h-5 rounded",
-            "bg-gradient-to-tr from-blue-500/10 to-indigo-500/10 dark:from-blue-400/20 dark:to-indigo-400/20",
-            "border border-blue-500/20 dark:border-blue-400/30",
-            "group transition-all duration-200 hover:scale-105"
+            "relative flex items-center justify-center w-6 h-6 rounded-md",
+            "bg-gradient-to-tr from-blue-500/10 to-indigo-500/10 dark:from-blue-400/15 dark:to-indigo-400/15",
+            "border border-blue-500/20 dark:border-blue-400/25",
+            "group transition-all duration-200 hover:scale-105 cursor-default shrink-0"
           )}
           title="IOX AI 划词助手"
         >
-          <Sparkles
-            size={11}
-            className="text-blue-600 dark:text-blue-400 transition-transform duration-200 group-hover:rotate-12 fill-blue-500/20 pointer-events-none"
+          <IOXLogo
+            size={22}
+            className="transition-transform duration-200 group-hover:scale-110"
           />
         </div>
 

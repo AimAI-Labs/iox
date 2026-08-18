@@ -82,6 +82,8 @@ pub fn execute_web_action(
     if let Ok(hwnd) = window.hwnd() {
         crate::window_manager::apply_main_window_native_style(hwnd.0 as _);
     }
+    let icon = tauri::include_image!("icons/icon.png");
+    let _ = window.set_icon(icon);
 
     // 构建顶部 MacTitleBar Webview
     let title_param = urlencoding::encode(&action.name);

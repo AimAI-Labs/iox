@@ -1,6 +1,7 @@
 import React from "react";
 import { Cpu, Zap, Sliders, Shield, Save, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { IOXLogo } from "@/components/common";
 import { cn } from "@/lib/utils";
 
 export type SettingsTab = "providers" | "actions" | "general" | "blacklist";
@@ -31,15 +32,20 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
     <aside className="w-48 shrink-0 flex flex-col justify-between border-r border-border/40 bg-transparent p-3.5 select-none">
       {/* Brand Header */}
       <div>
-        <div className="px-2 py-1 mb-5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-base font-bold tracking-tight bg-gradient-to-br from-blue-500 via-indigo-400 to-violet-400 bg-clip-text text-transparent">
+        <div className="px-2 py-1 mb-5 flex items-center gap-2.5">
+          <IOXLogo
+            variant="solid"
+            size={34}
+            className="rounded-lg shadow-xs shrink-0"
+          />
+          <div className="flex flex-col justify-center">
+            <span className="text-base font-bold tracking-tight bg-gradient-to-br from-blue-500 via-indigo-400 to-violet-400 bg-clip-text text-transparent leading-none">
               IOX
             </span>
+            <p className="text-[10.5px] text-muted-foreground mt-1 font-medium leading-none">
+              划词 AI
+            </p>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            划词 AI
-          </p>
         </div>
 
         {/* Navigation List */}

@@ -272,6 +272,8 @@ pub fn run() {
                 if let Ok(hwnd) = main_win.hwnd() {
                     window_manager::apply_main_window_native_style(hwnd.0 as _);
                 }
+                let icon = tauri::include_image!("icons/icon.png");
+                let _ = main_win.set_icon(icon);
             }
             // 启动全局鼠标划词钩子
             selection::start_mouse_hook(handle);
