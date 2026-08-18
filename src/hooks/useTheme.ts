@@ -3,10 +3,18 @@ import { useEffect } from 'react';
 export type ThemeMode = 'system' | 'dark' | 'light';
 
 /**
- * 响应系统与自定义深浅色主题切换 Hook
+ * 响应系统与自定义深浅色主题切换 Hook，并动态同步悬浮窗背景透明度
  * @param theme 目标主题 ('system' | 'dark' | 'light')
+ * @param overlayOpacity 悬浮窗背景透明度 (50 ~ 100)
  */
-export function useTheme(theme: ThemeMode = 'system') {
+export function useTheme(theme: ThemeMode = 'system', overlayOpacity: number = 90) {
+  // 动态同步背景透明度 CSS 变量
+  useEffect(() => {
+    const root = document.documentElement;
+    const opacityVal = Math.min(Math.max(overlayOpacity ?? 90, 50), 100) / 100;
+    root.style.setProperty('--overlay-opacity', opacityVal.toString());
+  }, [overlayOpacity]);
+
   useEffect(() => {
     const root = document.documentElement;
     const currentTheme = theme || 'system';

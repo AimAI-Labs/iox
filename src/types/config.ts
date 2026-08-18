@@ -9,6 +9,7 @@ export interface GeneralConfig {
   autoStart: boolean;
   webWindowMode: WebWindowMode;
   autoCopyOnWebAction: boolean;
+  overlayOpacity?: number;
 }
 
 export interface ProviderConfig {

@@ -5,8 +5,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { IOXLogo } from "@/components/common";
+import { Sparkles } from "lucide-react";
 
 interface GeneralTabProps {
   general: GeneralConfig;
@@ -216,6 +219,72 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                   { value: "light", label: "浅色模式 (Light)", icon: Sun },
                 ]}
               />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Overlay Opacity */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label className="text-xs text-foreground font-medium">
+                  悬浮窗背景透明度
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  调节划词胶囊条与 AI 结果卡片的毛玻璃背景透光度
+                </p>
+              </div>
+              <div className="w-52 flex items-center gap-3">
+                <Slider
+                  min={50}
+                  max={100}
+                  step={1}
+                  value={general.overlayOpacity ?? 90}
+                  onChange={(val) => onUpdateGeneral({ overlayOpacity: val })}
+                  className="flex-1"
+                />
+                <span className="w-9 text-right text-xs font-mono text-muted-foreground font-semibold">
+                  {general.overlayOpacity ?? 90}%
+                </span>
+              </div>
+            </div>
+
+            {/* 实时微缩毛玻璃对比展台 */}
+            <div className="relative rounded-xl p-3 overflow-hidden border border-border/50 bg-gradient-to-r from-blue-500/15 via-indigo-500/15 to-purple-500/15 dark:from-blue-600/20 dark:via-indigo-600/20 dark:to-purple-600/20 select-none">
+              <div className="relative z-10 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-medium text-muted-foreground">
+                    效果实时预览 (当前不透明度 {general.overlayOpacity ?? 90}%)
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/80">
+                    毛玻璃高斯模糊已联动
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
+                  {/* 1. 微缩胶囊气泡 */}
+                  <div className="capsule-glass h-7 px-2 rounded-lg border border-zinc-200/80 dark:border-zinc-800/80 inline-flex items-center gap-1.5 shadow-sm">
+                    <IOXLogo size={16} />
+                    <span className="text-[11px] font-medium text-foreground">气泡透明度</span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary font-medium">
+                      <Sparkles size={10} />
+                      <span>AI动作</span>
+                    </span>
+                  </div>
+
+                  {/* 2. 微缩卡片透光效果 */}
+                  <div className="flex-1 min-w-[180px] bg-[var(--bg-overlay-card)] backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-lg px-2.5 py-1.5 shadow-sm">
+                    <div className="flex items-center justify-between text-[10.5px] text-muted-foreground border-b border-border/40 pb-1 mb-1">
+                      <span className="font-medium text-foreground">AI 结果卡片</span>
+                      <span>Markdown 预览</span>
+                    </div>
+                    <p className="text-[10.5px] text-foreground/90 line-clamp-1">
+                      透明度调节实时生效，背景磨砂透光清晰自然。
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

@@ -27,8 +27,8 @@ export function App() {
 
   const overlayState = useOverlayState(config);
 
-  // 统一应用与监听主题
-  useTheme(config?.general.theme);
+  // 统一应用与监听主题及透明度
+  useTheme(config?.general.theme, config?.general.overlayOpacity);
 
   const handleOpenSettings = async () => {
     try {

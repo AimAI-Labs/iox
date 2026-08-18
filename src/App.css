@@ -27,9 +27,10 @@
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.75rem;
 
-    /* 兼容原有变量 */
-    --bg-overlay: rgba(255, 255, 255, 0.95);
-    --bg-overlay-card: rgba(255, 255, 255, 0.96);
+    /* 悬浮背景透明度变量系统 */
+    --overlay-opacity: 0.95;
+    --bg-overlay: rgba(255, 255, 255, var(--overlay-opacity, 0.95));
+    --bg-overlay-card: rgba(255, 255, 255, var(--overlay-opacity, 0.95));
     --bg-card: #ffffff;
     --border-color: rgba(0, 0, 0, 0.08);
     --text-main: #18181b;
@@ -61,8 +62,9 @@
     --input: 240 3.7% 15.9%;
     --ring: 217.2 91.2% 59.8%;
 
-    --bg-overlay: rgba(24, 24, 27, 0.92);
-    --bg-overlay-card: rgba(18, 20, 26, 0.94);
+    --overlay-opacity: 0.90;
+    --bg-overlay: rgba(24, 24, 27, var(--overlay-opacity, 0.90));
+    --bg-overlay-card: rgba(18, 20, 26, var(--overlay-opacity, 0.90));
     --bg-card: #18181b;
     --border-color: rgba(255, 255, 255, 0.12);
     --text-main: #f4f4f5;
@@ -100,7 +102,7 @@
 
 @layer utilities {
   .capsule-glass {
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--bg-overlay);
     backdrop-filter: blur(24px) saturate(180%);
     -webkit-backdrop-filter: blur(24px) saturate(180%);
     will-change: transform, opacity;
@@ -110,7 +112,7 @@
   }
 
   .dark .capsule-glass {
-    background: rgba(24, 24, 27, 0.9);
+    background: var(--bg-overlay);
     backdrop-filter: blur(24px) saturate(180%);
     -webkit-backdrop-filter: blur(24px) saturate(180%);
     will-change: transform, opacity;

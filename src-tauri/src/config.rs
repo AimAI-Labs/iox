@@ -6,6 +6,10 @@ fn default_web_window_mode() -> String {
     "multi_window".to_string()
 }
 
+fn default_overlay_opacity() -> u32 {
+    90
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GeneralConfig {
@@ -19,6 +23,8 @@ pub struct GeneralConfig {
     pub web_window_mode: String,  // "multi_window" | "tabbed"
     #[serde(default)]
     pub auto_copy_on_web_action: bool,
+    #[serde(default = "default_overlay_opacity")]
+    pub overlay_opacity: u32,
 }
 
 impl Default for GeneralConfig {
@@ -32,6 +38,7 @@ impl Default for GeneralConfig {
             auto_start: false,
             web_window_mode: "multi_window".to_string(),
             auto_copy_on_web_action: false,
+            overlay_opacity: 90,
         }
     }
 }
@@ -221,8 +228,31 @@ mod tests {
         let deserialized: AppConfig = serde_json::from_str(&json).expect("Deserialize default config");
         assert_eq!(config.general.global_hotkey, deserialized.general.global_hotkey);
         assert_eq!(deserialized.general.web_window_mode, "multi_window");
+        assert_eq!(deserialized.general.overlay_opacity, 90);
         assert_eq!(config.providers.len(), deserialized.providers.len());
         assert_eq!(config.actions.len(), deserialized.actions.len());
+    }
+
+    #[test]
+    fn test_overlay_opacity_default_and_backward_compatibility() {
+        let raw_json = r#"{
+            "general": {
+                "autoPopupOnSelection": true,
+                "minSelectionLength": 1,
+                "triggerModifier": "None",
+                "globalHotkey": "Alt+Space",
+                "theme": "system",
+                "autoStart": false
+            },
+            "blacklist": [],
+            "providers": [],
+            "actions": []
+        }"#;
+        let config: AppConfig = serde_json::from_str(raw_json).expect("Deserialize legacy config");
+        assert_eq!(config.general.overlay_opacity, 90);
+
+        let default_config = AppConfig::default();
+        assert_eq!(default_config.general.overlay_opacity, 90);
     }
 
     #[test]

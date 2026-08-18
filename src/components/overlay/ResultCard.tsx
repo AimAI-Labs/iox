@@ -70,7 +70,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     <div
       className={cn(
         "flex flex-col w-full h-full",
-        "bg-white/85 dark:bg-zinc-950/85 text-foreground backdrop-blur-2xl",
+        "bg-[var(--bg-overlay-card)] text-foreground backdrop-blur-2xl",
         "border border-black/10 dark:border-white/10",
         "rounded-xl overflow-hidden",
         isClosing ? "animate-capsule-out" : "animate-in fade-in zoom-in-95 duration-150"

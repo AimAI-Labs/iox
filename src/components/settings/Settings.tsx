@@ -19,8 +19,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  // 主题即时预览
-  useTheme(formData.general.theme);
+  // 主题与透明度即时预览
+  useTheme(formData.general.theme, formData.general.overlayOpacity);
 
   const handleSave = async () => {
     setSaving(true);
