@@ -45,11 +45,13 @@ export function useOverlayState(config: AppConfig | null) {
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 调整窗口尺寸
-  const updateWindowSize = useCallback(async (newMode: OverlayMode, allowFocus = false) => {
+  const updateWindowSize = useCallback(async (newMode: OverlayMode, allowFocus = false, customSize?: { width: number; height: number }) => {
     if (newMode === 'bubble') {
       await invoke('resize_overlay', { width: 500, height: 46, allowFocus: false });
     } else {
-      await invoke('resize_overlay', { width: 460, height: 420, allowFocus });
+      const width = customSize?.width || 460;
+      const height = customSize?.height || 420;
+      await invoke('resize_overlay', { width, height, allowFocus });
     }
   }, []);
 
@@ -133,6 +135,26 @@ export function useOverlayState(config: AppConfig | null) {
       } catch (err) {
         setError(String(err));
       }
+      return;
+    }
+
+    if (action.actionType === 'web_card') {
+      // Web 官网内嵌卡片模式
+      setActiveAction(action);
+      setMode('card');
+      setStreamText('');
+      setError(null);
+      setIsLoading(false);
+
+      if (action.copyToClipboard && selectedText) {
+        try {
+          await navigator.clipboard.writeText(selectedText);
+        } catch {
+          // ignore
+        }
+      }
+
+      await updateWindowSize('card', true, { width: 560, height: 500 });
       return;
     }
 

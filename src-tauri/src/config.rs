@@ -43,7 +43,7 @@ pub struct ActionConfig {
     pub id: String,
     pub name: String,
     pub icon: String,
-    pub action_type: String, // "api" | "web"
+    pub action_type: String, // "api" | "web" | "web_card"
     pub provider_id: Option<String>,
     pub prompt_template: Option<String>,
     pub url_template: Option<String>,
@@ -215,5 +215,24 @@ mod tests {
         let web_action = config.actions.iter().find(|a| a.action_type == "web");
         assert!(api_action.is_some());
         assert!(web_action.is_some());
+    }
+
+    #[test]
+    fn test_web_card_action_serialization() {
+        let action = ActionConfig {
+            id: "act_metaso".to_string(),
+            name: "秘塔搜索".to_string(),
+            icon: "Globe".to_string(),
+            action_type: "web_card".to_string(),
+            provider_id: None,
+            prompt_template: None,
+            url_template: Some("https://metaso.cn/?q={text}".to_string()),
+            copy_to_clipboard: Some(true),
+            enabled: true,
+        };
+        let json = serde_json::to_string(&action).expect("Serialize web_card action");
+        let deserialized: ActionConfig = serde_json::from_str(&json).expect("Deserialize web_card action");
+        assert_eq!(deserialized.action_type, "web_card");
+        assert_eq!(deserialized.url_template, Some("https://metaso.cn/?q={text}".to_string()));
     }
 }

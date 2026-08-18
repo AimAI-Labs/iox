@@ -104,6 +104,7 @@ export function App() {
             action={overlayState.activeAction}
             providers={config.providers}
             selectedModel={overlayState.selectedModel}
+            selectedText={overlayState.selectedText}
             streamText={overlayState.streamText}
             isLoading={overlayState.isLoading}
             isPinned={overlayState.isPinned}

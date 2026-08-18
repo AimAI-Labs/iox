@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import { ActionConfig, ProviderConfig } from '../types/config';
 import { DynamicIcon } from './Icons';
 import { useWindowDrag } from '../hooks/useWindowDrag';
+import { WebCardView } from './WebCardView';
 import {
   Pin,
   PinOff,
@@ -20,6 +21,7 @@ interface ResultCardProps {
   action: ActionConfig;
   providers: ProviderConfig[];
   selectedModel: string;
+  selectedText?: string;
   streamText: string;
   isLoading: boolean;
   isPinned: boolean;
@@ -36,6 +38,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   action,
   providers,
   selectedModel,
+  selectedText = '',
   streamText,
   isLoading,
   isPinned,
@@ -47,6 +50,20 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   onPinToggle,
   onClose,
 }) => {
+  // 若当前动作为 Web 官网卡片模式，渲染专用 Web 视图容器
+  if (action.actionType === 'web_card') {
+    return (
+      <WebCardView
+        action={action}
+        selectedText={selectedText}
+        isPinned={isPinned}
+        isClosing={isClosing}
+        onPinToggle={onPinToggle}
+        onClose={onClose}
+      />
+    );
+  }
+
   const [copied, setCopied] = useState(false);
   const [followUpInput, setFollowUpInput] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);

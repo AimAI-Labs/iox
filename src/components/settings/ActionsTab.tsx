@@ -1,5 +1,5 @@
 import React from "react";
-import { Plus, Trash2, Bot, Globe, Cpu } from "lucide-react";
+import { Plus, Trash2, Bot, Globe, Cpu, LayoutTemplate } from "lucide-react";
 import { ActionConfig, ProviderConfig } from "../../types/config";
 import { DynamicIcon } from "../Icons";
 import { Card, CardHeader, CardContent } from "../ui/card";
@@ -34,7 +34,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
             动作管理与模板
           </h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            配置划词气泡上展示的 AI 动作、Prompt 提示词及网页直达规则
+            配置划词气泡上展示的 AI 动作、Prompt 提示词及网页直达/内嵌卡片规则
           </p>
         </div>
         <Button
@@ -70,7 +70,11 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                   placeholder="动作名称"
                 />
                 <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted/40 font-mono">
-                  {act.actionType === "api" ? "API 流式" : "Web 网页"}
+                  {act.actionType === "api"
+                    ? "API 流式"
+                    : act.actionType === "web_card"
+                    ? "Web 卡片"
+                    : "Web 直达"}
                 </span>
               </div>
 
@@ -108,7 +112,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                     value={act.actionType}
                     onChange={(val) =>
                       onUpdateAction(idx, {
-                        actionType: val as "api" | "web",
+                        actionType: val as "api" | "web" | "web_card",
                       })
                     }
                     options={[
@@ -117,6 +121,12 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                         label: "API 流式卡片",
                         icon: Bot,
                         description: "原地逐字流式渲染",
+                      },
+                      {
+                        value: "web_card",
+                        label: "Web 官网卡片",
+                        icon: LayoutTemplate,
+                        description: "原地内嵌网页卡片",
                       },
                       {
                         value: "web",
@@ -190,7 +200,11 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                   {/* Web URL Template */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <Label>URL 跳转模板</Label>
+                      <Label>
+                        {act.actionType === "web_card"
+                          ? "网页地址 / 内嵌模板"
+                          : "URL 跳转模板"}
+                      </Label>
                       <span className="text-[10px] text-muted-foreground">
                         支持 <code className="bg-muted px-1 rounded font-mono">{"{text}"}</code> 传参
                       </span>
@@ -198,7 +212,11 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                     <Input
                       type="text"
                       value={act.urlTemplate || ""}
-                      placeholder="https://tongyi.aliyun.com/qianwen/?q={text}"
+                      placeholder={
+                        act.actionType === "web_card"
+                          ? "https://metaso.cn/?q={text}"
+                          : "https://tongyi.aliyun.com/qianwen/?q={text}"
+                      }
                       onChange={(e) =>
                         onUpdateAction(idx, { urlTemplate: e.target.value })
                       }
@@ -212,7 +230,9 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                         自动复制划选文本到剪贴板
                       </Label>
                       <p className="text-[10px] text-muted-foreground">
-                        打开网页前将划选内容写入剪贴板（适用于不支持 URL 参数直接提问的 AI 官网）
+                        {act.actionType === "web_card"
+                          ? "展开卡片时将划选内容写入剪贴板（便于在网页内快速粘贴）"
+                          : "打开网页前将划选内容写入剪贴板（适用于不支持 URL 参数提问的官网）"}
                       </p>
                     </div>
                     <Switch
