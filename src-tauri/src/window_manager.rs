@@ -232,6 +232,15 @@ pub fn resize_overlay_window(
         }
 
         unsafe {
+            let mut rect: RECT = std::mem::zeroed();
+            if GetWindowRect(hwnd_raw, &mut rect) != 0 {
+                let current_width = rect.right - rect.left;
+                let current_height = rect.bottom - rect.top;
+                if current_width == phys_width && current_height == phys_height && !allow_focus {
+                    return;
+                }
+            }
+
             let flags = if allow_focus {
                 SWP_NOMOVE | SWP_SHOWWINDOW
             } else {

@@ -6,12 +6,14 @@ interface UseOverlayLifecycleProps {
   isPinned: boolean;
   setIsPinned: (pinned: boolean) => void;
   setIsClosing: (closing: boolean) => void;
+  onHideComplete: () => void;
 }
 
 export function useOverlayLifecycle({
   isPinned,
   setIsPinned,
   setIsClosing,
+  onHideComplete,
 }: UseOverlayLifecycleProps) {
   const isPinnedRef = useRef<boolean>(isPinned);
   isPinnedRef.current = isPinned;
@@ -46,9 +48,9 @@ export function useOverlayLifecycle({
     }
     closeTimerRef.current = setTimeout(async () => {
       await invoke('hide_overlay');
-      setIsClosing(false);
+      onHideComplete();
     }, 100);
-  }, [setIsClosing]);
+  }, [setIsClosing, onHideComplete]);
 
   // 取消退场定时器（当新划词触发时调用）
   const cancelCloseTimer = useCallback(() => {

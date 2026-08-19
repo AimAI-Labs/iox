@@ -4,6 +4,7 @@ export type OverlayMode = 'bubble' | 'card';
 
 export interface OverlayState {
   mode: OverlayMode;
+  visible: boolean;
   selectedText: string;
   activeAction: ActionConfig | null;
   selectedModel: string;
@@ -17,6 +18,7 @@ export interface OverlayState {
 
 export const initialOverlayState: OverlayState = {
   mode: 'bubble',
+  visible: false,
   selectedText: '',
   activeAction: null,
   selectedModel: '',
@@ -41,6 +43,7 @@ export type OverlayAction =
   | { type: 'SET_MODEL'; model: string }
   | { type: 'SET_PINNED'; isPinned: boolean }
   | { type: 'SET_CLOSING'; isClosing: boolean }
+  | { type: 'HIDE_COMPLETE' }
   | { type: 'INCREMENT_ANIM_KEY' }
   | { type: 'RESET_STATE' };
 
@@ -49,6 +52,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
     case 'SELECTION_TRIGGERED':
       return {
         ...state,
+        visible: true,
         selectedText: action.text,
         mode: 'bubble',
         streamText: '',
@@ -68,6 +72,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
     case 'START_ACTION':
       return {
         ...state,
+        visible: true,
         activeAction: action.action,
         mode: 'card',
         streamText: '',
@@ -129,6 +134,14 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
       return {
         ...state,
         isClosing: action.isClosing,
+      };
+
+    case 'HIDE_COMPLETE':
+      return {
+        ...state,
+        visible: false,
+        isClosing: false,
+        activeAction: null,
       };
 
     case 'INCREMENT_ANIM_KEY':

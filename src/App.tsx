@@ -69,6 +69,10 @@ export function App() {
 
   // 1. Overlay 悬浮窗视图
   if (windowLabel === 'overlay') {
+    if (!overlayState.visible) {
+      return null;
+    }
+
     return (
       <div className="overlay-root">
         {overlayState.mode === 'bubble' ? (

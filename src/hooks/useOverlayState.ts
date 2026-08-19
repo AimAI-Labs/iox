@@ -28,6 +28,7 @@ export function useOverlayState(config: AppConfig | null) {
     isPinned: state.isPinned,
     setIsPinned: (pinned) => dispatch({ type: 'SET_PINNED', isPinned: pinned }),
     setIsClosing: (closing) => dispatch({ type: 'SET_CLOSING', isClosing: closing }),
+    onHideComplete: () => dispatch({ type: 'HIDE_COMPLETE' }),
   });
 
   // 2. 选词触发与退场事件监听
@@ -66,6 +67,7 @@ export function useOverlayState(config: AppConfig | null) {
 
   return {
     mode: state.mode,
+    visible: state.visible,
     animKey: state.animKey,
     isClosing: state.isClosing,
     selectedText: state.selectedText,
