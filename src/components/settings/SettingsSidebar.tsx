@@ -1,10 +1,10 @@
 import React from "react";
-import { Cpu, Zap, Sliders, Shield, Save, Check, Loader2 } from "lucide-react";
+import { Cpu, Zap, Globe, Sliders, Shield, Save, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IOXLogo } from "@/components/common";
 import { cn } from "@/lib/utils";
 
-export type SettingsTab = "providers" | "actions" | "general" | "blacklist";
+export type SettingsTab = "providers" | "actions" | "web" | "general" | "blacklist";
 
 interface SettingsSidebarProps {
   activeTab: SettingsTab;
@@ -17,6 +17,7 @@ interface SettingsSidebarProps {
 const navItems: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: "providers", label: "模型服务商", icon: Cpu },
   { id: "actions", label: "动作管理", icon: Zap },
+  { id: "web", label: "Web 浮窗", icon: Globe },
   { id: "general", label: "划词与通用", icon: Sliders },
   { id: "blacklist", label: "应用黑名单", icon: Shield },
 ];

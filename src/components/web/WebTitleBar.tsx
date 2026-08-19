@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { MacTitleBar } from '@/components/MacTitleBar';
-import { RotateCw, ExternalLink } from 'lucide-react';
+import { RotateCw, ExternalLink, Settings } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
 interface WebTitleBarProps {
@@ -91,6 +91,15 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = ({
     }
   };
 
+  // 6. 打开 Web 浮窗设置页面
+  const handleOpenSettings = async () => {
+    try {
+      await invoke('show_main_window', { targetTab: 'web' });
+    } catch (err) {
+      console.warn('Failed to open settings window:', err);
+    }
+  };
+
   return (
     <div className="w-screen h-screen bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
       <div className="w-full h-full flex flex-col bg-[var(--bg-overlay-card)] text-foreground rounded-t-xl border-t border-l border-r border-b border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl">
@@ -122,6 +131,16 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = ({
                   <ExternalLink size={12} />
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={handleOpenSettings}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                title="打开 Web 浮窗设置"
+              >
+                <Settings size={12} />
+              </button>
             </div>
           }
         />

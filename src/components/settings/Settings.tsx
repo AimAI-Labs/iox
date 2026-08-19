@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig } from "@/types/config";
 import { useTheme } from "@/hooks/useTheme";
 import { MacTitleBar } from "@/components/MacTitleBar";
 import { SettingsSidebar, SettingsTab } from "@/components/settings/SettingsSidebar";
 import { ProvidersTab } from "@/components/settings/ProvidersTab";
 import { ActionsTab } from "@/components/settings/ActionsTab";
+import { WebviewTab } from "@/components/settings/WebviewTab";
 import { GeneralTab } from "@/components/settings/GeneralTab";
 import { BlacklistTab } from "@/components/settings/BlacklistTab";
 
@@ -18,6 +20,24 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   const [formData, setFormData] = useState<AppConfig>(config);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // 监听来自其他窗口或快捷调起的 Tab 切换指令
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<string>("open_settings_tab", (event) => {
+      if (
+        event.payload &&
+        ["providers", "actions", "web", "general", "blacklist"].includes(event.payload)
+      ) {
+        setActiveTab(event.payload as SettingsTab);
+      }
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
 
   // 主题与透明度即时预览
   useTheme(formData.general.theme, formData.general.overlayOpacity);
@@ -187,6 +207,17 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
                   onUpdateAction={updateAction}
                   onRemoveAction={removeAction}
                   onReorderActions={reorderActions}
+                />
+              </div>
+            )}
+
+            {activeTab === "web" && (
+              <div className="flex-1 overflow-y-auto p-5">
+                <WebviewTab
+                  general={formData.general}
+                  actions={formData.actions}
+                  onUpdateGeneral={updateGeneral}
+                  onNavigateToActions={() => setActiveTab("actions")}
                 />
               </div>
             )}

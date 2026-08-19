@@ -1,6 +1,6 @@
 import React from "react";
-import { Monitor, Moon, Sun, LayoutGrid, Layers } from "lucide-react";
-import { GeneralConfig, WebWindowMode } from "@/types/config";
+import { Monitor, Moon, Sun, Sparkles } from "lucide-react";
+import { GeneralConfig } from "@/types/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +9,6 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { IOXLogo } from "@/components/common";
-import { Sparkles } from "lucide-react";
 
 interface GeneralTabProps {
   general: GeneralConfig;
@@ -28,7 +27,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
           划词触发与常规设置
         </h2>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          调整系统级取词逻辑、快捷键、Web 官网浮窗模式与界面外观
+          调整系统级取词逻辑、快捷键、界面外观与开机自启动
         </p>
       </div>
 
@@ -135,63 +134,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
             </div>
           </div>
 
-          <Separator />
 
-          {/* Web Window Mode */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <Label className="text-xs text-foreground font-medium">
-                Web 官网浮窗模式
-              </Label>
-              <p className="text-[11px] text-muted-foreground">
-                选择点击 Web 官网动作时的窗口展现与复用机制
-              </p>
-            </div>
-            <div className="w-52">
-              <Select
-                value={general.webWindowMode || "multi_window"}
-                onChange={(val) =>
-                  onUpdateGeneral({
-                    webWindowMode: val as WebWindowMode,
-                  })
-                }
-                options={[
-                  {
-                    value: "multi_window",
-                    label: "独立多窗口 (推荐)",
-                    icon: LayoutGrid,
-                    description: "同动作单例复用，支持多 AI 桌面并排对比",
-                  },
-                  {
-                    value: "tabbed",
-                    label: "统一多标签 (Hub)",
-                    icon: Layers,
-                    description: "所有 Web 动作收拢在单一浮窗内集中管理",
-                  },
-                ]}
-              />
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Auto Copy On Web Action */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-xs text-foreground font-medium">
-                Web 动作自动复制文本
-              </Label>
-              <p className="text-[11px] text-muted-foreground">
-                触发 Web 官网动作时，自动将划选内容写入剪贴板（便于在网页中快速粘贴）
-              </p>
-            </div>
-            <Switch
-              checked={general.autoCopyOnWebAction || false}
-              onCheckedChange={(checked) =>
-                onUpdateGeneral({ autoCopyOnWebAction: checked })
-              }
-            />
-          </div>
 
           <Separator />
 

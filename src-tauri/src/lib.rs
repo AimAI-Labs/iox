@@ -131,7 +131,7 @@ fn resize_overlay(
 }
 
 #[tauri::command]
-fn show_main_window(app: AppHandle) -> Result<(), String> {
+fn show_main_window(app: AppHandle, target_tab: Option<String>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         if let Ok(hwnd) = window.hwnd() {
             window_manager::apply_main_window_native_style(hwnd.0 as _);
@@ -139,6 +139,9 @@ fn show_main_window(app: AppHandle) -> Result<(), String> {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        if let Some(tab) = target_tab {
+            let _ = app.emit("open_settings_tab", tab);
+        }
         Ok(())
     } else {
         Err("Main window not found".to_string())
