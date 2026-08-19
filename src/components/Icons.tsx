@@ -352,45 +352,74 @@ const ALIAS_MAP: Record<string, string> = {
   Prompt: 'FileText',
 };
 
+export interface IconItemMeta {
+  name: string;
+  label: string;
+  keywords?: string[];
+}
+
 /**
- * 常用 AI 品牌图标元数据列表（用于设置面板的快捷选择）
+ * 常用 AI 品牌图标元数据列表（用于图标选择器）
  */
-export const POPULAR_AI_ICONS = [
-  { name: 'DeepSeek', label: 'DeepSeek 深度求索' },
-  { name: 'OpenAI', label: 'ChatGPT / OpenAI' },
-  { name: 'Claude', label: 'Claude (Anthropic)' },
-  { name: 'Kimi', label: 'Kimi (月之暗面)' },
-  { name: 'Qwen', label: '通义千问 (Qwen)' },
-  { name: 'Doubao', label: '豆包 (字节跳动)' },
-  { name: 'Metaso', label: '秘塔 AI' },
-  { name: 'Perplexity', label: 'Perplexity 搜索' },
-  { name: 'Phind', label: 'Phind 代码搜索' },
-  { name: 'Felo', label: 'Felo 跨语种搜索' },
-  { name: 'Ai360', label: '360 AI 搜索' },
-  { name: 'Ollama', label: 'Ollama 本地' },
-  { name: 'Gemini', label: 'Google Gemini' },
-  { name: 'Grok', label: 'xAI Grok' },
-  { name: 'Zhipu', label: '智谱清言 (GLM)' },
-  { name: 'Minimax', label: 'MiniMax' },
-  { name: 'DeepL', label: 'DeepL 翻译' },
+export const POPULAR_AI_ICONS: IconItemMeta[] = [
+  { name: 'DeepSeek', label: 'DeepSeek 深度求索', keywords: ['deepseek', 'r1', 'v3', '深度求索'] },
+  { name: 'OpenAI', label: 'ChatGPT / OpenAI', keywords: ['openai', 'chatgpt', 'gpt', 'gpt-4o', 'o1', 'o3'] },
+  { name: 'Claude', label: 'Claude (Anthropic)', keywords: ['claude', 'anthropic', 'sonnet', 'opus', '克劳德'] },
+  { name: 'Kimi', label: 'Kimi (月之暗面)', keywords: ['kimi', 'moonshot', '月之暗面'] },
+  { name: 'Qwen', label: '通义千问 (Qwen)', keywords: ['qwen', 'tongyi', 'aliyun', '阿里', '通义千问'] },
+  { name: 'Doubao', label: '豆包 (字节跳动)', keywords: ['doubao', 'bytedance', '字节', '豆包'] },
+  { name: 'Metaso', label: '秘塔 AI 搜索', keywords: ['metaso', '秘塔', '搜索'] },
+  { name: 'Perplexity', label: 'Perplexity 搜索', keywords: ['perplexity', 'ai搜索', 'pplx'] },
+  { name: 'Phind', label: 'Phind 代码搜索', keywords: ['phind', 'code', '编程'] },
+  { name: 'Felo', label: 'Felo 跨语种搜索', keywords: ['felo', '搜索', '跨语种'] },
+  { name: 'Ai360', label: '360 AI 搜索', keywords: ['360', 'ai360', '三六零'] },
+  { name: 'Ollama', label: 'Ollama 本地大模型', keywords: ['ollama', 'local', '本地', 'llama'] },
+  { name: 'Gemini', label: 'Google Gemini', keywords: ['gemini', 'google', '谷歌', '双子座'] },
+  { name: 'Grok', label: 'xAI Grok', keywords: ['grok', 'xai', 'elon', '马斯克'] },
+  { name: 'Zhipu', label: '智谱清言 (GLM)', keywords: ['zhipu', 'chatglm', 'glm', '智谱'] },
+  { name: 'Minimax', label: 'MiniMax 名之梦', keywords: ['minimax', 'abab', '名之梦'] },
+  { name: 'Baichuan', label: '百川智能', keywords: ['baichuan', '百川'] },
+  { name: 'Stepfun', label: '阶跃星辰 (跃问)', keywords: ['stepfun', 'step', '跃问', '阶跃星辰'] },
+  { name: 'Mistral', label: 'Mistral AI', keywords: ['mistral', 'lechat', '开源'] },
+  { name: 'Yi', label: '零一万物 (Yi)', keywords: ['yi', '01ai', '零一万物', '李开复'] },
+  { name: 'SiliconCloud', label: '硅基流动', keywords: ['siliconcloud', '硅基流动', 'api'] },
+  { name: 'OpenRouter', label: 'OpenRouter 聚合', keywords: ['openrouter', '聚合'] },
+  { name: 'Groq', label: 'Groq 极速推理', keywords: ['groq', 'lpu', '极速'] },
+  { name: 'DeepL', label: 'DeepL 翻译', keywords: ['deepl', 'translate', '翻译'] },
+  { name: 'Cursor', label: 'Cursor AI', keywords: ['cursor', 'ide', 'code'] },
+  { name: 'Trae', label: 'Trae 编程助手', keywords: ['trae', 'byte', 'code'] },
+  { name: 'Windsurf', label: 'Windsurf (Codeium)', keywords: ['windsurf', 'codeium'] },
+  { name: 'Hunyuan', label: '腾讯混元', keywords: ['hunyuan', 'tencent', '腾讯', '混元'] },
+  { name: 'Wenxin', label: '百度文心一言', keywords: ['wenxin', 'baidu', '百度', '文心'] },
+  { name: 'Spark', label: '讯飞星火', keywords: ['spark', 'iflytek', '讯飞', '星火'] },
+  { name: 'LobeHub', label: 'LobeHub', keywords: ['lobe', 'lobehub'] },
 ];
 
 /**
- * 常用通用功能 Lucide 图标列表
+ * 常用通用功能 Lucide 图标列表（用于图标选择器）
  */
-export const COMMON_FUNCTION_ICONS = [
-  { name: 'Languages', label: '翻译' },
-  { name: 'FileText', label: '文档/总结' },
-  { name: 'Sparkles', label: '智能/润色' },
-  { name: 'Terminal', label: '代码/终端' },
-  { name: 'Search', label: '搜索' },
-  { name: 'Copy', label: '复制' },
-  { name: 'Globe', label: '网页/全球' },
-  { name: 'Bot', label: '机器人' },
-  { name: 'MessageSquare', label: '对话' },
-  { name: 'Zap', label: '极速/闪电' },
-  { name: 'Brain', label: '思考/大脑' },
-  { name: 'Code', label: '代码' },
+export const COMMON_FUNCTION_ICONS: IconItemMeta[] = [
+  { name: 'Languages', label: '翻译 (Languages)', keywords: ['translate', 'languages', '翻译', '语言', '多语言'] },
+  { name: 'FileText', label: '文档/总结 (FileText)', keywords: ['summary', 'document', 'file', '总结', '文档', '文本'] },
+  { name: 'Sparkles', label: '智能/润色 (Sparkles)', keywords: ['sparkles', 'polish', 'ai', '润色', '智能', '闪光'] },
+  { name: 'Terminal', label: '终端/命令行 (Terminal)', keywords: ['terminal', 'cmd', 'cli', '终端', '命令'] },
+  { name: 'Code', label: '代码/编程 (Code)', keywords: ['code', 'program', 'developer', '代码', '编程'] },
+  { name: 'Search', label: '搜索/查询 (Search)', keywords: ['search', 'find', '搜索', '查询', '找'] },
+  { name: 'Copy', label: '复制 (Copy)', keywords: ['copy', 'clipboard', '复制', '剪贴板'] },
+  { name: 'MessageSquare', label: '对话/问答 (MessageSquare)', keywords: ['chat', 'message', '对话', '问答', '消息'] },
+  { name: 'Brain', label: '深度思考 (Brain)', keywords: ['brain', 'think', 'reasoning', '大脑', '思考', '推理'] },
+  { name: 'Zap', label: '极速/闪电 (Zap)', keywords: ['zap', 'fast', 'speed', '极速', '快', '闪电'] },
+  { name: 'Globe', label: '网页/全球 (Globe)', keywords: ['web', 'globe', 'network', '网页', '全球', '浏览器'] },
+  { name: 'Bot', label: '机器人 (Bot)', keywords: ['bot', 'robot', 'assistant', '机器人', '助手'] },
+  { name: 'BookOpen', label: '阅读/知识 (BookOpen)', keywords: ['book', 'read', 'learn', '阅读', '知识', '书本'] },
+  { name: 'Feather', label: '写作/轻量 (Feather)', keywords: ['feather', 'write', 'light', '写作', '羽毛', '轻量'] },
+  { name: 'Flame', label: '灵感/热门 (Flame)', keywords: ['flame', 'hot', 'fire', '灵感', '热门', '火焰'] },
+  { name: 'PenTool', label: '创作/绘图 (PenTool)', keywords: ['pen', 'draw', 'create', '创作', '画笔', '设计'] },
+  { name: 'Lightbulb', label: '创意/点子 (Lightbulb)', keywords: ['idea', 'lightbulb', 'bulb', '点子', '创意', '灯泡'] },
+  { name: 'Key', label: '密钥/权限 (Key)', keywords: ['key', 'auth', 'token', '密钥', '钥匙', '权限'] },
+  { name: 'ShieldCheck', label: '安全/校验 (ShieldCheck)', keywords: ['shield', 'safe', 'security', '安全', '盾牌', '校验'] },
+  { name: 'Wand2', label: '魔法/转换 (Wand2)', keywords: ['magic', 'wand', 'convert', '魔法', '转换', '魔棒'] },
+  { name: 'Share2', label: '分享/协作 (Share2)', keywords: ['share', 'network', '分享', '协作'] },
 ];
 
 /**

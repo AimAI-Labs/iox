@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { ActionConfig, ActionType, ProviderConfig } from "@/types/config";
 import { PRESET_ACTIONS } from "@/lib/presetActions";
-import { DynamicIcon, POPULAR_AI_ICONS } from "@/components/Icons";
+import { DynamicIcon } from "@/components/Icons";
+import { IconPicker } from "@/components/ui/IconPicker";
 import { BubbleBar } from "@/components/overlay";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -436,10 +437,19 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                     />
                   </button>
 
-                  {/* 动作图标 */}
-                  <div className="w-5 h-5 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                    <DynamicIcon name={act.icon} size={13} />
-                  </div>
+                  {/* 动作图标选择器（保持原本样式，点击直接悬浮展开选择） */}
+                  <IconPicker
+                    value={act.icon}
+                    onChange={(newIcon) => onUpdateAction(act.id, { icon: newIcon })}
+                    trigger={
+                      <div
+                        className="w-5 h-5 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0 hover:bg-primary/20 transition-colors cursor-pointer"
+                        title="点击更换动作图标"
+                      >
+                        <DynamicIcon name={act.icon} size={13} />
+                      </div>
+                    }
+                  />
 
                   {/* 动作名称 */}
                   <Input
@@ -504,103 +514,58 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
               >
                 <div className="card-collapse-inner">
                   <CardContent className="p-3.5 space-y-3 border-t border-border/40">
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Action Type */}
-                      <div className="space-y-1.5">
-                        <Label>动作类型</Label>
-                        <Select
-                          value={act.actionType}
-                          onChange={(val) =>
-                            onUpdateAction(act.id, {
-                              actionType: val as ActionType,
-                            })
-                          }
-                          options={[
-                            {
-                              value: "api",
-                              label: "API 流式卡片",
-                              icon: Bot,
-                              description: "原地逐字流式渲染",
-                            },
-                            {
-                              value: "web",
-                              label: "Web 官网浮窗",
-                              icon: Globe,
-                              description: "原生 Webview 浮窗访问官网",
-                            },
-                            {
-                              value: "copy",
-                              label: "快捷复制",
-                              icon: Copy,
-                              description: "直接复制选中文本至剪贴板",
-                            },
-                          ]}
-                        />
-                      </div>
-
-                      {/* 图标配置与快捷选取 */}
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <Label>动作图标 (LobeHub AI / Lucide)</Label>
-                          <span className="text-[10px] text-muted-foreground">
-                            支持 AI 品牌名或 Lucide 图标
-                          </span>
-                        </div>
-                        <div className="relative">
-                          <Input
-                            type="text"
-                            value={act.icon}
-                            placeholder="DeepSeek, OpenAI, Kimi, Claude, Qwen, Sparkles..."
-                            onChange={(e) =>
-                              onUpdateAction(act.id, { icon: e.target.value })
-                            }
-                            className="pr-8 h-8 text-xs font-mono"
-                          />
-                          <div className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none flex items-center justify-center">
-                            <DynamicIcon name={act.icon} size={15} />
-                          </div>
-                        </div>
-
-                        {/* 常用 AI 与功能图标快捷选择 */}
-                        <div className="flex flex-wrap gap-1 pt-1">
-                          {POPULAR_AI_ICONS.slice(0, 8).map((aiIcon) => (
-                            <button
-                              key={aiIcon.name}
-                              type="button"
-                              onClick={() => onUpdateAction(act.id, { icon: aiIcon.name })}
-                              className={cn(
-                                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border transition-colors cursor-pointer",
-                                act.icon.toLowerCase() === aiIcon.name.toLowerCase()
-                                  ? "border-primary bg-primary/10 text-primary font-medium"
-                                  : "border-border/60 bg-muted/30 text-muted-foreground hover:text-foreground hover:border-border"
-                              )}
-                              title={aiIcon.label}
-                            >
-                              <DynamicIcon name={aiIcon.name} size={11} />
-                              <span>{aiIcon.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
                     {act.actionType === "api" ? (
                       <>
-                        {/* Provider Binding */}
-                        <div className="space-y-1.5">
-                          <Label>绑定模型服务商</Label>
-                          <Select
-                            value={act.providerId || ""}
-                            onChange={(val) =>
-                              onUpdateAction(act.id, { providerId: val })
-                            }
-                            options={providers.map((p) => ({
-                              value: p.id,
-                              label: p.name,
-                              icon: Cpu,
-                              description: `默认: ${p.defaultModel}`,
-                            }))}
-                          />
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* Action Type */}
+                          <div className="space-y-1.5">
+                            <Label>动作类型</Label>
+                            <Select
+                              value={act.actionType}
+                              onChange={(val) =>
+                                onUpdateAction(act.id, {
+                                  actionType: val as ActionType,
+                                })
+                              }
+                              options={[
+                                {
+                                  value: "api",
+                                  label: "API 流式卡片",
+                                  icon: Bot,
+                                  description: "原地逐字流式渲染",
+                                },
+                                {
+                                  value: "web",
+                                  label: "Web 官网浮窗",
+                                  icon: Globe,
+                                  description: "原生 Webview 浮窗访问官网",
+                                },
+                                {
+                                  value: "copy",
+                                  label: "快捷复制",
+                                  icon: Copy,
+                                  description: "直接复制选中文本至剪贴板",
+                                },
+                              ]}
+                            />
+                          </div>
+
+                          {/* Provider Binding */}
+                          <div className="space-y-1.5">
+                            <Label>绑定模型服务商</Label>
+                            <Select
+                              value={act.providerId || ""}
+                              onChange={(val) =>
+                                onUpdateAction(act.id, { providerId: val })
+                              }
+                              options={providers.map((p) => ({
+                                value: p.id,
+                                label: p.name,
+                                icon: Cpu,
+                                description: `默认: ${p.defaultModel}`,
+                              }))}
+                            />
+                          </div>
                         </div>
 
                         {/* Prompt Template */}
@@ -629,6 +594,38 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                       </>
                     ) : (
                       <>
+                        {/* Action Type */}
+                        <div className="space-y-1.5">
+                          <Label>动作类型</Label>
+                          <Select
+                            value={act.actionType}
+                            onChange={(val) =>
+                              onUpdateAction(act.id, {
+                                actionType: val as ActionType,
+                              })
+                            }
+                            options={[
+                              {
+                                value: "api",
+                                label: "API 流式卡片",
+                                icon: Bot,
+                                description: "原地逐字流式渲染",
+                              },
+                              {
+                                value: "web",
+                                label: "Web 官网浮窗",
+                                icon: Globe,
+                                description: "原生 Webview 浮窗访问官网",
+                              },
+                              {
+                                value: "copy",
+                                label: "快捷复制",
+                                icon: Copy,
+                                description: "直接复制选中文本至剪贴板",
+                              },
+                            ]}
+                          />
+                        </div>
                         {/* Web URL Template */}
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between">
