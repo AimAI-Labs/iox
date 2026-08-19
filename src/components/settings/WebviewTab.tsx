@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Globe, LayoutGrid, Layers, RefreshCcw, ArrowUpRight, Zap } from "lucide-react";
 import { GeneralConfig, ActionConfig, WebWindowMode } from "@/types/config";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { DynamicIcon } from "@/components/Icons";
 
@@ -26,7 +27,41 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
   const webActions = actions.filter((a) => a.actionType === "web");
   const enabledWebActionsCount = webActions.filter((a) => a.enabled).length;
 
+  const [widthInput, setWidthInput] = useState(String(Math.round(currentW)));
+  const [heightInput, setHeightInput] = useState(String(Math.round(currentH)));
+
+  // 当外部配置改变时（如拖拽调整窗口大小），同步更新输入框
+  useEffect(() => {
+    setWidthInput(String(Math.round(currentW)));
+    setHeightInput(String(Math.round(currentH)));
+  }, [currentW, currentH]);
+
+  const commitSizeChange = () => {
+    let w = parseInt(widthInput, 10);
+    let h = parseInt(heightInput, 10);
+    if (isNaN(w) || w < 400) w = 400;
+    if (w > 2560) w = 2560;
+    if (isNaN(h) || h < 300) h = 300;
+    if (h > 1600) h = 1600;
+
+    setWidthInput(String(w));
+    setHeightInput(String(h));
+
+    if (w !== Math.round(currentW) || h !== Math.round(currentH)) {
+      onUpdateGeneral({ webWindowSize: [w, h] });
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      commitSizeChange();
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
   const handleResetSize = () => {
+    setWidthInput("860");
+    setHeightInput("640");
     onUpdateGeneral({ webWindowSize: [860, 640] });
   };
 
@@ -110,22 +145,57 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
                 浮窗记忆尺寸与重置
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                拖拽浮窗边框时系统会自动记住最新尺寸（当前记忆：{Math.round(currentW)} × {Math.round(currentH)} px）
+                拖拽浮窗边框时系统会自动记住最新尺寸，亦可在此直接输入指定分辨率
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="text-xs font-mono text-muted-foreground px-2 py-1 bg-muted/40 rounded border border-border/40">
-                {Math.round(currentW)} × {Math.round(currentH)}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <div className="relative flex items-center">
+                <span className="absolute left-2 text-[10px] font-mono text-muted-foreground select-none pointer-events-none">
+                  W
+                </span>
+                <Input
+                  type="number"
+                  min={400}
+                  max={2560}
+                  value={widthInput}
+                  onChange={(e) => setWidthInput(e.target.value)}
+                  onBlur={commitSizeChange}
+                  onKeyDown={handleKeyDown}
+                  className="h-7 w-[72px] pl-6 pr-1 text-xs font-mono"
+                  placeholder="860"
+                />
               </div>
+
+              <span className="text-xs text-muted-foreground select-none">×</span>
+
+              <div className="relative flex items-center">
+                <span className="absolute left-2 text-[10px] font-mono text-muted-foreground select-none pointer-events-none">
+                  H
+                </span>
+                <Input
+                  type="number"
+                  min={300}
+                  max={1600}
+                  value={heightInput}
+                  onChange={(e) => setHeightInput(e.target.value)}
+                  onBlur={commitSizeChange}
+                  onKeyDown={handleKeyDown}
+                  className="h-7 w-[72px] pl-6 pr-1 text-xs font-mono"
+                  placeholder="640"
+                />
+              </div>
+
+              <span className="text-[11px] text-muted-foreground mr-1 select-none">px</span>
+
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleResetSize}
-                className="h-7 text-xs gap-1 border-border/70 hover:border-primary/50"
+                className="h-7 text-xs gap-1 border-border/70 hover:border-primary/50 px-2 cursor-pointer"
                 title="恢复至推荐默认尺寸 860 × 640"
               >
                 <RefreshCcw size={11} />
-                <span>重置为默认</span>
+                <span>重置</span>
               </Button>
             </div>
           </div>
