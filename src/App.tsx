@@ -32,6 +32,7 @@ export function App() {
 
   const handleOpenSettings = async () => {
     try {
+      overlayState.handleClose();
       await invoke('show_main_window');
     } catch (e) {
       console.error('Failed to open settings window:', e);
