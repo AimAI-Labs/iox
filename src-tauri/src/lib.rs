@@ -212,9 +212,22 @@ fn start_overlay_dragging(app: AppHandle) {
 }
 
 #[tauri::command]
-fn close_web_window(app: AppHandle, label: String) -> Result<(), String> {
+fn close_web_window(app: AppHandle, state: State<AppState>, label: String) -> Result<(), String> {
     if let Some(window) = app.get_window(&label) {
-        let _ = window.close();
+        if !window.is_maximized().unwrap_or(false) {
+            if let Ok(size) = window.inner_size() {
+                let scale = window.scale_factor().unwrap_or(1.0);
+                let w = (size.width as f64 / scale).round();
+                let h = (size.height as f64 / scale).round();
+                if w >= 520.0 && h >= 400.0 {
+                    if let Ok(mut config) = state.config.lock() {
+                        config.general.web_window_size = (w, h);
+                        let _ = config.save();
+                    }
+                }
+            }
+        }
+        let _ = window.hide();
         Ok(())
     } else {
         Err("Window not found".to_string())

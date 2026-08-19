@@ -1,179 +1,10 @@
+use super::scripts::{build_dom_injection_script, build_initialization_script};
 use super::template::render_url_template;
 use crate::config::{ActionConfig, AppConfig};
 use arboard::Clipboard;
 use tauri::webview::WebviewBuilder;
 use tauri::window::WindowBuilder;
 use tauri::{AppHandle, Manager, WebviewUrl};
-
-/// 构造针对现代 SPA AI 官网（如 DeepSeek、Kimi 等）的通用 DOM 注入与受控组件同步脚本
-pub fn build_injection_script(
-    text: &str,
-    input_selector: &str,
-    submit_selector: Option<&str>,
-    auto_submit: bool,
-) -> String {
-    let text_json = serde_json::to_string(text).unwrap_or_else(|_| "\"\"".to_string());
-    let input_sel_json =
-        serde_json::to_string(input_selector).unwrap_or_else(|_| "\"\"".to_string());
-    let submit_sel_json = match submit_selector {
-        Some(sel) if !sel.trim().is_empty() => {
-            serde_json::to_string(sel).unwrap_or_else(|_| "null".to_string())
-        }
-        _ => "null".to_string(),
-    };
-    let auto_submit_js = if auto_submit { "true" } else { "false" };
-
-    format!(
-        r#"(function() {{
-    const targetText = {text_json};
-    const inputSel = {input_sel_json};
-    const submitSel = {submit_sel_json};
-    const autoSubmit = {auto_submit_js};
-
-    if (!targetText) return;
-
-    // 防止在同一次文本划选中重复执行
-    if (window.__iox_last_text === targetText && window.__iox_injected_done) {{
-        return;
-    }}
-
-    let attempts = 0;
-    const maxAttempts = 60; // 60 * 250ms = 15s
-
-    function findInput() {{
-        // 1. 优先使用用户或预设指定的选择器
-        if (inputSel) {{
-            try {{
-                const el = document.querySelector(inputSel);
-                if (el && el.offsetParent !== null) return el;
-                if (el) return el;
-            }} catch (_) {{}}
-        }}
-
-        // 2. 启发式回退：查找可见的 textarea
-        const textareas = Array.from(document.querySelectorAll('textarea'));
-        for (const ta of textareas) {{
-            if (ta.offsetParent !== null && !ta.disabled && !ta.readOnly) {{
-                return ta;
-            }}
-        }}
-
-        // 3. 启发式回退：查找可见的 contenteditable
-        const editables = Array.from(document.querySelectorAll('div[contenteditable="true"], [contenteditable="true"]'));
-        for (const ed of editables) {{
-            if (ed.offsetParent !== null) {{
-                return ed;
-            }}
-        }}
-
-        // 4. 最宽容回退
-        return document.querySelector('textarea, div[contenteditable="true"]');
-    }}
-
-    function triggerSubmit(inputEl) {{
-        let clicked = false;
-
-        // 1. 优先使用指定的 submitSel
-        if (submitSel) {{
-            try {{
-                const btn = document.querySelector(submitSel);
-                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {{
-                    btn.click();
-                    clicked = true;
-                }}
-            }} catch (_) {{}}
-        }}
-
-        // 2. 启发式查找发送按钮
-        if (!clicked) {{
-            const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
-            for (const b of buttons) {{
-                const aria = b.getAttribute('aria-label') || '';
-                const title = b.getAttribute('title') || '';
-                const text = b.textContent?.trim() || '';
-                const isSend = /发送|Send|Submit/i.test(aria) || /发送|Send|Submit/i.test(title) || /发送|Send/i.test(text);
-                const notDisabled = !b.disabled && b.getAttribute('aria-disabled') !== 'true';
-                if (isSend && notDisabled) {{
-                    b.click();
-                    clicked = true;
-                    break;
-                }}
-            }}
-        }}
-
-        // 3. 回车键盘事件双保险 (keydown -> keypress -> keyup)
-        const enterOpts = {{
-            key: 'Enter',
-            code: 'Enter',
-            keyCode: 13,
-            which: 13,
-            charCode: 13,
-            bubbles: true,
-            cancelable: true
-        }};
-        inputEl.dispatchEvent(new KeyboardEvent('keydown', enterOpts));
-        inputEl.dispatchEvent(new KeyboardEvent('keypress', enterOpts));
-        inputEl.dispatchEvent(new KeyboardEvent('keyup', enterOpts));
-    }}
-
-    function doInject() {{
-        const el = findInput();
-        if (!el) {{
-            if (++attempts < maxAttempts) {{
-                setTimeout(doInject, 250);
-            }}
-            return;
-        }}
-
-        try {{
-            el.focus();
-
-            if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {{
-                const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
-                const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-                if (setter) {{
-                    setter.call(el, targetText);
-                }} else {{
-                    el.value = targetText;
-                }}
-
-                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                try {{
-                    el.dispatchEvent(new InputEvent('input', {{ bubbles: true, inputType: 'insertText', data: targetText }}));
-                }} catch (_) {{}}
-                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-            }} else if (el.isContentEditable) {{
-                document.execCommand('selectAll', false, null);
-                document.execCommand('insertText', false, targetText);
-                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-            }}
-
-            window.__iox_last_text = targetText;
-            window.__iox_injected_done = true;
-
-            if (autoSubmit) {{
-                setTimeout(() => {{
-                    triggerSubmit(el);
-                }}, 200);
-            }}
-        }} catch (err) {{
-            console.error('[iox] DOM injection error:', err);
-        }}
-    }}
-
-    if (document.readyState === 'loading') {{
-        document.addEventListener('DOMContentLoaded', doInject, {{ once: true }});
-    }} else {{
-        doInject();
-    }}
-}})();"#,
-        text_json = text_json,
-        input_sel_json = input_sel_json,
-        submit_sel_json = submit_sel_json,
-        auto_submit_js = auto_submit_js
-    )
-}
 
 /// 执行 Web 动作：以支持 macOS 红黄绿圆点标题栏与透明圆角的高级原生 Multi-Webview 浮窗打开目标 AI 官网
 pub fn execute_web_action(
@@ -234,7 +65,7 @@ pub fn execute_web_action(
         });
 
         let auto_sub = action.auto_submit.unwrap_or(true);
-        let script = build_injection_script(text, input_sel, submit_sel, auto_sub);
+        let script = build_dom_injection_script(text, input_sel, submit_sel, auto_sub);
         (template.to_string(), Some(script))
     };
 
@@ -277,13 +108,15 @@ pub fn execute_web_action(
     }
 
     // 5. 创建无边框、支持通透圆角与 macOS 沉浸式标题栏的 Native 窗口
-    let initial_width = 860.0;
-    let initial_height = 640.0;
+    let (saved_w, saved_h) = config.general.web_window_size;
+    let initial_width = if saved_w >= 520.0 { saved_w } else { 860.0 };
+    let initial_height = if saved_h >= 400.0 { saved_h } else { 640.0 };
     let titlebar_height = 38.0;
 
     let window = WindowBuilder::new(app, &label)
         .title(&action.name)
         .inner_size(initial_width, initial_height)
+        .min_inner_size(520.0, 400.0)
         .resizable(true)
         .decorations(false) // 无系统粗糙边框
         .transparent(true) // 通透圆角
@@ -317,13 +150,12 @@ pub fn execute_web_action(
         )
         .map_err(|e| format!("Failed to create titlebar webview: {}", e))?;
 
-    // 构建外部 AI 官网内容 Webview
-    let mut content_builder = WebviewBuilder::new(&content_label, WebviewUrl::External(target_url))
-        .transparent(true);
-
-    if let Some(ref script) = injection_script {
-        content_builder = content_builder.initialization_script(script);
-    }
+    // 构建外部 AI 官网内容 Webview（启用 Ctrl+滚轮缩放与通用初始化增强）
+    let init_script = build_initialization_script(injection_script.as_deref());
+    let content_builder = WebviewBuilder::new(&content_label, WebviewUrl::External(target_url))
+        .transparent(true)
+        .zoom_hotkeys_enabled(true)
+        .initialization_script(&init_script);
 
     let content_wv = window
         .add_child(
@@ -352,40 +184,63 @@ pub fn execute_web_action(
         });
     }
 
-    // 监听窗口尺寸变化，动态平滑适配 Webview 尺寸与圆角 Region
+    // 监听窗口尺寸变化与关闭事件，动态平滑适配 Webview 尺寸并持久化记忆窗口尺寸
     let titlebar_clone = titlebar_wv.clone();
     let content_clone = content_wv.clone();
     let window_clone = window.clone();
+    let app_handle = app.clone();
 
     window.on_window_event(move |event| {
-        if let tauri::WindowEvent::Resized(physical_size) = event {
-            let scale = window_clone.scale_factor().unwrap_or(1.0);
-            let bar_physical_h = (38.0 * scale).round() as u32;
-            let content_physical_h = physical_size.height.saturating_sub(bar_physical_h);
-
-            let is_maximized = window_clone.is_maximized().unwrap_or(false);
-            if let Ok(hwnd) = window_clone.hwnd() {
-                let hwnd_raw = hwnd.0 as _;
-                if is_maximized {
-                    crate::window_manager::remove_content_webview_round(hwnd_raw);
-                } else {
-                    let r = (12.0 * scale).round() as i32;
-                    crate::window_manager::apply_content_webview_bottom_round(hwnd_raw, r);
+        match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                if !window_clone.is_maximized().unwrap_or(false) {
+                    if let Ok(size) = window_clone.inner_size() {
+                        let scale = window_clone.scale_factor().unwrap_or(1.0);
+                        let w = (size.width as f64 / scale).round();
+                        let h = (size.height as f64 / scale).round();
+                        if w >= 520.0 && h >= 400.0 {
+                            if let Some(state) = app_handle.try_state::<crate::AppState>() {
+                                if let Ok(mut config) = state.config.lock() {
+                                    config.general.web_window_size = (w, h);
+                                    let _ = config.save();
+                                }
+                            }
+                        }
+                    }
                 }
+                let _ = window_clone.hide();
             }
+            tauri::WindowEvent::Resized(physical_size) => {
+                let scale = window_clone.scale_factor().unwrap_or(1.0);
+                let bar_physical_h = (38.0 * scale).round() as u32;
+                let content_physical_h = physical_size.height.saturating_sub(bar_physical_h);
 
-            let _ = titlebar_clone.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
-                physical_size.width,
-                bar_physical_h,
-            )));
-            let _ = content_clone.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
-                physical_size.width,
-                content_physical_h,
-            )));
-            let _ = content_clone.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
-                0,
-                bar_physical_h as i32,
-            )));
+                let is_maximized = window_clone.is_maximized().unwrap_or(false);
+                if let Ok(hwnd) = window_clone.hwnd() {
+                    let hwnd_raw = hwnd.0 as _;
+                    if is_maximized {
+                        crate::window_manager::remove_content_webview_round(hwnd_raw);
+                    } else {
+                        let r = (12.0 * scale).round() as i32;
+                        crate::window_manager::apply_content_webview_bottom_round(hwnd_raw, r);
+                    }
+                }
+
+                let _ = titlebar_clone.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
+                    physical_size.width,
+                    bar_physical_h,
+                )));
+                let _ = content_clone.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
+                    physical_size.width,
+                    content_physical_h,
+                )));
+                let _ = content_clone.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
+                    0,
+                    bar_physical_h as i32,
+                )));
+            }
+            _ => {}
         }
     });
 
@@ -393,30 +248,4 @@ pub fn execute_web_action(
     let _ = window.set_focus();
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_build_injection_script_basic() {
-        let script = build_injection_script(
-            "Hello \"world\"\nNext line",
-            "textarea#chat-input",
-            Some("button.send"),
-            true,
-        );
-        assert!(script.contains("Hello \\\"world\\\"\\nNext line"));
-        assert!(script.contains("textarea#chat-input"));
-        assert!(script.contains("button.send"));
-        assert!(script.contains("const autoSubmit = true;"));
-    }
-
-    #[test]
-    fn test_build_injection_script_without_submit() {
-        let script = build_injection_script("Test", "textarea", None, false);
-        assert!(script.contains("const submitSel = null;"));
-        assert!(script.contains("const autoSubmit = false;"));
-    }
 }

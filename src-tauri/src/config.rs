@@ -10,6 +10,10 @@ fn default_overlay_opacity() -> u32 {
     90
 }
 
+fn default_web_window_size() -> (f64, f64) {
+    (860.0, 640.0)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GeneralConfig {
@@ -25,6 +29,8 @@ pub struct GeneralConfig {
     pub auto_copy_on_web_action: bool,
     #[serde(default = "default_overlay_opacity")]
     pub overlay_opacity: u32,
+    #[serde(default = "default_web_window_size")]
+    pub web_window_size: (f64, f64),
 }
 
 impl Default for GeneralConfig {
@@ -39,6 +45,7 @@ impl Default for GeneralConfig {
             web_window_mode: "multi_window".to_string(),
             auto_copy_on_web_action: false,
             overlay_opacity: 90,
+            web_window_size: (860.0, 640.0),
         }
     }
 }
@@ -382,6 +389,7 @@ mod tests {
         assert_eq!(config.general.global_hotkey, deserialized.general.global_hotkey);
         assert_eq!(deserialized.general.web_window_mode, "multi_window");
         assert_eq!(deserialized.general.overlay_opacity, 90);
+        assert_eq!(deserialized.general.web_window_size, (860.0, 640.0));
         assert_eq!(config.providers.len(), deserialized.providers.len());
         assert_eq!(config.actions.len(), deserialized.actions.len());
     }
@@ -403,9 +411,11 @@ mod tests {
         }"#;
         let config: AppConfig = serde_json::from_str(raw_json).expect("Deserialize legacy config");
         assert_eq!(config.general.overlay_opacity, 90);
+        assert_eq!(config.general.web_window_size, (860.0, 640.0));
 
         let default_config = AppConfig::default();
         assert_eq!(default_config.general.overlay_opacity, 90);
+        assert_eq!(default_config.general.web_window_size, (860.0, 640.0));
     }
 
     #[test]
