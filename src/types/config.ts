@@ -48,7 +48,7 @@ export interface AppConfig {
 }
 
 export interface WebHubTabItem {
-  action_id: string;
+  actionId: string;
   name: string;
   icon: string;
   url: string;
@@ -56,6 +56,14 @@ export interface WebHubTabItem {
 
 export interface WebHubState {
   tabs: WebHubTabItem[];
-  active_tab_id: string | null;
+  activeTabId: string | null;
 }
+
+export interface PickedProcessInfo {
+  processName: string;
+  windowTitle: string;
+}
+
+export type SettingsTab = 'providers' | 'actions' | 'web' | 'general' | 'blacklist';
+
 

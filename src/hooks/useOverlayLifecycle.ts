@@ -6,6 +6,7 @@ import { calculateBubbleWidth } from '@/utils/bubbleWidth';
 
 interface UseOverlayLifecycleProps {
   actions?: ActionConfig[];
+  iconOnly?: boolean;
   isPinned: boolean;
   setIsPinned: (pinned: boolean) => void;
   setIsClosing: (closing: boolean) => void;
@@ -14,6 +15,7 @@ interface UseOverlayLifecycleProps {
 
 export function useOverlayLifecycle({
   actions,
+  iconOnly = false,
   isPinned,
   setIsPinned,
   setIsClosing,
@@ -23,6 +25,8 @@ export function useOverlayLifecycle({
   isPinnedRef.current = isPinned;
   const actionsRef = useRef<ActionConfig[] | undefined>(actions);
   actionsRef.current = actions;
+  const iconOnlyRef = useRef<boolean>(iconOnly);
+  iconOnlyRef.current = iconOnly;
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 调整窗口尺寸并同步模式到 Rust 端
@@ -35,7 +39,7 @@ export function useOverlayLifecycle({
       // 同步模式到 Rust 端，供键盘钩子判断消失逻辑
       invoke('set_overlay_mode', { mode: newMode }).catch(() => {});
       if (newMode === 'bubble') {
-        const width = calculateBubbleWidth(actionsRef.current);
+        const width = calculateBubbleWidth(actionsRef.current, iconOnlyRef.current);
         await invoke('resize_overlay', { width, height: 46, allowFocus: false });
       } else {
         const width = customSize?.width || 460;

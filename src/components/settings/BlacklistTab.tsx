@@ -12,15 +12,8 @@ import {
   Cpu,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-
-interface PickedProcessInfo {
-  processName: string;
-  windowTitle: string;
-}
+import { Card, CardContent, Button, Input, Badge } from "@/components/ui";
+import { PickedProcessInfo } from "@/types/config";
 
 interface BlacklistTabProps {
   blacklist: string[];

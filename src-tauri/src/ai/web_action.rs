@@ -9,6 +9,7 @@ use tauri::window::WindowBuilder;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct WebHubTab {
     pub action_id: String,
     pub name: String,
@@ -17,6 +18,7 @@ pub struct WebHubTab {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WebHubState {
     pub tabs: Vec<WebHubTab>,
     pub active_tab_id: Option<String>,

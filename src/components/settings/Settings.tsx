@@ -5,7 +5,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { MacTitleBar } from "@/components/MacTitleBar";
 import { SettingsSidebar, SettingsTab } from "@/components/settings/SettingsSidebar";
 import { ProvidersTab } from "@/components/settings/ProvidersTab";
-import { ActionsTab } from "@/components/settings/ActionsTab";
+import { ActionsTab } from "@/components/settings/actions";
 import { WebviewTab } from "@/components/settings/WebviewTab";
 import { GeneralTab } from "@/components/settings/GeneralTab";
 import { BlacklistTab } from "@/components/settings/BlacklistTab";

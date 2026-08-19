@@ -4,12 +4,16 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { ProviderConfig } from "@/types/config";
 import { DynamicIcon } from "@/components/Icons";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import { MultiSelect } from "@/components/ui/multi-select";
+import {
+  Card,
+  CardHeader,
+  CardContent,
+  Button,
+  Input,
+  Label,
+  Select,
+  MultiSelect,
+} from "@/components/ui";
 
 interface ProvidersTabProps {
   providers: ProviderConfig[];

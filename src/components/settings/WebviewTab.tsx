@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { Globe, LayoutGrid, Layers, RefreshCcw, ArrowUpRight, Zap } from "lucide-react";
 import { GeneralConfig, ActionConfig, WebWindowMode } from "@/types/config";
-import { Card, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
+import {
+  Card,
+  CardContent,
+  Label,
+  Select,
+  Switch,
+  Button,
+  Input,
+  Separator,
+} from "@/components/ui";
 import { DynamicIcon } from "@/components/Icons";
 
 interface WebviewTabProps {

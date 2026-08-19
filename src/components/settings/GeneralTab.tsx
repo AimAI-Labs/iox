@@ -1,13 +1,16 @@
 import React from "react";
 import { Monitor, Moon, Sun, Sparkles } from "lucide-react";
 import { GeneralConfig } from "@/types/config";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
+import {
+  Card,
+  CardContent,
+  Input,
+  Label,
+  Select,
+  Slider,
+  Switch,
+  Separator,
+} from "@/components/ui";
 import { IOXLogo } from "@/components/common";
 
 interface GeneralTabProps {

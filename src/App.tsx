@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense, lazy } from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
 import { useConfig } from '@/hooks/useConfig';
 import { useTheme } from '@/hooks/useTheme';
 import { useOverlayState } from '@/hooks/useOverlayState';
 import { BubbleBar, ResultCard } from '@/components/overlay';
-import { Settings } from '@/components/settings';
-import { WebTitleBar } from '@/components/web';
 import { Toaster } from 'sonner';
 import './App.css';
+
+// 懒加载非悬浮窗视图，极大加速 Overlay 首屏渲染与降低内存占用
+const Settings = lazy(() => import('@/components/settings').then((m) => ({ default: m.Settings })));
+const WebTitleBar = lazy(() => import('@/components/web').then((m) => ({ default: m.WebTitleBar })));
 
 export function App() {
   const { config, loading, updateConfig } = useConfig();
@@ -79,10 +81,14 @@ export function App() {
 
   // 0. Web 官网浮窗标题栏视图
   if (isWebTitleBar) {
-    return <WebTitleBar />;
+    return (
+      <Suspense fallback={null}>
+        <WebTitleBar />
+      </Suspense>
+    );
   }
 
-  // 1. Overlay 悬浮窗视图
+  // 1. Overlay 悬浮窗视图 (保持同步直出渲染，零时延)
   if (windowLabel === 'overlay') {
     if (!overlayState.visible) {
       return null;
@@ -121,7 +127,7 @@ export function App() {
     );
   }
 
-  // 2. Settings 设置面板视图 (主窗口)
+  // 2. Settings 设置面板视图 (主窗口异步载入)
   return (
     <>
       <Toaster
@@ -131,7 +137,19 @@ export function App() {
         duration={3500}
         theme={config.general.theme === 'system' ? 'system' : (config.general.theme as 'dark' | 'light')}
       />
-      <Settings config={config} onSave={updateConfig} />
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center min-h-screen bg-transparent">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" />
+            </div>
+          </div>
+        }
+      >
+        <Settings config={config} onSave={updateConfig} />
+      </Suspense>
     </>
   );
 }

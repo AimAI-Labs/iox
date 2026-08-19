@@ -35,5 +35,23 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("@lobehub/icons")) {
+            return "vendor-lobe-icons";
+          }
+          if (id.includes("lucide-react")) {
+            return "vendor-lucide";
+          }
+          if (id.includes("react-markdown")) {
+            return "vendor-markdown";
+          }
+        },
+      },
+    },
+  },
 }));
 

@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 export const HubTabBar: React.FC = () => {
   const [hubState, setHubState] = useState<WebHubState>({
     tabs: [],
-    active_tab_id: null,
+    activeTabId: null,
   });
   const [actions, setActions] = useState<ActionConfig[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -105,7 +105,7 @@ export const HubTabBar: React.FC = () => {
   };
 
   const handleMouseDownDrag = async (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button, .traffic-light, input, select, .tab-item, .popover-menu')) {
+    if ((e.target as HTMLElement).closest('button, .traffic-light, input, select, .tab-item')) {
       return;
     }
     if (e.button === 0) {
@@ -119,7 +119,7 @@ export const HubTabBar: React.FC = () => {
   };
 
   const handleDoubleClickDrag = async (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button, .traffic-light, input, select, .tab-item, .popover-menu')) {
+    if ((e.target as HTMLElement).closest('button, .traffic-light, input, select, .tab-item')) {
       return;
     }
     await handleMaximize();
@@ -170,7 +170,7 @@ export const HubTabBar: React.FC = () => {
   };
 
   // 6. 外部浏览器打开当前活跃 Tab
-  const currentActiveTab = hubState.tabs.find((t) => t.action_id === hubState.active_tab_id);
+  const currentActiveTab = hubState.tabs.find((t) => t.actionId === hubState.activeTabId);
   const handleOpenExternal = async () => {
     if (!currentActiveTab?.url) return;
     try {
@@ -194,7 +194,7 @@ export const HubTabBar: React.FC = () => {
   };
 
   // 过滤出未在 Hub 中打开的已启用 Web 动作
-  const openedActionIds = new Set(hubState.tabs.map((t) => t.action_id));
+  const openedActionIds = new Set(hubState.tabs.map((t) => t.actionId));
   const availableWebActions = actions.filter(
     (a) => a.actionType === 'web' && a.enabled && !openedActionIds.has(a.id)
   );
@@ -222,11 +222,11 @@ export const HubTabBar: React.FC = () => {
           data-tauri-drag-region
         >
           {hubState.tabs.map((tab) => {
-            const isActive = tab.action_id === hubState.active_tab_id;
+            const isActive = tab.actionId === hubState.activeTabId;
             return (
               <div
-                key={tab.action_id}
-                onClick={() => handleSwitchTab(tab.action_id)}
+                key={tab.actionId}
+                onClick={() => handleSwitchTab(tab.actionId)}
                 className={cn(
                   'tab-item group flex items-center gap-1.5 px-2.5 h-[26px] rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 shrink-0 select-none border box-border',
                   isActive
@@ -250,7 +250,7 @@ export const HubTabBar: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={(e) => handleCloseTab(e, tab.action_id)}
+                  onClick={(e) => handleCloseTab(e, tab.actionId)}
                   onMouseDown={(e) => e.stopPropagation()}
                   className="w-3.5 h-3.5 rounded-full inline-flex items-center justify-center text-muted-foreground/60 hover:text-foreground hover:bg-black/10 dark:hover:bg-white/15 transition-colors ml-0.5"
                   title={`关闭 ${tab.name}`}

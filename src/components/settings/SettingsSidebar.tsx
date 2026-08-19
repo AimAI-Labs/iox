@@ -1,10 +1,11 @@
 import React from "react";
 import { Cpu, Zap, Globe, Sliders, Shield, Save, Check, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui";
 import { IOXLogo } from "@/components/common";
 import { cn } from "@/lib/utils";
+import { SettingsTab } from "@/types/config";
 
-export type SettingsTab = "providers" | "actions" | "web" | "general" | "blacklist";
+export type { SettingsTab };
 
 interface SettingsSidebarProps {
   activeTab: SettingsTab;

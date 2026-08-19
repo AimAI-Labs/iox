@@ -310,7 +310,7 @@ pub fn run_overlay_drag_loop(app: &AppHandle) {
 }
 
 /// 根据启用的 Action 列表与内容文本自适应计算胶囊悬浮气泡条（BubbleBar）的物理像素宽度
-pub fn calculate_bubble_bar_width(actions: &[crate::config::ActionConfig]) -> i32 {
+pub fn calculate_bubble_bar_width(actions: &[crate::config::ActionConfig], icon_only: bool) -> i32 {
     let enabled_actions: Vec<&crate::config::ActionConfig> =
         actions.iter().filter(|a| a.enabled).collect();
     if enabled_actions.is_empty() {
@@ -331,23 +331,29 @@ pub fn calculate_bubble_bar_width(actions: &[crate::config::ActionConfig]) -> i3
         total_width += ((enabled_actions.len() - 1) * 2) as f64;
     }
 
-    for action in enabled_actions {
-        // 单个按钮内边距 px-1.5 (12px) + 图标 (14px) + gap-1 (4px)
-        let mut btn_w: f64 = 12.0 + 14.0 + 4.0;
-        // 计算文本宽度 (11.5px 字体: ASCII 字符约 7.5px, 中文/全角字符约 13px)
-        for ch in action.name.chars() {
-            if ch.is_ascii() {
-                btn_w += 7.5;
-            } else {
-                btn_w += 13.0;
+    if icon_only {
+        // 纯图标模式下每个按钮固定宽度 23px
+        total_width += (enabled_actions.len() * 23) as f64;
+    } else {
+        for action in enabled_actions {
+            // 单个按钮内边距 px-1.5 (12px) + 图标 (14px) + gap-1 (4px)
+            let mut btn_w: f64 = 12.0 + 14.0 + 4.0;
+            // 计算文本宽度 (11.5px 字体: ASCII 字符约 7.5px, 中文/全角字符约 13px)
+            for ch in action.name.chars() {
+                if ch.is_ascii() {
+                    btn_w += 7.5;
+                } else {
+                    btn_w += 13.0;
+                }
             }
+            total_width += btn_w;
         }
-        total_width += btn_w;
     }
 
-    // 向上取整，并做上下限约束 (最小 220px，最大 1200px)
+    // 向上取整，并做上下限约束 (最小 160px，最大 1200px)
+    let min_w = if icon_only { 160 } else { 220 };
     let final_width = total_width.ceil() as i32;
-    final_width.clamp(220, 1200)
+    final_width.clamp(min_w, 1200)
 }
 
 #[cfg(test)]
@@ -365,7 +371,8 @@ mod tests {
     #[test]
     fn test_calculate_bubble_bar_width_various_actions() {
         // 1. 空动作列表
-        assert_eq!(calculate_bubble_bar_width(&[]), 220);
+        assert_eq!(calculate_bubble_bar_width(&[], false), 220);
+        assert_eq!(calculate_bubble_bar_width(&[], true), 220);
 
         // 2. 只有禁用动作
         let disabled_action = ActionConfig {
@@ -382,7 +389,8 @@ mod tests {
             submit_selector: None,
             auto_submit: None,
         };
-        assert_eq!(calculate_bubble_bar_width(&[disabled_action]), 220);
+        assert_eq!(calculate_bubble_bar_width(&[disabled_action.clone()], false), 220);
+        assert_eq!(calculate_bubble_bar_width(&[disabled_action], true), 220);
 
         // 3. 7 个典型动作 (DeepSeek, Qwen, Perplexity, 复制, Claude, ChatGPT, 豆包)
         let sample_actions = vec![
@@ -486,8 +494,12 @@ mod tests {
             },
         ];
 
-        let width = calculate_bubble_bar_width(&sample_actions);
-        // 7 个动作总宽应该在 600px ~ 660px 之间，远大于原先写死的 500px
+        let width = calculate_bubble_bar_width(&sample_actions, false);
+        // 7 个动作总宽应该在 600px ~ 660px 之间
         assert!(width >= 600 && width <= 700, "Calculated width was {}", width);
+
+        // 纯图标模式下 7 个动作的宽度应该更紧凑 (约 260px)
+        let icon_only_width = calculate_bubble_bar_width(&sample_actions, true);
+        assert!(icon_only_width >= 240 && icon_only_width <= 280, "Calculated icon_only width was {}", icon_only_width);
     }
 }
