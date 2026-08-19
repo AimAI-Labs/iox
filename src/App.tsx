@@ -39,15 +39,29 @@ export function App() {
     }
   };
 
-  // 全局 Esc 键监听
+  // 全局 Esc 键与鼠标侧键监听
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && windowLabel === 'overlay' && !overlayState.isPinned) {
         overlayState.handleClose();
       }
     };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      // 3: 鼠标后退侧键, 4: 鼠标前进侧键
+      if ((e.button === 3 || e.button === 4) && windowLabel === 'overlay' && !overlayState.isPinned) {
+        overlayState.handleClose();
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('auxclick', handleMouseDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('auxclick', handleMouseDown);
+    };
   }, [windowLabel, overlayState]);
 
   if (loading || !config) {

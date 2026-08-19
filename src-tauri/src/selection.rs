@@ -381,11 +381,22 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                         request_hide_overlay_gracefully(handle);
                     }
                 }
-            } else if msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN || msg == WM_MOUSEWHEEL {
-                // 右键、中键点击或滚轮滚动外部也平滑请求隐藏
+            } else if msg == WM_RBUTTONDOWN
+                || msg == WM_MBUTTONDOWN
+                || msg == WM_MOUSEWHEEL
+                || msg == WM_MOUSEHWHEEL
+                || msg == WM_XBUTTONDOWN
+                || msg == WM_NCXBUTTONDOWN
+            {
+                // 右键、中键、滚轮滚动或鼠标侧键点击时平滑请求隐藏
                 if let Some(ref handle) = app_handle {
-                    if is_overlay_visible(handle) && !is_point_inside_overlay(handle, x, y) {
-                        request_hide_overlay_gracefully(handle);
+                    if is_overlay_visible(handle) {
+                        let is_xbutton = msg == WM_XBUTTONDOWN || msg == WM_NCXBUTTONDOWN;
+                        // 侧键触发时，无论是在悬浮窗内部还是外部均应隐藏（胶囊条不消费侧键）
+                        // 右键/中键/滚轮则在悬浮窗外部时平滑隐藏
+                        if is_xbutton || !is_point_inside_overlay(handle, x, y) {
+                            request_hide_overlay_gracefully(handle);
+                        }
                     }
                 }
             } else if msg == WM_LBUTTONUP {
