@@ -121,6 +121,7 @@ pub fn execute_web_action(
         .decorations(false) // 无系统粗糙边框
         .transparent(true) // 通透圆角
         .shadow(false) // 无脏阴影
+        .visible(false) // 隐式原子构建，待子 Webview 和原生样式全部就绪后再统一显示
         .build()
         .map_err(|e| format!("Failed to create web window: {}", e))?;
 
@@ -151,7 +152,7 @@ pub fn execute_web_action(
         .map_err(|e| format!("Failed to create titlebar webview: {}", e))?;
 
     // 构建外部 AI 官网内容 Webview（启用 Ctrl+滚轮缩放与通用初始化增强）
-    let init_script = build_initialization_script(injection_script.as_deref());
+    let init_script = build_initialization_script(&config.general.theme, injection_script.as_deref());
     let content_builder = WebviewBuilder::new(&content_label, WebviewUrl::External(target_url))
         .transparent(true)
         .zoom_hotkeys_enabled(true)
