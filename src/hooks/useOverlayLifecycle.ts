@@ -1,8 +1,11 @@
 import { useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { OverlayMode } from '@/state/overlayReducer';
+import { ActionConfig } from '@/types/config';
+import { calculateBubbleWidth } from '@/utils/bubbleWidth';
 
 interface UseOverlayLifecycleProps {
+  actions?: ActionConfig[];
   isPinned: boolean;
   setIsPinned: (pinned: boolean) => void;
   setIsClosing: (closing: boolean) => void;
@@ -10,6 +13,7 @@ interface UseOverlayLifecycleProps {
 }
 
 export function useOverlayLifecycle({
+  actions,
   isPinned,
   setIsPinned,
   setIsClosing,
@@ -17,6 +21,8 @@ export function useOverlayLifecycle({
 }: UseOverlayLifecycleProps) {
   const isPinnedRef = useRef<boolean>(isPinned);
   isPinnedRef.current = isPinned;
+  const actionsRef = useRef<ActionConfig[] | undefined>(actions);
+  actionsRef.current = actions;
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 调整窗口尺寸并同步模式到 Rust 端
@@ -29,7 +35,8 @@ export function useOverlayLifecycle({
       // 同步模式到 Rust 端，供键盘钩子判断消失逻辑
       invoke('set_overlay_mode', { mode: newMode }).catch(() => {});
       if (newMode === 'bubble') {
-        await invoke('resize_overlay', { width: 500, height: 46, allowFocus: false });
+        const width = calculateBubbleWidth(actionsRef.current);
+        await invoke('resize_overlay', { width, height: 46, allowFocus: false });
       } else {
         const width = customSize?.width || 460;
         const height = customSize?.height || 420;

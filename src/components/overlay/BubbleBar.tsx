@@ -78,7 +78,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         className={cn(
           "inline-flex items-center h-[30px] px-1.5 py-0.5 gap-0.5",
           "capsule-glass",
-          "rounded-lg",
+          "rounded-lg max-w-[calc(100vw-16px)] overflow-hidden",
           "border border-zinc-200/80 dark:border-zinc-800/80",
           !isPreview && (isClosing ? "animate-capsule-out" : "animate-capsule-in")
         )}
@@ -87,7 +87,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         <div
           onMouseDown={!isPreview ? handleMouseDown : undefined}
           className={cn(
-            "flex items-center justify-center w-4 h-5 rounded",
+            "flex items-center justify-center w-4 h-5 rounded shrink-0",
             "text-zinc-400 dark:text-zinc-500",
             !isPreview && "hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60 cursor-grab active:cursor-grabbing",
             isPreview && "cursor-default opacity-80",
@@ -99,7 +99,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         </div>
 
         {/* 2. 动作按钮组 (支持拖拽位置排序) */}
-        <div className="flex items-center gap-[2px]">
+        <div className="flex items-center gap-[2px] overflow-x-auto no-scrollbar shrink-0">
           {enabledActions.map((action) => {
             const isCopyAction = action.actionType === 'copy';
             const isActionDragging = draggedId === action.id;
@@ -142,7 +142,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                   onMouseDown={(e) => e.stopPropagation()}
                   {...dragHandlers}
                   className={cn(
-                    "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded",
+                    "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded shrink-0",
                     "text-[11.5px] font-medium tracking-tight whitespace-nowrap",
                     isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                     "transition-all duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] active:scale-95",
@@ -173,7 +173,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                 onMouseDown={(e) => e.stopPropagation()}
                 {...dragHandlers}
                 className={cn(
-                  "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded",
+                  "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded shrink-0",
                   "text-[11.5px] font-medium tracking-tight whitespace-nowrap",
                   isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                   "text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400",
@@ -195,7 +195,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
 
         {/* 3. 精致渐变分割线 */}
         {(onOpenSettings || isPreview) && (
-          <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5" />
+          <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5 shrink-0" />
         )}
 
         {/* 4. 品牌 Logo / 设置入口 */}
@@ -205,10 +205,10 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
             onClick={!isPreview ? onOpenSettings : undefined}
             onMouseDown={(e) => e.stopPropagation()}
             className={cn(
-              "relative flex items-center justify-center w-6 h-6 rounded-md",
+              "relative flex items-center justify-center w-6 h-6 rounded-md shrink-0",
               "bg-gradient-to-tr from-blue-500/10 to-indigo-500/10 dark:from-blue-400/15 dark:to-indigo-400/15",
               "border border-blue-500/20 dark:border-blue-400/25",
-              "group transition-all duration-200 hover:scale-105 active:scale-95 shrink-0",
+              "group transition-all duration-200 hover:scale-105 active:scale-95",
               !isPreview ? "cursor-pointer" : "cursor-default opacity-80"
             )}
             title={!isPreview ? "更多与设置" : "IOX AI 划词助手"}

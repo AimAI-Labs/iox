@@ -309,14 +309,185 @@ pub fn run_overlay_drag_loop(app: &AppHandle) {
     }
 }
 
+/// 根据启用的 Action 列表与内容文本自适应计算胶囊悬浮气泡条（BubbleBar）的物理像素宽度
+pub fn calculate_bubble_bar_width(actions: &[crate::config::ActionConfig]) -> i32 {
+    let enabled_actions: Vec<&crate::config::ActionConfig> =
+        actions.iter().filter(|a| a.enabled).collect();
+    if enabled_actions.is_empty() {
+        return 220;
+    }
+
+    // 基础固定组件与边距 (px)：
+    // - 拖拽指示手柄 (16px) + gap (2px)
+    // - 分割线 (5px)
+    // - Logo/设置入口 (24px)
+    // - 外层胶囊容器内边距 px-1.5 (12px)
+    // - 边框与安全呼吸内边距 padding (12px)
+    // - 渲染阴影与安全缓冲裕量 (18px)
+    let mut total_width: f64 = 16.0 + 2.0 + 5.0 + 24.0 + 12.0 + 12.0 + 18.0;
+
+    // 按钮之间 gap-[2px]
+    if enabled_actions.len() > 1 {
+        total_width += ((enabled_actions.len() - 1) * 2) as f64;
+    }
+
+    for action in enabled_actions {
+        // 单个按钮内边距 px-1.5 (12px) + 图标 (14px) + gap-1 (4px)
+        let mut btn_w: f64 = 12.0 + 14.0 + 4.0;
+        // 计算文本宽度 (11.5px 字体: ASCII 字符约 7.5px, 中文/全角字符约 13px)
+        for ch in action.name.chars() {
+            if ch.is_ascii() {
+                btn_w += 7.5;
+            } else {
+                btn_w += 13.0;
+            }
+        }
+        total_width += btn_w;
+    }
+
+    // 向上取整，并做上下限约束 (最小 220px，最大 1200px)
+    let final_width = total_width.ceil() as i32;
+    final_width.clamp(220, 1200)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ActionConfig;
 
     #[test]
     fn test_position_calculation_basic() {
         let (x, y) = calculate_overlay_position(500, 500, 260, 42);
         assert_eq!(x, 500 - 130);
         assert_eq!(y, 500 - 42 - 10);
+    }
+
+    #[test]
+    fn test_calculate_bubble_bar_width_various_actions() {
+        // 1. 空动作列表
+        assert_eq!(calculate_bubble_bar_width(&[]), 220);
+
+        // 2. 只有禁用动作
+        let disabled_action = ActionConfig {
+            id: "act1".to_string(),
+            name: "DeepSeek".to_string(),
+            icon: "bot".to_string(),
+            action_type: "api".to_string(),
+            provider_id: None,
+            prompt_template: None,
+            url_template: None,
+            copy_to_clipboard: None,
+            enabled: false,
+            input_selector: None,
+            submit_selector: None,
+            auto_submit: None,
+        };
+        assert_eq!(calculate_bubble_bar_width(&[disabled_action]), 220);
+
+        // 3. 7 个典型动作 (DeepSeek, Qwen, Perplexity, 复制, Claude, ChatGPT, 豆包)
+        let sample_actions = vec![
+            ActionConfig {
+                id: "1".into(),
+                name: "DeepSeek".into(),
+                icon: "bot".into(),
+                action_type: "api".into(),
+                provider_id: None,
+                prompt_template: None,
+                url_template: None,
+                copy_to_clipboard: None,
+                enabled: true,
+                input_selector: None,
+                submit_selector: None,
+                auto_submit: None,
+            },
+            ActionConfig {
+                id: "2".into(),
+                name: "Qwen".into(),
+                icon: "bot".into(),
+                action_type: "api".into(),
+                provider_id: None,
+                prompt_template: None,
+                url_template: None,
+                copy_to_clipboard: None,
+                enabled: true,
+                input_selector: None,
+                submit_selector: None,
+                auto_submit: None,
+            },
+            ActionConfig {
+                id: "3".into(),
+                name: "Perplexity".into(),
+                icon: "bot".into(),
+                action_type: "api".into(),
+                provider_id: None,
+                prompt_template: None,
+                url_template: None,
+                copy_to_clipboard: None,
+                enabled: true,
+                input_selector: None,
+                submit_selector: None,
+                auto_submit: None,
+            },
+            ActionConfig {
+                id: "4".into(),
+                name: "复制".into(),
+                icon: "copy".into(),
+                action_type: "copy".into(),
+                provider_id: None,
+                prompt_template: None,
+                url_template: None,
+                copy_to_clipboard: None,
+                enabled: true,
+                input_selector: None,
+                submit_selector: None,
+                auto_submit: None,
+            },
+            ActionConfig {
+                id: "5".into(),
+                name: "Claude".into(),
+                icon: "bot".into(),
+                action_type: "api".into(),
+                provider_id: None,
+                prompt_template: None,
+                url_template: None,
+                copy_to_clipboard: None,
+                enabled: true,
+                input_selector: None,
+                submit_selector: None,
+                auto_submit: None,
+            },
+            ActionConfig {
+                id: "6".into(),
+                name: "ChatGPT".into(),
+                icon: "bot".into(),
+                action_type: "api".into(),
+                provider_id: None,
+                prompt_template: None,
+                url_template: None,
+                copy_to_clipboard: None,
+                enabled: true,
+                input_selector: None,
+                submit_selector: None,
+                auto_submit: None,
+            },
+            ActionConfig {
+                id: "7".into(),
+                name: "豆包".into(),
+                icon: "bot".into(),
+                action_type: "api".into(),
+                provider_id: None,
+                prompt_template: None,
+                url_template: None,
+                copy_to_clipboard: None,
+                enabled: true,
+                input_selector: None,
+                submit_selector: None,
+                auto_submit: None,
+            },
+        ];
+
+        let width = calculate_bubble_bar_width(&sample_actions);
+        // 7 个动作总宽应该在 600px ~ 660px 之间，远大于原先写死的 500px
+        assert!(width >= 600 && width <= 700, "Calculated width was {}", width);
     }
 }

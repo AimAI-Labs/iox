@@ -25,6 +25,7 @@ export function useOverlayState(config: AppConfig | null) {
     handlePinToggle,
     handleClose,
   } = useOverlayLifecycle({
+    actions: config?.actions,
     isPinned: state.isPinned,
     setIsPinned: (pinned) => dispatch({ type: 'SET_PINNED', isPinned: pinned }),
     setIsClosing: (closing) => dispatch({ type: 'SET_CLOSING', isClosing: closing }),

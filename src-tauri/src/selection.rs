@@ -514,7 +514,7 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
             let Some(handle) = app_handle else { return };
 
             // 检查配置
-            let (auto_popup, min_len, modifier, blacklist) = {
+            let (auto_popup, min_len, modifier, blacklist, actions) = {
                 if let Some(state) = handle.try_state::<crate::AppState>() {
                     if let Ok(config) = state.config.lock() {
                         (
@@ -522,6 +522,7 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
                             config.general.min_selection_length,
                             config.general.trigger_modifier.clone(),
                             config.blacklist.clone(),
+                            config.actions.clone(),
                         )
                     } else {
                         return;
@@ -574,8 +575,9 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
 
                     let _ = handle.emit("selection-triggered", payload);
                     
-                    // 调度窗口定位与展示（紧凑胶囊尺寸 500x46）
-                    crate::window_manager::show_overlay_at(&handle, cursor_pos.0, cursor_pos.1, 500, 46);
+                    // 动态计算胶囊气泡所需物理宽度并调度窗口定位与展示
+                    let bubble_width = crate::window_manager::calculate_bubble_bar_width(&actions);
+                    crate::window_manager::show_overlay_at(&handle, cursor_pos.0, cursor_pos.1, bubble_width, 46);
                 }
             }
         });

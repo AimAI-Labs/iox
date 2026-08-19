@@ -340,7 +340,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
           </div>
 
           {/* 胶囊居中展示区域 */}
-          <div className="w-full flex items-center justify-center pt-3.5 pb-0.5 min-h-[40px]">
+          <div className="w-full flex items-center justify-center pt-3.5 pb-0.5 min-h-[40px] overflow-x-auto no-scrollbar">
             {enabledCount > 0 ? (
               <BubbleBar
                 actions={actions}
