@@ -11,6 +11,7 @@ export interface GeneralConfig {
   autoCopyOnWebAction: boolean;
   overlayOpacity?: number;
   webWindowSize?: [number, number];
+  iconOnlyBubble?: boolean;
 }
 
 export interface ProviderConfig {

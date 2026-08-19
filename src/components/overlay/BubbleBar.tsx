@@ -15,6 +15,7 @@ export interface BubbleBarProps {
   onOpenSettings?: () => void;
   onReorderActions?: (newActions: ActionConfig[]) => void;
   isPreview?: boolean;
+  iconOnly?: boolean;
 }
 
 export const BubbleBar: React.FC<BubbleBarProps> = ({
@@ -25,6 +26,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   onOpenSettings,
   onReorderActions,
   isPreview = false,
+  iconOnly = false,
 }) => {
   const { copied, copy } = useCopyFeedback(1500);
   const { handleMouseDown } = useWindowDrag();
@@ -142,8 +144,10 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                   onMouseDown={(e) => e.stopPropagation()}
                   {...dragHandlers}
                   className={cn(
-                    "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded shrink-0",
-                    "text-[11.5px] font-medium tracking-tight whitespace-nowrap",
+                    "group relative inline-flex items-center rounded shrink-0",
+                    iconOnly
+                      ? "w-[23px] h-[23px] justify-center p-0"
+                      : "gap-1 h-[23px] px-1.5 text-[11.5px] font-medium tracking-tight whitespace-nowrap",
                     isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                     "transition-all duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] active:scale-95",
                     isActionDragging && "opacity-35 scale-95 border border-dashed border-primary/70 bg-primary/10 text-primary/70 shadow-none",
@@ -161,7 +165,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                       <Copy size={11.5} strokeWidth={2} className="text-zinc-500 dark:text-zinc-400 group-hover:text-primary transition-transform duration-150 group-hover:scale-110" />
                     )}
                   </span>
-                  <span className="pointer-events-none">{action.name}</span>
+                  {!iconOnly && <span className="pointer-events-none">{action.name}</span>}
                 </button>
               );
             }
@@ -173,8 +177,10 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                 onMouseDown={(e) => e.stopPropagation()}
                 {...dragHandlers}
                 className={cn(
-                  "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded shrink-0",
-                  "text-[11.5px] font-medium tracking-tight whitespace-nowrap",
+                  "group relative inline-flex items-center rounded shrink-0",
+                  iconOnly
+                    ? "w-[23px] h-[23px] justify-center p-0"
+                    : "gap-1 h-[23px] px-1.5 text-[11.5px] font-medium tracking-tight whitespace-nowrap",
                   isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                   "text-zinc-700 dark:text-zinc-200 hover:text-primary",
                   "hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90",
@@ -187,7 +193,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                 <span className="w-3.5 h-3.5 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-primary transition-transform duration-150 group-hover:scale-110 pointer-events-none shrink-0">
                   <DynamicIcon name={action.icon} size={11.5} />
                 </span>
-                <span className="pointer-events-none">{action.name}</span>
+                {!iconOnly && <span className="pointer-events-none">{action.name}</span>}
               </button>
             );
           })}

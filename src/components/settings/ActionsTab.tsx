@@ -13,7 +13,7 @@ import {
   Zap,
   ChevronDown,
 } from "lucide-react";
-import { ActionConfig, ActionType, ProviderConfig } from "@/types/config";
+import { ActionConfig, ActionType, ProviderConfig, GeneralConfig } from "@/types/config";
 import { PRESET_ACTIONS } from "@/lib/presetActions";
 import { DynamicIcon } from "@/components/Icons";
 import { IconPicker } from "@/components/ui/IconPicker";
@@ -30,6 +30,8 @@ import { cn } from "@/lib/utils";
 interface ActionsTabProps {
   actions: ActionConfig[];
   providers: ProviderConfig[];
+  general?: GeneralConfig;
+  onUpdateGeneral?: (updated: Partial<GeneralConfig>) => void;
   onAddAction: (preset?: Partial<ActionConfig> & { defaultIdPrefix?: string }) => void;
   onUpdateAction: (id: string, updated: Partial<ActionConfig>) => void;
   onRemoveAction: (id: string) => void;
@@ -39,6 +41,8 @@ interface ActionsTabProps {
 export const ActionsTab: React.FC<ActionsTabProps> = ({
   actions,
   providers,
+  general,
+  onUpdateGeneral,
   onAddAction,
   onUpdateAction,
   onRemoveAction,
@@ -340,7 +344,27 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                 {enabledCount} 项已启用
               </span>
             </div>
-            <span className="text-[10px] text-muted-foreground/60">可拖拽气泡内动作调整顺序</span>
+            <div className="flex items-center gap-3">
+              {onUpdateGeneral && (
+                <div className="flex items-center gap-1.5">
+                  <Label
+                    htmlFor="bubble-icon-only-switch"
+                    className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                    title="开启后气泡条仅展示动作图标，隐藏文字"
+                  >
+                    无字模式
+                  </Label>
+                  <Switch
+                    id="bubble-icon-only-switch"
+                    checked={general?.iconOnlyBubble || false}
+                    onCheckedChange={(checked) =>
+                      onUpdateGeneral({ iconOnlyBubble: checked })
+                    }
+                  />
+                </div>
+              )}
+              <span className="text-[10px] text-muted-foreground/60 hidden sm:inline">可拖拽气泡内动作调整顺序</span>
+            </div>
           </div>
 
           {/* 胶囊居中展示区域 */}
@@ -350,6 +374,7 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                 actions={actions}
                 selectedText="IOX 划词助手"
                 isPreview={true}
+                iconOnly={general?.iconOnlyBubble}
                 onReorderActions={onReorderActions}
                 onActionClick={() => {}}
               />

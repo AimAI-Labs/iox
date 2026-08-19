@@ -81,6 +81,7 @@ export function App() {
             actions={config.actions}
             selectedText={overlayState.selectedText}
             isClosing={overlayState.isClosing}
+            iconOnly={config.general.iconOnlyBubble}
             onActionClick={overlayState.handleTriggerAction}
             onOpenSettings={handleOpenSettings}
           />

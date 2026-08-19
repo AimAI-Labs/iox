@@ -31,6 +31,8 @@ pub struct GeneralConfig {
     pub overlay_opacity: u32,
     #[serde(default = "default_web_window_size")]
     pub web_window_size: (f64, f64),
+    #[serde(default)]
+    pub icon_only_bubble: bool,
 }
 
 impl Default for GeneralConfig {
@@ -46,6 +48,7 @@ impl Default for GeneralConfig {
             auto_copy_on_web_action: false,
             overlay_opacity: 90,
             web_window_size: (860.0, 640.0),
+            icon_only_bubble: false,
         }
     }
 }

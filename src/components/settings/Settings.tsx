@@ -203,6 +203,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
                 <ActionsTab
                   actions={formData.actions}
                   providers={formData.providers}
+                  general={formData.general}
+                  onUpdateGeneral={updateGeneral}
                   onAddAction={addAction}
                   onUpdateAction={updateAction}
                   onRemoveAction={removeAction}
