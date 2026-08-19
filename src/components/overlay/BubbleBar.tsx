@@ -146,11 +146,11 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                     "text-[11.5px] font-medium tracking-tight whitespace-nowrap",
                     isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                     "transition-all duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] active:scale-95",
-                    isActionDragging && "opacity-30 scale-90 -rotate-2 border border-dashed border-blue-500 bg-blue-500/10 shadow-inner",
-                    isActionDragOver && "bg-blue-500/25 ring-2 ring-blue-500/60 scale-105 shadow-[0_0_12px_rgba(59,130,246,0.35)] -translate-y-0.5",
+                    isActionDragging && "opacity-35 scale-95 border border-dashed border-primary/70 bg-primary/10 text-primary/70 shadow-none",
+                    isActionDragOver && "bg-primary/20 text-primary ring-1.5 ring-inset ring-primary/70 font-medium",
                     copied
                       ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-500/30"
-                      : "text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90"
+                      : "text-zinc-700 dark:text-zinc-200 hover:text-primary hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90"
                   )}
                   title={isDraggable ? `按住拖拽调整「${action.name}」排列顺序` : (copied ? "已复制到剪贴板" : action.name)}
                 >
@@ -158,7 +158,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                     {copied ? (
                       <Check size={11.5} className="text-emerald-500 dark:text-emerald-400 stroke-[2.5] animate-in zoom-in-75 duration-150" />
                     ) : (
-                      <Copy size={11.5} strokeWidth={2} className="text-zinc-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-transform duration-150 group-hover:scale-110" />
+                      <Copy size={11.5} strokeWidth={2} className="text-zinc-500 dark:text-zinc-400 group-hover:text-primary transition-transform duration-150 group-hover:scale-110" />
                     )}
                   </span>
                   <span className="pointer-events-none">{action.name}</span>
@@ -176,15 +176,15 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                   "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded shrink-0",
                   "text-[11.5px] font-medium tracking-tight whitespace-nowrap",
                   isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
-                  "text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400",
+                  "text-zinc-700 dark:text-zinc-200 hover:text-primary",
                   "hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90",
                   "transition-all duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] active:scale-95",
-                  isActionDragging && "opacity-30 scale-90 -rotate-2 border border-dashed border-blue-500 bg-blue-500/10 shadow-inner",
-                  isActionDragOver && "bg-blue-500/25 ring-2 ring-blue-500/60 scale-105 shadow-[0_0_12px_rgba(59,130,246,0.35)] -translate-y-0.5"
+                  isActionDragging && "opacity-35 scale-95 border border-dashed border-primary/70 bg-primary/10 text-primary/70 shadow-none",
+                  isActionDragOver && "bg-primary/20 text-primary ring-1.5 ring-inset ring-primary/70 font-medium"
                 )}
                 title={isDraggable ? `按住拖拽调整「${action.name}」排列顺序` : action.name}
               >
-                <span className="w-3.5 h-3.5 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-transform duration-150 group-hover:scale-110 pointer-events-none shrink-0">
+                <span className="w-3.5 h-3.5 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-primary transition-transform duration-150 group-hover:scale-110 pointer-events-none shrink-0">
                   <DynamicIcon name={action.icon} size={11.5} />
                 </span>
                 <span className="pointer-events-none">{action.name}</span>

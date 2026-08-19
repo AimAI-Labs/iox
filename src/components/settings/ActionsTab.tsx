@@ -329,18 +329,21 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
         </div>
 
         {/* 胶囊条实时效果预览展台 (固定不随滚轮滚动) */}
-        <div className="relative flex flex-col items-center justify-center py-4 px-4 rounded-xl border border-border/70 bg-gradient-to-b from-muted/40 via-muted/20 to-muted/5 shadow-xs overflow-hidden">
-          {/* 左上角说明徽标 */}
-          <div className="absolute top-2.5 left-3.5 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/80">
-            <Eye size={12} className="text-primary/70" />
-            <span>划词气泡实时预览</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-mono ml-0.5 leading-none">
-              {enabledCount} 项已启用
-            </span>
+        <div className="flex flex-col rounded-xl border border-border/70 bg-gradient-to-b from-muted/40 via-muted/20 to-muted/5 shadow-xs overflow-hidden">
+          {/* 展台说明与状态头部 */}
+          <div className="w-full flex items-center justify-between px-3.5 pt-2.5 pb-1.5 text-[11px] font-medium text-muted-foreground/80 select-none border-b border-border/30">
+            <div className="flex items-center gap-1.5">
+              <Eye size={13} className="text-primary/80" />
+              <span className="font-semibold text-foreground/85">划词气泡实时预览</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-mono ml-0.5 leading-none font-normal">
+                {enabledCount} 项已启用
+              </span>
+            </div>
+            <span className="text-[10px] text-muted-foreground/60">可拖拽气泡内动作调整顺序</span>
           </div>
 
           {/* 胶囊居中展示区域 */}
-          <div className="w-full flex items-center justify-center pt-3.5 pb-0.5 min-h-[40px] overflow-x-auto no-scrollbar">
+          <div className="w-full flex items-center justify-center px-2 py-3 min-h-[46px] overflow-x-auto no-scrollbar">
             {enabledCount > 0 ? (
               <BubbleBar
                 actions={actions}
