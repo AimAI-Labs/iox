@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { Plus, Trash2, Eye, EyeOff, Box, RefreshCw, Check, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Eye, EyeOff, Box, RefreshCw } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import { ProviderConfig } from "@/types/config";
 import { DynamicIcon } from "@/components/Icons";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -8,19 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+import { MultiSelect } from "@/components/ui/multi-select";
 
 interface ProvidersTabProps {
   providers: ProviderConfig[];
   onAddProvider: () => void;
   onUpdateProvider: (id: string, updated: Partial<ProviderConfig>) => void;
   onRemoveProvider: (id: string) => void;
-}
-
-interface FetchStatus {
-  loading: boolean;
-  error?: string;
-  successMsg?: string;
 }
 
 export const ProvidersTab: React.FC<ProvidersTabProps> = ({
@@ -30,7 +25,9 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
   onRemoveProvider,
 }) => {
   const [showKeys, setShowKeys] = useState<{ [key: string]: boolean }>({});
-  const [fetchStatus, setFetchStatus] = useState<{ [id: string]: FetchStatus }>({});
+  const [fetchingIds, setFetchingIds] = useState<{ [key: string]: boolean }>({});
+  // 缓存各服务商拉取或已知的候选模型列表池 (id -> models[])
+  const [modelCandidates, setModelCandidates] = useState<{ [id: string]: string[] }>({});
 
   const toggleKeyVisibility = (id: string) => {
     setShowKeys((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -39,17 +36,14 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
   const handleFetchModels = async (p: ProviderConfig) => {
     const trimmedUrl = p.baseUrl.trim();
     if (!trimmedUrl) {
-      setFetchStatus((prev) => ({
-        ...prev,
-        [p.id]: { loading: false, error: "请先填写 API Base URL" },
-      }));
+      toast.error("请先填写 API Base URL", {
+        description: `服务商 [${p.name || p.id}] 未配置有效 Base URL`,
+      });
       return;
     }
 
-    setFetchStatus((prev) => ({
-      ...prev,
-      [p.id]: { loading: true, error: undefined, successMsg: undefined },
-    }));
+    setFetchingIds((prev) => ({ ...prev, [p.id]: true }));
+    const toastId = toast.loading(`正在从 ${p.name || "服务商"} 获取可用模型...`);
 
     try {
       const models = await invoke<string[]>("fetch_provider_models", {
@@ -58,34 +52,24 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
       });
 
       if (models && models.length > 0) {
-        // 自动设置获取到的模型列表，并将默认调用模型设置为第 1 个
+        // 更新候选模型池
+        setModelCandidates((prev) => ({ ...prev, [p.id]: models }));
+
+        // 默认勾选获取到的全部模型，并将默认调用模型设为第 1 个
         onUpdateProvider(p.id, {
           models,
           defaultModel: models[0],
         });
 
-        setFetchStatus((prev) => ({
-          ...prev,
-          [p.id]: {
-            loading: false,
-            successMsg: `成功获取 ${models.length} 个可用模型，已默认选择第 1 个`,
-          },
-        }));
-
-        setTimeout(() => {
-          setFetchStatus((prev) => {
-            const current = prev[p.id];
-            if (current?.successMsg) {
-              return { ...prev, [p.id]: { loading: false } };
-            }
-            return prev;
-          });
-        }, 4000);
+        toast.success(`成功获取 ${models.length} 个可用模型`, {
+          id: toastId,
+          description: `已默认选择第 1 个模型: ${models[0]}`,
+        });
       } else {
-        setFetchStatus((prev) => ({
-          ...prev,
-          [p.id]: { loading: false, error: "服务商未返回可用模型列表" },
-        }));
+        toast.error("服务商返回的模型列表为空", {
+          id: toastId,
+          description: "接口未返回任何可用模型，请检查服务商配置",
+        });
       }
     } catch (err: unknown) {
       const errorMsg =
@@ -94,11 +78,27 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
           : err instanceof Error
           ? err.message
           : "获取模型列表失败";
-      setFetchStatus((prev) => ({
-        ...prev,
-        [p.id]: { loading: false, error: errorMsg },
-      }));
+
+      toast.error("获取模型列表失败", {
+        id: toastId,
+        description: errorMsg,
+      });
+    } finally {
+      setFetchingIds((prev) => ({ ...prev, [p.id]: false }));
     }
+  };
+
+  const handleModelsChange = (p: ProviderConfig, newModels: string[]) => {
+    // 若原默认模型不在新选列表内，自动修正默认模型为新选列表的首项
+    let newDefault = p.defaultModel;
+    if (!newModels.includes(newDefault)) {
+      newDefault = newModels.length > 0 ? newModels[0] : "";
+    }
+
+    onUpdateProvider(p.id, {
+      models: newModels,
+      defaultModel: newDefault,
+    });
   };
 
   return (
@@ -110,7 +110,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
             模型服务商管理
           </h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            配置支持 OpenAI Compatible 协议的大语言模型 API 接口，支持自动获取模型列表
+            配置支持 OpenAI Compatible 协议的大语言模型 API 接口，支持下拉复选与自动获取模型
           </p>
         </div>
         <Button
@@ -128,7 +128,12 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
       <div className="space-y-3">
         {providers.map((p) => {
           const isKeyVisible = showKeys[p.id] || false;
-          const status = fetchStatus[p.id] || { loading: false };
+          const isFetching = fetchingIds[p.id] || false;
+
+          // 合并当前已选项与已获取候选模型，去重生成选项
+          const candidateList = Array.from(
+            new Set([...(modelCandidates[p.id] || []), ...p.models])
+          );
 
           return (
             <Card
@@ -162,10 +167,12 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
               </CardHeader>
 
               <CardContent className="p-3.5 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 items-start">
                   {/* Base URL */}
                   <div className="space-y-1.5">
-                    <Label>API Base URL</Label>
+                    <div className="flex items-center justify-between h-5">
+                      <Label>API Base URL</Label>
+                    </div>
                     <Input
                       type="text"
                       value={p.baseUrl}
@@ -178,20 +185,20 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
 
                   {/* API Key */}
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between h-5">
                       <Label>API Key</Label>
                       <button
                         type="button"
                         onClick={() => toggleKeyVisibility(p.id)}
-                        className="text-[10px] text-muted-foreground/80 hover:text-foreground flex items-center gap-0.5 outline-none"
+                        className="text-[10px] text-muted-foreground/80 hover:text-foreground flex items-center gap-0.5 outline-none cursor-pointer"
                       >
                         {isKeyVisible ? (
                           <>
-                            <EyeOff size={10} /> 隐藏
+                            <EyeOff size={11} /> 隐藏
                           </>
                         ) : (
                           <>
-                            <Eye size={10} /> 显示
+                            <Eye size={11} /> 显示
                           </>
                         )}
                       </button>
@@ -208,84 +215,43 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                   </div>
                 </div>
 
-                {/* Status Alert for Fetch Models */}
-                {status.error && (
-                  <div className="text-[11px] text-destructive flex items-center gap-1.5 bg-destructive/10 border border-destructive/20 px-2.5 py-1.5 rounded-md">
-                    <AlertCircle size={13} className="shrink-0" />
-                    <span className="break-all">{status.error}</span>
-                  </div>
-                )}
-                {status.successMsg && (
-                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-md">
-                    <Check size={13} className="shrink-0" />
-                    <span>{status.successMsg}</span>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Available Models */}
+                <div className="grid grid-cols-2 gap-3 items-start">
+                  {/* Available Models (MultiSelect Dropdown Checkboxes) */}
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between h-5">
                       <Label>可用模型列表 ({p.models.length})</Label>
                       <button
                         type="button"
-                        disabled={status.loading}
+                        disabled={isFetching}
                         onClick={() => handleFetchModels(p)}
                         className="text-[11px] text-primary hover:text-primary/80 font-medium flex items-center gap-1 outline-none disabled:opacity-50 transition-colors cursor-pointer"
                         title="从 API 自动拉取可用模型列表"
                       >
                         <RefreshCw
                           size={11}
-                          className={status.loading ? "animate-spin" : ""}
+                          className={isFetching ? "animate-spin" : ""}
                         />
-                        <span>{status.loading ? "获取中..." : "获取模型"}</span>
+                        <span>{isFetching ? "获取中..." : "获取模型"}</span>
                       </button>
                     </div>
-                    <Input
-                      type="text"
-                      value={p.models.join(", ")}
-                      placeholder="deepseek-chat, deepseek-coder"
-                      onChange={(e) => {
-                        const newModels = e.target.value
-                          .split(",")
-                          .map((m) => m.trim())
-                          .filter(Boolean);
-                        onUpdateProvider(p.id, {
-                          models: newModels,
-                          defaultModel:
-                            newModels.includes(p.defaultModel) ||
-                            newModels.length === 0
-                              ? p.defaultModel
-                              : newModels[0],
-                        });
-                      }}
+
+                    <MultiSelect
+                      values={p.models}
+                      options={candidateList.map((m) => ({
+                        value: m,
+                        label: m,
+                      }))}
+                      placeholder="点击下拉勾选可用模型..."
+                      onChange={(newModels) => handleModelsChange(p, newModels)}
+                      allowCustomInput={true}
                     />
-                    {/* Model Badges preview */}
-                    {p.models.length > 0 && (
-                      <div className="flex flex-wrap gap-1 pt-0.5 max-h-24 overflow-y-auto custom-scrollbar">
-                        {p.models.map((m, mIdx) => (
-                          <Badge
-                            key={mIdx}
-                            variant={
-                              m === p.defaultModel ? "default" : "secondary"
-                            }
-                            className="text-[10px] px-1.5 py-0 h-4 font-mono font-normal cursor-pointer hover:border-primary/60 transition-colors"
-                            onClick={() =>
-                              onUpdateProvider(p.id, { defaultModel: m })
-                            }
-                            title="点击设为默认模型"
-                          >
-                            {m}
-                            {m === p.defaultModel && " ★"}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
                   {/* Default Model */}
                   <div className="space-y-1.5">
-                    <Label>默认调用模型</Label>
+                    <div className="flex items-center justify-between h-5">
+                      <Label>默认调用模型</Label>
+                    </div>
                     {p.models.length > 0 ? (
                       <Select
                         value={p.defaultModel}
@@ -302,7 +268,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                       <Input
                         type="text"
                         value={p.defaultModel}
-                        placeholder="例如: deepseek-chat"
+                        placeholder="请先在左侧勾选或添加可用模型"
                         onChange={(e) =>
                           onUpdateProvider(p.id, {
                             defaultModel: e.target.value,

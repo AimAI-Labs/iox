@@ -7,6 +7,7 @@ import { useOverlayState } from '@/hooks/useOverlayState';
 import { BubbleBar, ResultCard } from '@/components/overlay';
 import { Settings } from '@/components/settings';
 import { WebTitleBar } from '@/components/web';
+import { Toaster } from 'sonner';
 import './App.css';
 
 export function App() {
@@ -121,7 +122,18 @@ export function App() {
   }
 
   // 2. Settings 设置面板视图 (主窗口)
-  return <Settings config={config} onSave={updateConfig} />;
+  return (
+    <>
+      <Toaster
+        position="top-center"
+        richColors
+        closeButton
+        duration={3500}
+        theme={config.general.theme === 'system' ? 'system' : (config.general.theme as 'dark' | 'light')}
+      />
+      <Settings config={config} onSave={updateConfig} />
+    </>
+  );
 }
 
 export default App;
