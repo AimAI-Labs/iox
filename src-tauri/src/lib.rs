@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod config;
 pub mod overlay_state;
+pub mod picker;
 pub mod selection;
 pub mod tray;
 pub mod window_manager;
@@ -298,6 +299,31 @@ fn reload_web_hub_active_tab(app: AppHandle, state: State<AppState>) -> Result<(
     ai::reload_web_hub_active_tab(&app, &state)
 }
 
+#[tauri::command]
+async fn start_window_picker(app: AppHandle) -> Result<Option<picker::PickedProcessInfo>, String> {
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        picker::pick_window_blocking()
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    if let Some(main_win) = app.get_webview_window("main") {
+        if let Ok(hwnd) = main_win.hwnd() {
+            window_manager::apply_main_window_native_style(hwnd.0 as _);
+        }
+        let _ = main_win.show();
+        let _ = main_win.unminimize();
+        let _ = main_win.set_focus();
+    }
+
+    Ok(res)
+}
+
+#[tauri::command]
+fn cancel_window_picker() {
+    picker::cancel_picking();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial_config = AppConfig::load();
@@ -357,7 +383,9 @@ pub fn run() {
             get_web_hub_state,
             switch_web_hub_tab,
             close_web_hub_tab,
-            reload_web_hub_active_tab
+            reload_web_hub_active_tab,
+            start_window_picker,
+            cancel_window_picker
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
