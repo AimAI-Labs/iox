@@ -16,7 +16,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
     template: {
       defaultIdPrefix: 'act_web_deepseek',
       name: 'DeepSeek',
-      icon: 'Bot',
+      icon: 'DeepSeek',
       actionType: 'web',
       urlTemplate: 'https://chat.deepseek.com/',
       inputSelector: 'textarea#chat-input, textarea',
@@ -33,7 +33,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
     template: {
       defaultIdPrefix: 'act_web_kimi',
       name: 'Kimi',
-      icon: 'Sparkles',
+      icon: 'Kimi',
       actionType: 'web',
       urlTemplate: 'https://kimi.moonshot.cn/',
       inputSelector: "div[contenteditable='true'], textarea",
@@ -50,7 +50,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
     template: {
       defaultIdPrefix: 'act_web_claude',
       name: 'Claude',
-      icon: 'Bot',
+      icon: 'Claude',
       actionType: 'web',
       urlTemplate: 'https://claude.ai/new',
       inputSelector: "div[contenteditable='true'], fieldset textarea",
@@ -67,7 +67,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
     template: {
       defaultIdPrefix: 'act_web_doubao',
       name: '豆包',
-      icon: 'MessageSquare',
+      icon: 'Doubao',
       actionType: 'web',
       urlTemplate: 'https://www.doubao.com/chat/',
       inputSelector: "textarea[data-testid*='input'], textarea",
@@ -84,7 +84,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
     template: {
       defaultIdPrefix: 'act_web_metaso',
       name: '秘塔AI',
-      icon: 'Compass',
+      icon: 'Metaso',
       actionType: 'web',
       urlTemplate: 'https://metaso.cn/?q={text}',
       copyToClipboard: false,
@@ -98,7 +98,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
     template: {
       defaultIdPrefix: 'act_web_chatgpt',
       name: 'ChatGPT',
-      icon: 'Bot',
+      icon: 'OpenAI',
       actionType: 'web',
       urlTemplate: 'https://chatgpt.com/?q={text}',
       copyToClipboard: false,
@@ -112,7 +112,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
     template: {
       defaultIdPrefix: 'act_web_search',
       name: 'AI搜索 (Perplexity)',
-      icon: 'Search',
+      icon: 'Perplexity',
       actionType: 'web',
       urlTemplate: 'https://www.perplexity.ai/search?q={text}',
       copyToClipboard: false,
@@ -126,7 +126,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
     template: {
       defaultIdPrefix: 'act_web_qwen',
       name: '问千问',
-      icon: 'MessageSquare',
+      icon: 'Qwen',
       actionType: 'web',
       urlTemplate: 'https://tongyi.aliyun.com/qianwen/?q={text}',
       copyToClipboard: false,
@@ -140,7 +140,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
     template: {
       defaultIdPrefix: 'act_web_phind',
       name: 'Phind (代码搜索)',
-      icon: 'Code',
+      icon: 'Phind',
       actionType: 'web',
       urlTemplate: 'https://www.phind.com/search?q={text}',
       copyToClipboard: false,
@@ -154,7 +154,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
     template: {
       defaultIdPrefix: 'act_web_felo',
       name: 'Felo AI 搜索',
-      icon: 'Globe',
+      icon: 'Felo',
       actionType: 'web',
       urlTemplate: 'https://felo.ai/search?q={text}',
       copyToClipboard: false,
@@ -168,7 +168,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
     template: {
       defaultIdPrefix: 'act_web_360',
       name: '360 AI 搜索',
-      icon: 'Search',
+      icon: 'Ai360',
       actionType: 'web',
       urlTemplate: 'https://ai.360.com/search?q={text}',
       copyToClipboard: false,

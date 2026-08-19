@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Plus, Trash2, Eye, EyeOff, Box } from "lucide-react";
 import { ProviderConfig } from "@/types/config";
+import { DynamicIcon } from "@/components/Icons";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,7 +62,9 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 py-2.5 px-3.5 border-b border-border/40 bg-muted/20">
                 <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  <div className="flex items-center justify-center w-5 h-5 rounded bg-muted/60">
+                    <DynamicIcon name={p.id || p.name} size={14} />
+                  </div>
                   <Input
                     type="text"
                     value={p.name}

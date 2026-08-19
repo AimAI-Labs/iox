@@ -161,7 +161,7 @@ impl Default for AppConfig {
                 ActionConfig {
                     id: "act_web_deepseek".to_string(),
                     name: "DeepSeek".to_string(),
-                    icon: "Bot".to_string(),
+                    icon: "DeepSeek".to_string(),
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,
@@ -175,7 +175,7 @@ impl Default for AppConfig {
                 ActionConfig {
                     id: "act_web_kimi".to_string(),
                     name: "Kimi".to_string(),
-                    icon: "Sparkles".to_string(),
+                    icon: "Kimi".to_string(),
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,
@@ -189,7 +189,7 @@ impl Default for AppConfig {
                 ActionConfig {
                     id: "act_web_search".to_string(),
                     name: "AI搜索".to_string(),
-                    icon: "Search".to_string(),
+                    icon: "Perplexity".to_string(),
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,
@@ -203,7 +203,7 @@ impl Default for AppConfig {
                 ActionConfig {
                     id: "act_web_metaso".to_string(),
                     name: "秘塔AI".to_string(),
-                    icon: "Compass".to_string(),
+                    icon: "Metaso".to_string(),
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,
@@ -217,7 +217,7 @@ impl Default for AppConfig {
                 ActionConfig {
                     id: "act_web_chatgpt".to_string(),
                     name: "ChatGPT".to_string(),
-                    icon: "Bot".to_string(),
+                    icon: "OpenAI".to_string(),
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,
@@ -231,7 +231,7 @@ impl Default for AppConfig {
                 ActionConfig {
                     id: "act_web_qwen".to_string(),
                     name: "问千问".to_string(),
-                    icon: "MessageSquare".to_string(),
+                    icon: "Qwen".to_string(),
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,
@@ -245,7 +245,7 @@ impl Default for AppConfig {
                 ActionConfig {
                     id: "act_web_phind".to_string(),
                     name: "Phind".to_string(),
-                    icon: "Code".to_string(),
+                    icon: "Phind".to_string(),
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,
@@ -259,7 +259,7 @@ impl Default for AppConfig {
                 ActionConfig {
                     id: "act_web_felo".to_string(),
                     name: "Felo AI".to_string(),
-                    icon: "Globe".to_string(),
+                    icon: "Felo".to_string(),
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,
@@ -273,7 +273,7 @@ impl Default for AppConfig {
                 ActionConfig {
                     id: "act_web_360".to_string(),
                     name: "360 AI".to_string(),
-                    icon: "Search".to_string(),
+                    icon: "Ai360".to_string(),
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,

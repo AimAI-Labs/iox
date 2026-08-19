@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { ActionConfig, ActionType, ProviderConfig } from "@/types/config";
 import { PRESET_ACTIONS } from "@/lib/presetActions";
-import { DynamicIcon } from "@/components/Icons";
+import { DynamicIcon, POPULAR_AI_ICONS } from "@/components/Icons";
 import { BubbleBar } from "@/components/overlay";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -488,22 +488,48 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                         />
                       </div>
 
-                      {/* Lucide Icon */}
+                      {/* 图标配置与快捷选取 */}
                       <div className="space-y-1.5">
-                        <Label>Lucide 图标名</Label>
+                        <div className="flex items-center justify-between">
+                          <Label>动作图标 (LobeHub AI / Lucide)</Label>
+                          <span className="text-[10px] text-muted-foreground">
+                            支持 AI 品牌名或 Lucide 图标
+                          </span>
+                        </div>
                         <div className="relative">
                           <Input
                             type="text"
                             value={act.icon}
-                            placeholder="Sparkles, Bot, Globe, Languages..."
+                            placeholder="DeepSeek, OpenAI, Kimi, Claude, Qwen, Sparkles..."
                             onChange={(e) =>
                               onUpdateAction(act.id, { icon: e.target.value })
                             }
-                            className="pr-8"
+                            className="pr-8 h-8 text-xs font-mono"
                           />
-                          <div className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
-                            <DynamicIcon name={act.icon} size={13} />
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none flex items-center justify-center">
+                            <DynamicIcon name={act.icon} size={15} />
                           </div>
+                        </div>
+
+                        {/* 常用 AI 与功能图标快捷选择 */}
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {POPULAR_AI_ICONS.slice(0, 8).map((aiIcon) => (
+                            <button
+                              key={aiIcon.name}
+                              type="button"
+                              onClick={() => onUpdateAction(act.id, { icon: aiIcon.name })}
+                              className={cn(
+                                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border transition-colors cursor-pointer",
+                                act.icon.toLowerCase() === aiIcon.name.toLowerCase()
+                                  ? "border-primary bg-primary/10 text-primary font-medium"
+                                  : "border-border/60 bg-muted/30 text-muted-foreground hover:text-foreground hover:border-border"
+                              )}
+                              title={aiIcon.label}
+                            >
+                              <DynamicIcon name={aiIcon.name} size={11} />
+                              <span>{aiIcon.name}</span>
+                            </button>
+                          ))}
                         </div>
                       </div>
                     </div>
