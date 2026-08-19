@@ -35,9 +35,19 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   const isDraggable = Boolean(onReorderActions);
 
   // 快捷复制当前选中文本
-  const handleQuickCopy = (e: React.MouseEvent) => {
+  const handleQuickCopy = async (action: ActionConfig, e: React.MouseEvent) => {
     e.stopPropagation();
-    copy(selectedText || '选中文本示例');
+    if (copied) return;
+    const textToCopy = selectedText || (isPreview ? '选中文本示例' : '');
+    if (!textToCopy && !isPreview) return;
+
+    const success = await copy(textToCopy);
+    if (success && !isPreview) {
+      // 真实划词场景下展示 450ms 成功动效后，通知父组件平滑退场
+      setTimeout(() => {
+        onActionClick(action);
+      }, 450);
+    }
   };
 
   // 拖拽完成排序处理
@@ -128,7 +138,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
               return (
                 <button
                   key={action.id}
-                  onClick={handleQuickCopy}
+                  onClick={(e) => handleQuickCopy(action, e)}
                   onMouseDown={(e) => e.stopPropagation()}
                   {...dragHandlers}
                   className={cn(
@@ -139,19 +149,19 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                     isActionDragging && "opacity-25 scale-90 border border-dashed border-blue-500",
                     isActionDragOver && "bg-blue-500/20 ring-1 ring-blue-500/50 scale-105",
                     copied
-                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-500/30"
                       : "text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90"
                   )}
-                  title={isDraggable ? `按住拖拽调整「${action.name}」排列顺序` : "快捷复制选中文本"}
+                  title={isDraggable ? `按住拖拽调整「${action.name}」排列顺序` : (copied ? "已复制到剪贴板" : action.name)}
                 >
-                  <span className="flex items-center justify-center transition-transform duration-150 group-hover:scale-110 pointer-events-none">
+                  <span className="w-3.5 h-3.5 flex items-center justify-center pointer-events-none shrink-0">
                     {copied ? (
-                      <Check size={11} className="text-emerald-500 stroke-[2.5] animate-in zoom-in-75 duration-150" />
+                      <Check size={11.5} className="text-emerald-500 dark:text-emerald-400 stroke-[2.5] animate-in zoom-in-75 duration-150" />
                     ) : (
-                      <Copy size={11} strokeWidth={2} />
+                      <Copy size={11.5} strokeWidth={2} className="text-zinc-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-transform duration-150 group-hover:scale-110" />
                     )}
                   </span>
-                  <span className="pointer-events-none">{copied ? '已复制' : action.name}</span>
+                  <span className="pointer-events-none">{action.name}</span>
                 </button>
               );
             }
@@ -174,7 +184,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                 )}
                 title={isDraggable ? `按住拖拽调整「${action.name}」排列顺序` : action.name}
               >
-                <span className="flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-transform duration-150 group-hover:scale-110 pointer-events-none">
+                <span className="w-3.5 h-3.5 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-transform duration-150 group-hover:scale-110 pointer-events-none shrink-0">
                   <DynamicIcon name={action.icon} size={11.5} />
                 </span>
                 <span className="pointer-events-none">{action.name}</span>

@@ -102,6 +102,9 @@ export function useActionStream({
             console.warn('Copy action failed:', err);
           }
         }
+        if (!isPinned) {
+          executeGracefulHide();
+        }
         return;
       }
 
