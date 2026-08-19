@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Plus, Trash2, Eye, EyeOff, Box } from "lucide-react";
+import { Plus, Trash2, Eye, EyeOff, Box, RefreshCw, Check, AlertCircle } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { ProviderConfig } from "@/types/config";
 import { DynamicIcon } from "@/components/Icons";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -16,6 +17,12 @@ interface ProvidersTabProps {
   onRemoveProvider: (id: string) => void;
 }
 
+interface FetchStatus {
+  loading: boolean;
+  error?: string;
+  successMsg?: string;
+}
+
 export const ProvidersTab: React.FC<ProvidersTabProps> = ({
   providers,
   onAddProvider,
@@ -23,9 +30,75 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
   onRemoveProvider,
 }) => {
   const [showKeys, setShowKeys] = useState<{ [key: string]: boolean }>({});
+  const [fetchStatus, setFetchStatus] = useState<{ [id: string]: FetchStatus }>({});
 
   const toggleKeyVisibility = (id: string) => {
     setShowKeys((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleFetchModels = async (p: ProviderConfig) => {
+    const trimmedUrl = p.baseUrl.trim();
+    if (!trimmedUrl) {
+      setFetchStatus((prev) => ({
+        ...prev,
+        [p.id]: { loading: false, error: "请先填写 API Base URL" },
+      }));
+      return;
+    }
+
+    setFetchStatus((prev) => ({
+      ...prev,
+      [p.id]: { loading: true, error: undefined, successMsg: undefined },
+    }));
+
+    try {
+      const models = await invoke<string[]>("fetch_provider_models", {
+        baseUrl: trimmedUrl,
+        apiKey: p.apiKey.trim(),
+      });
+
+      if (models && models.length > 0) {
+        // 自动设置获取到的模型列表，并将默认调用模型设置为第 1 个
+        onUpdateProvider(p.id, {
+          models,
+          defaultModel: models[0],
+        });
+
+        setFetchStatus((prev) => ({
+          ...prev,
+          [p.id]: {
+            loading: false,
+            successMsg: `成功获取 ${models.length} 个可用模型，已默认选择第 1 个`,
+          },
+        }));
+
+        setTimeout(() => {
+          setFetchStatus((prev) => {
+            const current = prev[p.id];
+            if (current?.successMsg) {
+              return { ...prev, [p.id]: { loading: false } };
+            }
+            return prev;
+          });
+        }, 4000);
+      } else {
+        setFetchStatus((prev) => ({
+          ...prev,
+          [p.id]: { loading: false, error: "服务商未返回可用模型列表" },
+        }));
+      }
+    } catch (err: unknown) {
+      const errorMsg =
+        typeof err === "string"
+          ? err
+          : err instanceof Error
+          ? err.message
+          : "获取模型列表失败";
+      setFetchStatus((prev) => ({
+        ...prev,
+        [p.id]: { loading: false, error: errorMsg },
+      }));
+    }
   };
 
   return (
@@ -37,7 +110,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
             模型服务商管理
           </h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            配置支持 OpenAI Compatible 协议的大语言模型 API 接口
+            配置支持 OpenAI Compatible 协议的大语言模型 API 接口，支持自动获取模型列表
           </p>
         </div>
         <Button
@@ -55,6 +128,8 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
       <div className="space-y-3">
         {providers.map((p) => {
           const isKeyVisible = showKeys[p.id] || false;
+          const status = fetchStatus[p.id] || { loading: false };
+
           return (
             <Card
               key={p.id}
@@ -133,10 +208,39 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                   </div>
                 </div>
 
+                {/* Status Alert for Fetch Models */}
+                {status.error && (
+                  <div className="text-[11px] text-destructive flex items-center gap-1.5 bg-destructive/10 border border-destructive/20 px-2.5 py-1.5 rounded-md">
+                    <AlertCircle size={13} className="shrink-0" />
+                    <span className="break-all">{status.error}</span>
+                  </div>
+                )}
+                {status.successMsg && (
+                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-md">
+                    <Check size={13} className="shrink-0" />
+                    <span>{status.successMsg}</span>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
                   {/* Available Models */}
                   <div className="space-y-1.5">
-                    <Label>可用模型列表 (英文逗号分隔)</Label>
+                    <div className="flex items-center justify-between">
+                      <Label>可用模型列表 ({p.models.length})</Label>
+                      <button
+                        type="button"
+                        disabled={status.loading}
+                        onClick={() => handleFetchModels(p)}
+                        className="text-[11px] text-primary hover:text-primary/80 font-medium flex items-center gap-1 outline-none disabled:opacity-50 transition-colors cursor-pointer"
+                        title="从 API 自动拉取可用模型列表"
+                      >
+                        <RefreshCw
+                          size={11}
+                          className={status.loading ? "animate-spin" : ""}
+                        />
+                        <span>{status.loading ? "获取中..." : "获取模型"}</span>
+                      </button>
+                    </div>
                     <Input
                       type="text"
                       value={p.models.join(", ")}
@@ -149,7 +253,8 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                         onUpdateProvider(p.id, {
                           models: newModels,
                           defaultModel:
-                            newModels.includes(p.defaultModel) || newModels.length === 0
+                            newModels.includes(p.defaultModel) ||
+                            newModels.length === 0
                               ? p.defaultModel
                               : newModels[0],
                         });
@@ -157,14 +262,18 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                     />
                     {/* Model Badges preview */}
                     {p.models.length > 0 && (
-                      <div className="flex flex-wrap gap-1 pt-0.5">
+                      <div className="flex flex-wrap gap-1 pt-0.5 max-h-24 overflow-y-auto custom-scrollbar">
                         {p.models.map((m, mIdx) => (
                           <Badge
                             key={mIdx}
                             variant={
                               m === p.defaultModel ? "default" : "secondary"
                             }
-                            className="text-[10px] px-1.5 py-0 h-4 font-mono font-normal"
+                            className="text-[10px] px-1.5 py-0 h-4 font-mono font-normal cursor-pointer hover:border-primary/60 transition-colors"
+                            onClick={() =>
+                              onUpdateProvider(p.id, { defaultModel: m })
+                            }
+                            title="点击设为默认模型"
                           >
                             {m}
                             {m === p.defaultModel && " ★"}
@@ -195,7 +304,9 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                         value={p.defaultModel}
                         placeholder="例如: deepseek-chat"
                         onChange={(e) =>
-                          onUpdateProvider(p.id, { defaultModel: e.target.value })
+                          onUpdateProvider(p.id, {
+                            defaultModel: e.target.value,
+                          })
                         }
                       />
                     )}

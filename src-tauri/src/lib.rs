@@ -324,6 +324,14 @@ fn cancel_window_picker() {
     picker::cancel_picking();
 }
 
+#[tauri::command]
+async fn fetch_provider_models(
+    base_url: String,
+    api_key: String,
+) -> Result<Vec<String>, String> {
+    ai::fetch_provider_models(base_url, api_key).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial_config = AppConfig::load();
@@ -385,7 +393,8 @@ pub fn run() {
             close_web_hub_tab,
             reload_web_hub_active_tab,
             start_window_picker,
-            cancel_window_picker
+            cancel_window_picker,
+            fetch_provider_models
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
