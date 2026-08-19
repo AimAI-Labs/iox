@@ -145,9 +145,9 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                     "group relative inline-flex items-center gap-1 h-[23px] px-1.5 rounded",
                     "text-[11.5px] font-medium tracking-tight whitespace-nowrap",
                     isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
-                    "transition-all duration-150 ease-out active:scale-95",
-                    isActionDragging && "opacity-25 scale-90 border border-dashed border-blue-500",
-                    isActionDragOver && "bg-blue-500/20 ring-1 ring-blue-500/50 scale-105",
+                    "transition-all duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] active:scale-95",
+                    isActionDragging && "opacity-30 scale-90 -rotate-2 border border-dashed border-blue-500 bg-blue-500/10 shadow-inner",
+                    isActionDragOver && "bg-blue-500/25 ring-2 ring-blue-500/60 scale-105 shadow-[0_0_12px_rgba(59,130,246,0.35)] -translate-y-0.5",
                     copied
                       ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-500/30"
                       : "text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90"
@@ -178,9 +178,9 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                   isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                   "text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400",
                   "hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90",
-                  "transition-all duration-150 ease-out active:scale-95",
-                  isActionDragging && "opacity-25 scale-90 border border-dashed border-blue-500",
-                  isActionDragOver && "bg-blue-500/20 ring-1 ring-blue-500/50 scale-105"
+                  "transition-all duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] active:scale-95",
+                  isActionDragging && "opacity-30 scale-90 -rotate-2 border border-dashed border-blue-500 bg-blue-500/10 shadow-inner",
+                  isActionDragOver && "bg-blue-500/25 ring-2 ring-blue-500/60 scale-105 shadow-[0_0_12px_rgba(59,130,246,0.35)] -translate-y-0.5"
                 )}
                 title={isDraggable ? `按住拖拽调整「${action.name}」排列顺序` : action.name}
               >

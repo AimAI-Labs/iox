@@ -29,7 +29,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   return (
     <div
       onMouseDown={handleMouseDown}
-      className="flex items-center justify-between px-3.5 py-2.5 border-b border-black/10 dark:border-white/10 bg-transparent select-none cursor-move shrink-0"
+      className="flex items-center justify-between px-3.5 py-2.5 border-b border-black/10 dark:border-white/10 bg-transparent select-none cursor-grab active:cursor-grabbing shrink-0"
     >
       {/* 左侧：Mac 交通灯三色圆点 + 动作图标 + 标题 + 模型徽标 */}
       <div data-tauri-drag-region className="flex items-center gap-2.5 min-w-0">
@@ -51,7 +51,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
           />
           <span
             data-tauri-drag-region
-            className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate cursor-move"
+            className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate cursor-grab active:cursor-grabbing"
           >
             {title}
           </span>

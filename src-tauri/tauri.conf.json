@@ -24,7 +24,8 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": false,
-        "shadow": false
+        "shadow": false,
+        "dragDropEnabled": false
       },
       {
         "label": "main",
@@ -37,7 +38,8 @@
         "decorations": false,
         "transparent": true,
         "shadow": false,
-        "visible": true
+        "visible": true,
+        "dragDropEnabled": false
       }
     ],
     "security": {

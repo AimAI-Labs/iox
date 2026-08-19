@@ -46,12 +46,12 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set(actions.map(a => a.id)));
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<'top' | 'bottom' | null>(null);
   const [showPresetMenu, setShowPresetMenu] = useState(false);
   const presetMenuRef = useRef<HTMLDivElement>(null);
-  // 同步持有当前拖拽源 id：HTML5 拖拽事件间间隔极短，
-  // setState 异步更新会让 dragOver/drop 闭包读到陈旧的 null。
-  // 用 ref 在 onDragStart 内立刻写入，事件回调即可同步读取。
+  // 同步持有当前拖拽状态，确保在密集拖拽事件中不丢帧、无闭包陈旧问题
   const draggingIdRef = React.useRef<string | null>(null);
+  const dropPositionRef = React.useRef<'top' | 'bottom' | null>(null);
 
   // 点击外部关闭预设下拉菜单
   useEffect(() => {
@@ -102,47 +102,76 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
     e.dataTransfer.setData("text/plain", actionId);
   };
 
-  // 拖拽悬停：使用 ref 同步判断，避免闭包陈旧导致 dropEffect 失效
+  // 拖拽悬停：实时计算鼠标位于卡片上半部还是下半部，精准计算插入位置
   const handleDragOver = (e: React.DragEvent, actionId: string) => {
-    if (draggingIdRef.current === null) return;
+    if (draggingIdRef.current === null || draggingIdRef.current === actionId) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    if (dragOverId !== actionId) {
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mouseY = e.clientY;
+    const threshold = rect.top + rect.height / 2;
+    const position: 'top' | 'bottom' = mouseY < threshold ? 'top' : 'bottom';
+
+    if (dragOverId !== actionId || dropPosition !== position) {
       setDragOverId(actionId);
+      setDropPosition(position);
+      dropPositionRef.current = position;
     }
   };
 
-  // 拖拽结束：清理 ref + state
-  const handleDragEnd = () => {
-    draggingIdRef.current = null;
-    setDraggedId(null);
-    setDragOverId(null);
+  // 拖拽离开当前卡片时重置目标指示（排除内部子元素冒泡）
+  const handleDragLeave = (e: React.DragEvent, actionId: string) => {
+    const related = e.relatedTarget as Node | null;
+    if (related && (e.currentTarget as HTMLElement).contains(related)) {
+      return;
+    }
+    if (dragOverId === actionId) {
+      setDragOverId(null);
+      setDropPosition(null);
+      dropPositionRef.current = null;
+    }
   };
 
-  // 拖拽放置：使用 ref 同步读取拖拽源
+  // 拖拽结束：清理所有 ref 与 state
+  const handleDragEnd = () => {
+    draggingIdRef.current = null;
+    dropPositionRef.current = null;
+    setDraggedId(null);
+    setDragOverId(null);
+    setDropPosition(null);
+  };
+
+  // 拖拽放置：精准根据 top/bottom 插入目标位置
   const handleDrop = (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
     const sourceId = draggingIdRef.current;
+    const pos = dropPositionRef.current || dropPosition || 'bottom';
+
     if (sourceId === null || sourceId === targetId) {
-      draggingIdRef.current = null;
-      setDraggedId(null);
-      setDragOverId(null);
+      handleDragEnd();
       return;
     }
 
     const srcIndex = actions.findIndex((a) => a.id === sourceId);
-    const dstIndex = actions.findIndex((a) => a.id === targetId);
+    if (srcIndex === -1) {
+      handleDragEnd();
+      return;
+    }
 
-    if (srcIndex !== -1 && dstIndex !== -1) {
-      const newActions = [...actions];
-      const [moved] = newActions.splice(srcIndex, 1);
-      newActions.splice(dstIndex, 0, moved);
+    const newActions = [...actions];
+    const [moved] = newActions.splice(srcIndex, 1);
+    let targetIndex = newActions.findIndex((a) => a.id === targetId);
+
+    if (targetIndex !== -1) {
+      if (pos === 'bottom') {
+        targetIndex += 1;
+      }
+      newActions.splice(targetIndex, 0, moved);
       onReorderActions(newActions);
     }
 
-    draggingIdRef.current = null;
-    setDraggedId(null);
-    setDragOverId(null);
+    handleDragEnd();
   };
 
   return (
@@ -330,45 +359,63 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
       </div>
 
       {/* Action Cards (独立滚动区域 + 支持拖拽排序) */}
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1.5 -mr-1.5">
+      <div className="flex-1 overflow-y-auto space-y-3.5 pr-1.5 -mr-1.5 py-1">
         {actions.map((act) => {
           const isCollapsed = collapsedIds.has(act.id);
           const isDragging = draggedId === act.id;
           const isDragOver = dragOverId === act.id && draggedId !== act.id;
 
           return (
-            <Card
-              key={act.id}
-              onDragOver={(e) => handleDragOver(e, act.id)}
-              onDragEnter={(e) => e.preventDefault()}
-              onDrop={(e) => handleDrop(e, act.id)}
-              className={cn(
-                "group border-border/60 bg-card/60 transition-all duration-150 overflow-hidden",
-                isDragging && "opacity-35 scale-[0.98] border-dashed border-primary shadow-none",
-                isDragOver && "border-primary ring-2 ring-primary/30 translate-y-0.5",
-                !isDragging && !isDragOver && "hover:border-border/90"
+            <div key={act.id} className="relative group/card-wrapper transition-transform duration-200 ease-out">
+              {/* 顶部精准插入发光指示条 */}
+              {isDragOver && dropPosition === 'top' && (
+                <div className="absolute -top-2 left-0 right-0 z-30 pointer-events-none flex items-center gap-1.5 px-2 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-primary/25 shadow-[0_0_10px_hsl(var(--primary))]" />
+                  <div className="flex-1 h-[2px] rounded-full bg-gradient-to-r from-primary via-primary/80 to-transparent shadow-[0_0_8px_hsl(var(--primary))]" />
+                </div>
               )}
-            >
-              <CardHeader
-                className="flex flex-row items-center justify-between space-y-0 py-2 px-3 bg-muted/20 select-none border-b-0"
+
+              <Card
+                onDragOver={(e) => handleDragOver(e, act.id)}
+                onDragLeave={(e) => handleDragLeave(e, act.id)}
+                onDragEnter={(e) => e.preventDefault()}
+                onDrop={(e) => handleDrop(e, act.id)}
+                className={cn(
+                  "border-border/60 bg-card/70 overflow-hidden relative",
+                  "transition-all duration-200 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]",
+                  isDragging && [
+                    "opacity-35 scale-[0.985] -rotate-[0.35deg]",
+                    "border-dashed border-primary/70 bg-primary/5",
+                    "shadow-none"
+                  ],
+                  isDragOver && [
+                    "border-primary/80 ring-2 ring-primary/25",
+                    "shadow-[0_4px_20px_-4px_rgba(59,130,246,0.22)]",
+                    dropPosition === 'top' ? "translate-y-1.5" : "-translate-y-1.5"
+                  ],
+                  !isDragging && !isDragOver && "hover:border-border/90 hover:shadow-xs"
+                )}
               >
-                <div className="flex items-center gap-1.5">
-                  {/* 专属拖拽把手 (按住启动卡片拖拽) */}
-                  <div
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, act.id)}
-                    onDragEnd={handleDragEnd}
-                    className={cn(
-                      "flex items-center justify-center w-6 h-7 -ml-1 rounded",
-                      "text-muted-foreground/60 hover:text-foreground hover:bg-muted/60",
-                      "cursor-grab active:cursor-grabbing select-none",
-                      "transition-colors",
-                      isDragging && "bg-primary/15 text-primary"
-                    )}
-                    title="按住拖拽调整此动作排列顺序"
-                  >
-                    <GripVertical size={14} />
-                  </div>
+                <CardHeader
+                  className="flex flex-row items-center justify-between space-y-0 py-2 px-3 bg-muted/20 select-none border-b-0"
+                >
+                  <div className="flex items-center gap-1.5">
+                    {/* 专属拖拽把手 (按住启动卡片拖拽) */}
+                    <div
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, act.id)}
+                      onDragEnd={handleDragEnd}
+                      className={cn(
+                        "flex items-center justify-center w-6 h-7 -ml-1 rounded-md",
+                        "text-muted-foreground/50 hover:text-primary hover:bg-primary/10",
+                        "cursor-grab active:cursor-grabbing select-none",
+                        "transition-all duration-150 active:scale-90 hover:scale-105",
+                        isDragging && "bg-primary/20 text-primary scale-105 ring-1 ring-primary/30"
+                      )}
+                      title="按住拖拽调整此动作排列顺序"
+                    >
+                      <GripVertical size={14} className="stroke-[2.2]" />
+                    </div>
 
                   {/* 折叠/展开切换按钮 */}
                   <button
@@ -706,9 +753,18 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
                 </div>
               </div>
             </Card>
-          );
-        })}
-      </div>
+
+            {/* 底部精准插入发光指示条 */}
+            {isDragOver && dropPosition === 'bottom' && (
+              <div className="absolute -bottom-2 left-0 right-0 z-30 pointer-events-none flex items-center gap-1.5 px-2 animate-in fade-in zoom-in-95 duration-150">
+                <div className="w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-primary/25 shadow-[0_0_10px_hsl(var(--primary))]" />
+                <div className="flex-1 h-[2px] rounded-full bg-gradient-to-r from-primary via-primary/80 to-transparent shadow-[0_0_8px_hsl(var(--primary))]" />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
-  );
+  </div>
+);
 };
