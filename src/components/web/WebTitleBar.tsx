@@ -4,6 +4,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { MacTitleBar } from '@/components/MacTitleBar';
 import { RotateCw, ExternalLink, Settings } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { HubTabBar } from './HubTabBar';
 
 interface WebTitleBarProps {
   label?: string;
@@ -20,6 +21,11 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = ({
   const windowLabel = propLabel || urlParams.get('label') || 'web_win';
   const displayTitle = propTitle || urlParams.get('title') || 'Web 官网浮窗';
   const targetUrl = propUrl || urlParams.get('url') || '';
+
+  // 如果是统一单窗口多标签模式 Hub，渲染专属的 HubTabBar
+  if (windowLabel === 'web_hub' || windowLabel === 'web_hub_bar') {
+    return <HubTabBar />;
+  }
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -101,8 +107,8 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = ({
   };
 
   return (
-    <div className="w-screen h-screen bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
-      <div className="w-full h-full flex flex-col bg-[var(--bg-overlay-card)] text-foreground rounded-t-xl border-t border-l border-r border-b border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl">
+    <div className="web-titlebar-root w-full h-[38px] max-h-[38px] bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
+      <div className="w-full h-[38px] max-h-[38px] flex flex-col bg-[var(--bg-overlay-card)] text-foreground rounded-t-xl border-t border-l border-r border-b border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl box-border">
         <MacTitleBar
           title={displayTitle}
           onClose={handleClose}

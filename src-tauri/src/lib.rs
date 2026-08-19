@@ -12,6 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 pub struct AppState {
     pub config: Mutex<AppConfig>,
     pub ai_manager: AiManager,
+    pub web_hub_state: Mutex<ai::WebHubState>,
 }
 
 #[tauri::command]
@@ -276,12 +277,33 @@ fn open_in_browser(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_web_hub_state(state: State<AppState>) -> ai::WebHubState {
+    state.web_hub_state.lock().unwrap().clone()
+}
+
+#[tauri::command]
+fn switch_web_hub_tab(app: AppHandle, state: State<AppState>, action_id: String) -> Result<(), String> {
+    ai::switch_web_hub_tab(&app, &state, &action_id)
+}
+
+#[tauri::command]
+fn close_web_hub_tab(app: AppHandle, state: State<AppState>, action_id: String) -> Result<(), String> {
+    ai::close_web_hub_tab(&app, &state, &action_id)
+}
+
+#[tauri::command]
+fn reload_web_hub_active_tab(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+    ai::reload_web_hub_active_tab(&app, &state)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial_config = AppConfig::load();
     let app_state = AppState {
         config: Mutex::new(initial_config),
         ai_manager: AiManager::new(),
+        web_hub_state: Mutex::new(ai::WebHubState::default()),
     };
 
     tauri::Builder::default()
@@ -320,7 +342,11 @@ pub fn run() {
             set_pin_state,
             set_drag_state,
             set_overlay_mode,
-            start_overlay_dragging
+            start_overlay_dragging,
+            get_web_hub_state,
+            switch_web_hub_tab,
+            close_web_hub_tab,
+            reload_web_hub_active_tab
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

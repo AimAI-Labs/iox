@@ -81,10 +81,40 @@
     user-select: none;
   }
 
-  body {
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
     background: transparent !important;
-    overflow: hidden;
+    overflow: hidden !important;
   }
+}
+
+/* 隐藏滚动条工具类 */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Web 标题栏专用彻底禁止任何滚动条 */
+.web-titlebar-root,
+.web-titlebar-root * {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+.web-titlebar-root *::-webkit-scrollbar,
+.web-titlebar-root::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* 覆盖层容器 */

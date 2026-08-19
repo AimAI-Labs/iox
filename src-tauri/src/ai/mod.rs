@@ -6,7 +6,10 @@ pub mod web_action;
 pub use scripts::{build_dom_injection_script, build_initialization_script, ZOOM_PERSISTENCE_SCRIPT};
 pub use stream::execute_stream_request;
 pub use template::{render_prompt_template, render_url_template};
-pub use web_action::execute_web_action;
+pub use web_action::{
+    close_web_hub_tab, execute_web_action, reload_web_hub_active_tab, switch_web_hub_tab,
+    WebHubState, WebHubTab,
+};
 
 use std::collections::HashMap;
 use std::sync::Arc;

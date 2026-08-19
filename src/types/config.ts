@@ -45,3 +45,16 @@ export interface AppConfig {
   providers: ProviderConfig[];
   actions: ActionConfig[];
 }
+
+export interface WebHubTabItem {
+  action_id: string;
+  name: string;
+  icon: string;
+  url: string;
+}
+
+export interface WebHubState {
+  tabs: WebHubTabItem[];
+  active_tab_id: string | null;
+}
+
