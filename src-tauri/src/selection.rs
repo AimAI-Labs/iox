@@ -6,6 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 use windows_sys::Win32::Foundation::*;
+use windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber;
 use windows_sys::Win32::System::Threading::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
@@ -23,6 +24,8 @@ pub fn set_app_handle(handle: AppHandle) {
 /// 鼠标点击状态跟踪器（用于识别双击与三击）
 struct ClickState {
     last_down_pos: Option<(i32, i32)>,
+    /// 按下时刻按下点是否位于目标窗口客户区（必须按下时同步命中测试，窗口拖动后坐标语义即失效）
+    last_down_in_client: bool,
     last_up_pos: (i32, i32),
     last_up_time: Option<Instant>,
     click_count: u32,
@@ -30,10 +33,14 @@ struct ClickState {
 
 static CLICK_STATE: Mutex<ClickState> = Mutex::new(ClickState {
     last_down_pos: None,
+    last_down_in_client: false,
     last_up_pos: (0, 0),
     last_up_time: None,
     click_count: 0,
 });
+
+const IOX_EXTRA_INFO: usize = 0x494F58; // "IOX"
+const LLKHF_INJECTED_FLAG: u32 = 0x00000010;
 
 /// 检查指定屏幕物理坐标 (x, y) 是否落在 Overlay 窗口内
 pub fn is_point_inside_overlay(app: &AppHandle, x: i32, y: i32) -> bool {
@@ -47,6 +54,53 @@ pub fn is_point_inside_overlay(app: &AppHandle, x: i32, y: i32) -> bool {
                         return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
                     }
                 }
+            }
+        }
+    }
+    false
+}
+
+/// 检查屏幕物理坐标 (x, y) 是否位于目标窗口的 Client（工作区/客户区）内
+/// 用于精准过滤标题栏拖拽（HTCAPTION）、边框缩放（HTLEFT..HTBOTTOMRIGHT）、滚动条拖动（HTVSCROLL）等非选词交互
+pub fn is_point_in_client_area(x: i32, y: i32) -> bool {
+    unsafe {
+        let pt = POINT { x, y };
+        let hwnd = WindowFromPoint(pt);
+        if hwnd.is_null() {
+            return false;
+        }
+
+        // 构造 MAKELPARAM(x, y)
+        let l_param = ((y as i16 as u16 as u32) << 16) | (x as i16 as u16 as u32);
+        let mut hit_test_result: usize = 0;
+
+        let res = SendMessageTimeoutW(
+            hwnd,
+            WM_NCHITTEST,
+            0,
+            l_param as isize,
+            SMTO_ABORTIFHUNG | SMTO_NORMAL,
+            20, // 20ms 安全超时，避免目标进程无响应时卡死钩子
+            &mut hit_test_result,
+        );
+
+        if res != 0 {
+            // HTCLIENT = 1, HTTRANSPARENT = -1 (isize as usize)
+            hit_test_result == (HTCLIENT as usize) || (hit_test_result as isize == -1)
+        } else {
+            // 若消息超时或失败，退化为允许后续流程
+            true
+        }
+    }
+}
+
+/// 检查 Overlay 窗口当前是否在屏幕上处于可见显示状态
+pub fn is_overlay_visible(app: &AppHandle) -> bool {
+    if let Some(window) = app.get_webview_window("overlay") {
+        if let Ok(hwnd) = window.hwnd() {
+            unsafe {
+                let hwnd_raw = hwnd.0 as HWND;
+                return IsWindowVisible(hwnd_raw) != 0;
             }
         }
     }
@@ -74,6 +128,9 @@ pub fn hide_overlay_if_unpinned(app: &AppHandle) {
 /// 优雅请求隐藏 Overlay（向前端广播退场动画事件，并设置 280ms 延时兜底，带 HIDE_SEQ 防抖）
 pub fn request_hide_overlay_gracefully(app: &AppHandle) {
     if is_overlay_pinned() {
+        return;
+    }
+    if !is_overlay_visible(app) {
         return;
     }
     let seq = HIDE_SEQ.fetch_add(1, Ordering::SeqCst) + 1;
@@ -189,7 +246,7 @@ pub fn simulate_ctrl_c() {
                         wScan: 0,
                         dwFlags: 0,
                         time: 0,
-                        dwExtraInfo: 0,
+                        dwExtraInfo: IOX_EXTRA_INFO,
                     },
                 },
             },
@@ -201,7 +258,7 @@ pub fn simulate_ctrl_c() {
                         wScan: 0,
                         dwFlags: 0,
                         time: 0,
-                        dwExtraInfo: 0,
+                        dwExtraInfo: IOX_EXTRA_INFO,
                     },
                 },
             },
@@ -213,7 +270,7 @@ pub fn simulate_ctrl_c() {
                         wScan: 0,
                         dwFlags: KEYEVENTF_KEYUP,
                         time: 0,
-                        dwExtraInfo: 0,
+                        dwExtraInfo: IOX_EXTRA_INFO,
                     },
                 },
             },
@@ -225,7 +282,7 @@ pub fn simulate_ctrl_c() {
                         wScan: 0,
                         dwFlags: KEYEVENTF_KEYUP,
                         time: 0,
-                        dwExtraInfo: 0,
+                        dwExtraInfo: IOX_EXTRA_INFO,
                     },
                 },
             },
@@ -239,22 +296,43 @@ pub fn simulate_ctrl_c() {
     }
 }
 
-/// 安全提取选中文本（单例互斥锁保护：备份原始剪贴板 -> 复制选区 -> 恢复原剪贴板）
+/// 安全提取选中文本（单例互斥锁保护：备份原始剪贴板 -> 记录序列号 -> 模拟 Ctrl+C -> 校验序列号更新 -> 读取新选区 -> 恢复原剪贴板）
 pub fn extract_selected_text_safely() -> Option<String> {
     let _guard = CLIPBOARD_LOCK.lock().ok()?;
     let mut clipboard = Clipboard::new().ok()?;
-    
+
     // 1. 备份原剪贴板文本
     let original_text = clipboard.get_text().ok();
 
-    // 2. 模拟 Ctrl+C
-    simulate_ctrl_c();
-    thread::sleep(Duration::from_millis(50));
+    // 2. 记录模拟复制前的剪贴板序列号
+    let seq_before = unsafe { GetClipboardSequenceNumber() };
 
-    // 3. 读取新剪贴板内容
+    // 3. 模拟 Ctrl+C
+    simulate_ctrl_c();
+
+    // 4. 轮询等待剪贴板序列号发生更新（最大等待 80ms，每 8ms 检测一次）
+    let start = Instant::now();
+    let timeout = Duration::from_millis(80);
+    let mut seq_changed = false;
+
+    while start.elapsed() < timeout {
+        thread::sleep(Duration::from_millis(8));
+        let seq_now = unsafe { GetClipboardSequenceNumber() };
+        if seq_now != seq_before {
+            seq_changed = true;
+            break;
+        }
+    }
+
+    // 若剪贴板序列号未发生任何改变，说明前台程序未执行复制操作（即没有选中文本）
+    if !seq_changed {
+        return None;
+    }
+
+    // 5. 读取新复制的剪贴板内容
     let selected_text = clipboard.get_text().ok();
 
-    // 4. 恢复原剪贴板文本
+    // 6. 恢复原剪贴板文本（零污染）
     if let Some(orig) = original_text {
         let _ = clipboard.set_text(orig);
     } else {
@@ -282,6 +360,10 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
 
                 if let Ok(mut state) = CLICK_STATE.lock() {
                     state.last_down_pos = Some((x, y));
+                    // 命中测试必须在“按下时刻”完成：若拖动/缩放窗口后于抬起时用按下坐标重测，
+                    // 该坐标可能已落到移动后窗口的客户区或其后方窗口的客户区，
+                    // 导致“移动窗口”被误判为“拖选文本”而错误触发 Ctrl+C
+                    state.last_down_in_client = is_point_in_client_area(x, y);
                     if let Some(last_up) = state.last_up_time {
                         let elapsed = now.duration_since(last_up).as_millis();
                         let dist = calc_drag_distance(state.last_up_pos, (x, y));
@@ -295,14 +377,14 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                 // 若在悬浮窗外部按下左键，且悬浮窗非固定：
                 // 若处于双击中途，则智能拦截即时隐藏广播，避免双击时“先闪退再弹出”
                 if let Some(ref handle) = app_handle {
-                    if !is_point_inside_overlay(handle, x, y) && !is_potential_dbl_click {
+                    if is_overlay_visible(handle) && !is_point_inside_overlay(handle, x, y) && !is_potential_dbl_click {
                         request_hide_overlay_gracefully(handle);
                     }
                 }
             } else if msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN || msg == WM_MOUSEWHEEL {
                 // 右键、中键点击或滚轮滚动外部也平滑请求隐藏
                 if let Some(ref handle) = app_handle {
-                    if !is_point_inside_overlay(handle, x, y) {
+                    if is_overlay_visible(handle) && !is_point_inside_overlay(handle, x, y) {
                         request_hide_overlay_gracefully(handle);
                     }
                 }
@@ -317,32 +399,42 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
 
                     if let Some(p1) = start_pos {
                         let p2 = (x, y);
-                        // 1. 判断是否为拖拽选词（位移 >= 6px）
-                        if is_drag_valid(p1, p2, 6.0) {
-                            is_drag = true;
-                            state.click_count = 0;
-                            state.last_up_time = Some(now);
-                            state.last_up_pos = p2;
-                        } else {
-                            // 2. 判断是否为双击/三击选词（时间差在系统双击阈值内，位移 <= 8px）
-                            let is_within_time = match state.last_up_time {
-                                Some(last_time) => now.duration_since(last_time).as_millis() <= dbl_click_time_ms,
-                                None => false,
-                            };
-                            let is_within_dist = calc_drag_distance(state.last_up_pos, p2) <= 8.0;
 
-                            if is_within_time && is_within_dist {
-                                state.click_count += 1;
+                        // 使用按下时刻缓存的命中测试结果：按下点位于非客户区
+                        // （如标题栏 HTCAPTION、窗口边框、滚动条等）时，绝非文本选择操作
+                        let is_client_start = state.last_down_in_client;
+
+                        if is_client_start {
+                            // 1. 判断是否为拖拽选词（位移 >= 6px）
+                            if is_drag_valid(p1, p2, 6.0) {
+                                is_drag = true;
+                                state.click_count = 0;
                                 state.last_up_time = Some(now);
                                 state.last_up_pos = p2;
-                                if state.click_count >= 2 {
-                                    is_double_or_triple = true;
-                                }
                             } else {
-                                state.click_count = 1;
-                                state.last_up_time = Some(now);
-                                state.last_up_pos = p2;
+                                // 2. 判断是否为双击/三击选词（时间差在系统双击阈值内，位移 <= 8px）
+                                let is_within_time = match state.last_up_time {
+                                    Some(last_time) => now.duration_since(last_time).as_millis() <= dbl_click_time_ms,
+                                    None => false,
+                                };
+                                let is_within_dist = calc_drag_distance(state.last_up_pos, p2) <= 8.0;
+
+                                if is_within_time && is_within_dist {
+                                    state.click_count += 1;
+                                    state.last_up_time = Some(now);
+                                    state.last_up_pos = p2;
+                                    if state.click_count >= 2 {
+                                        is_double_or_triple = true;
+                                    }
+                                } else {
+                                    state.click_count = 1;
+                                    state.last_up_time = Some(now);
+                                    state.last_up_pos = p2;
+                                }
                             }
+                        } else {
+                            state.click_count = 0;
+                            state.last_up_time = None;
                         }
                     }
                 }
@@ -374,6 +466,12 @@ unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_par
     let _ = std::panic::catch_unwind(|| {
         if n_code >= 0 && l_param != 0 {
             let kbd_struct = *(l_param as *const KBDLLHOOKSTRUCT);
+            
+            // 忽略由本程序或其他程序通过 SendInput 注入的合成按键
+            if (kbd_struct.flags & LLKHF_INJECTED_FLAG) != 0 || kbd_struct.dwExtraInfo == IOX_EXTRA_INFO {
+                return;
+            }
+
             let vk = kbd_struct.vkCode as u16;
             let msg = w_param as u32;
 
@@ -389,7 +487,9 @@ unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_par
                 if should_hide {
                     let app_handle = APP_HANDLE.get().cloned();
                     if let Some(ref handle) = app_handle {
-                        request_hide_overlay_gracefully(handle);
+                        if is_overlay_visible(&handle) {
+                            request_hide_overlay_gracefully(&handle);
+                        }
                     }
                 }
             }
