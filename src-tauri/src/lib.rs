@@ -2,6 +2,7 @@ pub mod ai;
 pub mod config;
 pub mod overlay_state;
 pub mod selection;
+pub mod tray;
 pub mod window_manager;
 
 use ai::AiManager;
@@ -320,7 +321,17 @@ pub fn run() {
             }
             // 启动全局鼠标划词钩子
             selection::start_mouse_hook(handle);
+            // 初始化常驻系统托盘
+            tray::setup_tray(app)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_config,
