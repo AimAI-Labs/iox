@@ -199,6 +199,9 @@ fn toggle_maximize_main_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn hide_overlay(app: AppHandle) -> Result<(), String> {
+    // 刻意不复位 Pin 状态：钉住是跨会话的用户偏好（由前端 localStorage 记忆），
+    // 主动关闭仅结束当前窗口会话；隐藏后的残留 pin 不会拦截后续划词
+    // （selection.rs 已用「钉住 && 可见 && 卡片态」组合条件防死锁）
     if let Some(window) = app.get_webview_window("overlay") {
         window_manager::hide_overlay_window(&window);
         Ok(())

@@ -536,6 +536,14 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
             let app_handle = APP_HANDLE.get().cloned();
             let Some(handle) = app_handle else { return };
 
+            // 仅当「钉住 && 可见 && 卡片态」时零打扰放弃本次取词：
+            // - 钉住的卡片不因新划词被打扰（不覆盖内容、不移动窗口）
+            // - 气泡态即使处于钉住偏好也允许新划词刷新（气泡是瞬态查询入口）
+            // - 窗口隐藏后的残留钉住状态（如重启恢复的记忆）不得拦截划词，避免死锁
+            if is_overlay_pinned() && is_overlay_visible(&handle) && !is_overlay_bubble_mode() {
+                return;
+            }
+
             // 检查配置
             let (auto_popup, min_len, modifier, blacklist, actions, icon_only) = {
                 if let Some(state) = handle.try_state::<crate::AppState>() {
@@ -579,6 +587,12 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
                 }
 
                 if is_text_valid(&text, min_len) {
+                    // 取词期间状态可能变化（如卡片刚被钉住、或气泡已被关闭）：
+                    // 仅拦截「钉住且可见的卡片」，气泡态允许新划词正常接管
+                    if is_overlay_pinned() && is_overlay_visible(&handle) && !is_overlay_bubble_mode() {
+                        return;
+                    }
+
                     // 取消任何待处理的隐藏操作
                     HIDE_SEQ.fetch_add(1, Ordering::SeqCst);
 

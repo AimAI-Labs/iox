@@ -16,6 +16,8 @@ export interface OverlayState {
   animKey: number;
 }
 
+// 跨会话记忆钉住偏好：重启/隐藏后恢复，配合后端
+// 「钉住 && 可见 && 卡片态」的零打扰判定，不会造成划词死锁
 const getInitialPinnedState = (): boolean => {
   try {
     return localStorage.getItem('iox_overlay_pinned') === 'true';
@@ -66,7 +68,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         streamText: '',
         error: null,
         isLoading: false,
-        isPinned: state.isPinned, // 记忆并保留钉住状态
+        isPinned: state.isPinned, // 记忆并保留钉住偏好（气泡态允许新划词刷新）
         isClosing: false,
         animKey: state.animKey + 1,
       };
@@ -153,6 +155,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         visible: false,
         isClosing: false,
         activeAction: null,
+        isPinned: state.isPinned, // 隐藏仅结束窗口会话，钉住偏好保留记忆
       };
 
     case 'INCREMENT_ANIM_KEY':

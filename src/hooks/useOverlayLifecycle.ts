@@ -88,7 +88,8 @@ export function useOverlayLifecycle({
     invoke('set_pin_state', { pinned: next }).catch(() => {});
   }, [setIsPinned]);
 
-  // 主动关闭悬浮窗（隐藏窗口，保留用户记忆的钉住偏好）
+  // 主动关闭悬浮窗（强制隐藏；钉住偏好由 localStorage 记忆保留，
+  // 隐藏后的残留 Pin 不会拦截后续划词——后端以「钉住 && 可见 && 卡片态」判定零打扰）
   const handleClose = useCallback(async () => {
     executeGracefulHide(true);
   }, [executeGracefulHide]);

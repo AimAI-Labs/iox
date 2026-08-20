@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
 import { OverlayMode } from '@/state/overlayReducer';
 
 interface SelectionEventPayload {
@@ -31,7 +30,8 @@ export function useSelectionEvents({
     const unlistenSelection = listen<SelectionEventPayload>('selection-triggered', (event) => {
       cancelCloseTimer();
       onSelectionTriggered(event.payload.text);
-      invoke('set_pin_state', { pinned: false }).catch(() => {});
+      // 钉住是跨会话偏好：划词不重置后端 Pin 状态。
+      // 后端以「钉住 && 可见 && 卡片态」判定零打扰，气泡态划词照常刷新且 Pin 保留
       updateWindowSize('bubble', false);
     });
 
