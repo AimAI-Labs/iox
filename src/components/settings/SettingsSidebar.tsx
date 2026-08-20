@@ -1,5 +1,5 @@
 import React from "react";
-import { Cpu, Zap, Globe, Sliders, Shield, Save, Check, Loader2 } from "lucide-react";
+import { Cpu, Zap, Globe, Sliders, Shield, Save } from "lucide-react";
 import { Button } from "@/components/ui";
 import { IOXLogo } from "@/components/common";
 import { cn } from "@/lib/utils";
@@ -11,8 +11,6 @@ interface SettingsSidebarProps {
   activeTab: SettingsTab;
   onTabChange: (tab: SettingsTab) => void;
   onSave: () => void;
-  saving: boolean;
-  savedSuccess: boolean;
 }
 
 const navItems: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
@@ -27,8 +25,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   activeTab,
   onTabChange,
   onSave,
-  saving,
-  savedSuccess,
 }) => {
   return (
     <aside className="w-48 shrink-0 flex flex-col justify-between border-r border-border/40 bg-transparent p-3.5 select-none">
@@ -85,31 +81,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
       <div className="pt-3 border-t border-border/30">
         <Button
           onClick={onSave}
-          disabled={saving}
-          variant={savedSuccess ? "default" : "default"}
-          className={cn(
-            "w-full h-8 gap-1.5 text-xs font-medium transition-all duration-200",
-            savedSuccess
-              ? "bg-emerald-600 hover:bg-emerald-600 text-white"
-              : "bg-primary hover:bg-primary/90 text-primary-foreground"
-          )}
+          title="保存设置 (Ctrl + S)"
+          className="w-full h-8 gap-1.5 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-all duration-150 shadow-xs active:scale-[0.98]"
         >
-          {saving ? (
-            <>
-              <Loader2 size={13} className="animate-spin" />
-              <span>保存中...</span>
-            </>
-          ) : savedSuccess ? (
-            <>
-              <Check size={13} className="stroke-[2.5]" />
-              <span>已保存</span>
-            </>
-          ) : (
-            <>
-              <Save size={13} />
-              <span>保存配置</span>
-            </>
-          )}
+          <Save size={13} />
+          <span>保存配置</span>
         </Button>
       </div>
     </aside>

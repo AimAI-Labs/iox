@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { toast } from "sonner";
 import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig } from "@/types/config";
 import { useTheme } from "@/hooks/useTheme";
 import { MacTitleBar } from "@/components/MacTitleBar";
@@ -19,7 +20,11 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>("providers");
   const [formData, setFormData] = useState<AppConfig>(config);
   const [saving, setSaving] = useState(false);
-  const [savedSuccess, setSavedSuccess] = useState(false);
+  const formDataRef = useRef<AppConfig>(formData);
+
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
 
   // 监听来自其他窗口或快捷调起的 Tab 切换指令
   useEffect(() => {
@@ -43,14 +48,39 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   useTheme(formData.general.theme, formData.general.overlayOpacity);
 
   const handleSave = async () => {
+    if (saving) return;
     setSaving(true);
-    const ok = await onSave(formData);
-    setSaving(false);
-    if (ok) {
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 2200);
+    try {
+      const ok = await onSave(formDataRef.current);
+      if (ok) {
+        toast.success("配置已保存", {
+          description: "所有修改已即时生效",
+        });
+      } else {
+        toast.error("配置保存失败", {
+          description: "请检查填写内容或系统日志",
+        });
+      }
+    } catch (err) {
+      toast.error("配置保存异常", {
+        description: String(err),
+      });
+    } finally {
+      setSaving(false);
     }
   };
+
+  // 支持 Ctrl + S / Cmd + S 快捷键快速保存
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [saving]);
 
   // Provider 更新 (基于 ID)
   const updateProvider = (id: string, updated: Partial<ProviderConfig>) => {
@@ -181,8 +211,6 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onSave={handleSave}
-            saving={saving}
-            savedSuccess={savedSuccess}
           />
 
           {/* 右侧主工作区 */}
