@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { invoke } from '@tauri-apps/api/core';
 import { ActionConfig, ProviderConfig, ApiCardConfig } from '@/types/config';
 import { CardHeader } from '@/components/overlay/CardHeader';
 import { LoadingState } from '@/components/overlay/LoadingState';
@@ -9,6 +10,7 @@ import { PromptBar } from '@/components/overlay/PromptBar';
 import { ResponseToolbar } from '@/components/overlay/ResponseToolbar';
 import { UserBubble } from '@/components/overlay/UserBubble';
 import { ResizeHandle } from '@/components/overlay/ResizeHandle';
+import { ContextMenu } from '@/components/overlay/ContextMenu';
 import { DynamicIcon } from '@/components/Icons';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { AlertCircle, RotateCcw, Copy, Check } from 'lucide-react';
@@ -31,6 +33,10 @@ export interface ResultCardProps {
   apiCard?: ApiCardConfig;
   onModelChange: (model: string) => void;
   onSendFollowUp: (prompt: string) => void;
+  onRegenerateCurrentTurn?: (thinkingAugment?: string) => void;
+  onNewChat?: () => void;
+  onExportMarkdown?: () => void;
+  onOpenSettings?: () => void;
   onCancel: () => void;
   onPinToggle: () => void;
   onClose: () => void;
@@ -79,6 +85,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   apiCard,
   onModelChange,
   onSendFollowUp,
+  onRegenerateCurrentTurn,
+  onNewChat,
+  onExportMarkdown,
+  onOpenSettings,
   onCancel,
   onPinToggle,
   onClose,
@@ -87,6 +97,14 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const { copied, copy } = useCopyFeedback(2000);
   const [followUpInput, setFollowUpInput] = useState('');
   const [isThinkingOpen, setIsThinkingOpen] = useState(apiCard?.thinkingDefaultOpen ?? true);
+  const [thinkingMode, setThinkingMode] = useState<'quick' | 'deep'>('quick');
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; visible: boolean }>({
+    x: 0,
+    y: 0,
+    visible: false,
+  });
+
   const bodyRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
 
@@ -96,6 +114,52 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   const provider = providers.find((p) => p.id === action.providerId);
   const availableModels = provider?.models || [];
+
+  // 最大化切换
+  const handleToggleMaximize = async () => {
+    try {
+      const nextMax = await invoke<boolean>('toggle_maximize_overlay');
+      setIsMaximized(nextMax);
+    } catch (err) {
+      console.warn('Failed to toggle maximize overlay:', err);
+    }
+  };
+
+  // 右键菜单呼出
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      visible: true,
+    });
+  };
+
+  // 重新生成处理
+  const handleRegenerate = React.useCallback(() => {
+    if (isLoading) return;
+    if (onRegenerateCurrentTurn) {
+      const augment =
+        thinkingMode === 'deep'
+          ? '[深度思考模式] 请进行严谨的逐步拆解与深度推理：'
+          : undefined;
+      onRegenerateCurrentTurn(augment);
+    } else {
+      onModelChange(selectedModel);
+    }
+  }, [isLoading, onRegenerateCurrentTurn, thinkingMode, onModelChange, selectedModel]);
+
+  // 监听全局 Ctrl+R 快捷重新生成
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
+        e.preventDefault();
+        handleRegenerate();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [handleRegenerate]);
 
   // 监听请求起止以计算总耗时
   useEffect(() => {
@@ -184,14 +248,13 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   const handleFollowUpSubmit = (prompt: string) => {
     if (!prompt.trim() || isLoading) return;
-    onSendFollowUp(prompt);
+    const finalPrompt =
+      thinkingMode === 'deep'
+        ? `[深度思考模式] 请进行严谨的逐步拆解与深度推理：\n${prompt}`
+        : prompt;
+    onSendFollowUp(finalPrompt);
     setFollowUpInput('');
     isAutoScrollRef.current = true;
-  };
-
-  const handleRegenerate = () => {
-    if (isLoading) return;
-    onModelChange(selectedModel);
   };
 
   const handleToggleThinking = () => {
@@ -200,6 +263,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   return (
     <div
+      onContextMenu={handleContextMenu}
       className={cn(
         'relative flex flex-col w-full h-full select-none',
         'bg-[#fcfcfd]/95 dark:bg-[#18181b]/95 text-zinc-900 dark:text-zinc-100 backdrop-blur-2xl',
@@ -209,7 +273,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           : 'animate-in fade-in zoom-in-95 duration-150'
       )}
     >
-      {/* 1. 样图风格极简卡片头部 */}
+      {/* 1. 极简卡片头部导航 */}
       <CardHeader
         icon={action.icon}
         title={action.name}
@@ -231,11 +295,13 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           ) : undefined
         }
         isPinned={isPinned}
+        isMaximized={isMaximized}
         onPinToggle={onPinToggle}
+        onToggleMaximize={handleToggleMaximize}
         onClose={onClose}
+        onMinimize={onClose}
         onResetSize={onResetSize}
       />
-
 
       {/* 2. 正文与对话流内容区 */}
       <div
@@ -391,13 +457,46 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         title={action.name || '千问'}
         selectedModel={selectedModel}
         availableModels={availableModels}
+        thinkingMode={thinkingMode}
+        isPinned={isPinned}
         sendKeyShortcut={apiCard?.sendKeyShortcut}
         onModelChange={onModelChange}
+        onThinkingModeChange={setThinkingMode}
         onRegenerate={handleRegenerate}
+        onNewChat={onNewChat}
+        onExportMarkdown={onExportMarkdown}
+        onTogglePin={onPinToggle}
+        onOpenSettings={onOpenSettings}
       />
 
       {/* 4. 右下角原生缩放手柄 */}
       <ResizeHandle onReset={onResetSize} />
+
+      {/* 5. 极简 macOS 风格自定义右键菜单 */}
+      <ContextMenu
+        x={contextMenu.x}
+        y={contextMenu.y}
+        visible={contextMenu.visible}
+        hasSelectionText={Boolean(selectedText || window.getSelection()?.toString())}
+        hasAnswerText={Boolean(mainText || streamText)}
+        isPinned={isPinned}
+        isMaximized={isMaximized}
+        onClose={() => setContextMenu((prev) => ({ ...prev, visible: false }))}
+        onCopySelection={() => {
+          const sel = window.getSelection()?.toString() || selectedText;
+          if (sel) copy(sel);
+        }}
+        onCopyCurrentAnswer={() => {
+          if (mainText) copy(mainText);
+        }}
+        onCopyAllMarkdown={onExportMarkdown}
+        onRegenerateCurrent={handleRegenerate}
+        onNewChat={onNewChat}
+        onTogglePin={onPinToggle}
+        onToggleMaximize={handleToggleMaximize}
+        onResetSize={onResetSize}
+        onOpenSettings={onOpenSettings}
+      />
     </div>
   );
 };

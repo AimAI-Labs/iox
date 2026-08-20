@@ -8,7 +8,7 @@ export interface MacTrafficLightsProps {
   closeTitle?: string;
   minimizeTitle?: string;
   maximizeTitle?: string;
-  isPinned?: boolean;
+  isMaximized?: boolean;
   className?: string;
 }
 
@@ -17,9 +17,9 @@ export const MacTrafficLights: React.FC<MacTrafficLightsProps> = ({
   onMinimize,
   onMaximize,
   closeTitle = '关闭 (Esc)',
-  minimizeTitle = '最小化',
-  maximizeTitle = '最大化 / 还原',
-  isPinned,
+  minimizeTitle = '收起并保留会话',
+  maximizeTitle = '全屏最大化 / 还原',
+  isMaximized = false,
   className,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -55,7 +55,7 @@ export const MacTrafficLights: React.FC<MacTrafficLightsProps> = ({
         )}
       </button>
 
-      {/* 2. 黄色最小化/取消按钮 */}
+      {/* 2. 黄色最小化/收起按钮 */}
       <button
         type="button"
         className="traffic-light traffic-light-minimize"
@@ -79,12 +79,12 @@ export const MacTrafficLights: React.FC<MacTrafficLightsProps> = ({
         )}
       </button>
 
-      {/* 3. 绿色最大化 / Pin 固定按钮 */}
+      {/* 3. 绿色最大化 / 还原按钮 */}
       <button
         type="button"
         className={cn(
           "traffic-light traffic-light-maximize",
-          isPinned && "ring-1 ring-emerald-500/80 brightness-110"
+          isMaximized && "brightness-110"
         )}
         onClick={(e) => {
           e.stopPropagation();
@@ -96,14 +96,27 @@ export const MacTrafficLights: React.FC<MacTrafficLightsProps> = ({
       >
         {isHovered && (
           <svg viewBox="0 0 24 24" className="traffic-icon" aria-hidden="true">
-            <path
-              d="M7 17L17 7M7 7H17V17"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            {isMaximized ? (
+              /* 还原图标 (双箭头对角收缩) */
+              <path
+                d="M4 14H10M10 14V20M20 10H14M14 10V4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ) : (
+              /* 最大化图标 (对角展开箭头) */
+              <path
+                d="M7 17L17 7M7 7H17V17"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
           </svg>
         )}
       </button>

@@ -230,6 +230,98 @@ export function useActionStream({
     [activeAction, selectedText, onSetModel, onSetStreamText, onSetLoading, onSetError]
   );
 
+  // 针对当前轮次重新生成 (保留前序多轮历史)
+  const handleRegenerateCurrentTurn = useCallback(
+    async (thinkingPromptAugment?: string) => {
+      if (!activeAction) return;
+
+      onSetLoading(true);
+      onSetError(null);
+
+      const parts = streamText.split(/\n\n---\n\*\*追问：\*\*\s*/);
+      if (parts.length <= 1) {
+        // 第一轮回答重新生成
+        onSetStreamText('');
+        const promptTemplate = thinkingPromptAugment
+          ? `${thinkingPromptAugment}\n\n${activeAction.promptTemplate || '{text}'}`
+          : activeAction.promptTemplate;
+
+        try {
+          await invoke('trigger_api_action', {
+            actionId: activeAction.id,
+            text: selectedText,
+            modelOverride: selectedModel,
+            promptOverride: promptTemplate,
+          });
+        } catch (err) {
+          onSetError(String(err));
+          onSetLoading(false);
+        }
+      } else {
+        // 多轮追问：保留前 N-1 轮历史，仅重置最新一轮
+        const lastPart = parts[parts.length - 1];
+        const firstNewline = lastPart.indexOf('\n\n');
+        const latestPrompt = firstNewline === -1 ? lastPart.trim() : lastPart.slice(0, firstNewline).trim();
+
+        const precedingParts = parts.slice(0, -1);
+        const maxTurns = config?.apiCard?.contextTurns ?? 5;
+        const recentHistory = precedingParts.slice(-maxTurns).join('\n\n---\n**追问：** ');
+
+        // 重置 streamText 为去掉最新轮 assistant 内容的状态
+        const baseStreamText = precedingParts.join('\n\n---\n**追问：** ') + `\n\n---\n**追问：** ${latestPrompt}\n\n`;
+        onSetStreamText(baseStreamText);
+
+        const followUpCombined = selectedText
+          ? `原始选中文本：\n${selectedText}\n\n前序对话：\n${recentHistory}\n\n最新追问：\n${latestPrompt}`
+          : `前序对话：\n${recentHistory}\n\n最新追问：\n${latestPrompt}`;
+
+        try {
+          await invoke('trigger_api_action', {
+            actionId: activeAction.id,
+            text: followUpCombined,
+            modelOverride: selectedModel,
+            promptOverride: '{text}',
+          });
+        } catch (err) {
+          onSetError(String(err));
+          onSetLoading(false);
+        }
+      }
+    },
+    [
+      activeAction,
+      streamText,
+      selectedText,
+      selectedModel,
+      config?.apiCard?.contextTurns,
+      onSetStreamText,
+      onSetLoading,
+      onSetError,
+    ]
+  );
+
+  // 开启新会话 (清空追问历史，保留选中文本)
+  const handleNewChat = useCallback(() => {
+    onSetStreamText('');
+    onSetLoading(false);
+    onSetError(null);
+  }, [onSetStreamText, onSetLoading, onSetError]);
+
+  // 导出完整对话为 Markdown
+  const handleExportMarkdown = useCallback(async () => {
+    let md = `# IOX AI 对话记录\n\n- **动作**: ${activeAction?.name || 'AI'}\n- **模型**: ${selectedModel || '默认'}\n- **时间**: ${new Date().toLocaleString()}\n\n`;
+    if (selectedText) {
+      md += `### 原始选中文本\n> ${selectedText.replace(/\n/g, '\n> ')}\n\n---\n\n`;
+    }
+    md += `### 对话内容\n\n${streamText}\n`;
+
+    try {
+      await navigator.clipboard.writeText(md);
+    } catch (err) {
+      console.warn('Failed to export markdown:', err);
+    }
+  }, [activeAction?.name, selectedModel, selectedText, streamText]);
+
   // 停止生成
   const handleCancel = useCallback(async () => {
     if (activeAction) {
@@ -242,6 +334,9 @@ export function useActionStream({
     handleTriggerAction,
     handleSendFollowUp,
     handleModelChange,
+    handleRegenerateCurrentTurn,
+    handleNewChat,
+    handleExportMarkdown,
     handleCancel,
   };
 }

@@ -33,10 +33,10 @@ export function App() {
   // 统一应用与监听主题及透明度
   useTheme(config?.general.theme, config?.general.overlayOpacity);
 
-  const handleOpenSettings = async () => {
+  const handleOpenSettings = async (tab?: string) => {
     try {
       overlayState.handleClose();
-      await invoke('show_main_window');
+      await invoke('show_main_window', { targetTab: tab });
     } catch (e) {
       console.error('Failed to open settings window:', e);
     }
@@ -160,6 +160,10 @@ export function App() {
             apiCard={config.apiCard}
             onModelChange={overlayState.handleModelChange}
             onSendFollowUp={overlayState.handleSendFollowUp}
+            onRegenerateCurrentTurn={overlayState.handleRegenerateCurrentTurn}
+            onNewChat={overlayState.handleNewChat}
+            onExportMarkdown={overlayState.handleExportMarkdown}
+            onOpenSettings={() => handleOpenSettings('api_card')}
             onCancel={overlayState.handleCancel}
             onPinToggle={overlayState.handlePinToggle}
             onClose={overlayState.handleClose}

@@ -146,6 +146,22 @@ fn resize_overlay(
 }
 
 #[tauri::command]
+fn toggle_maximize_overlay(app: AppHandle) -> Result<bool, String> {
+    if let Some(window) = app.get_webview_window("overlay") {
+        let is_max = window.is_maximized().map_err(|e| e.to_string())?;
+        if is_max {
+            window.unmaximize().map_err(|e| e.to_string())?;
+            Ok(false)
+        } else {
+            window.maximize().map_err(|e| e.to_string())?;
+            Ok(true)
+        }
+    } else {
+        Err("Overlay window not found".to_string())
+    }
+}
+
+#[tauri::command]
 fn show_main_window(app: AppHandle, target_tab: Option<String>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         if let Ok(hwnd) = window.hwnd() {
@@ -519,6 +535,7 @@ pub fn run() {
             trigger_web_action,
             cancel_action,
             resize_overlay,
+            toggle_maximize_overlay,
             hide_overlay,
             show_main_window,
             hide_main_window,

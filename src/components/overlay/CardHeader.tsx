@@ -17,7 +17,9 @@ export interface CardHeaderProps {
   badge?: React.ReactNode;
   tools?: React.ReactNode;
   isPinned: boolean;
+  isMaximized?: boolean;
   onPinToggle: () => void;
+  onToggleMaximize?: () => void;
   onClose: () => void;
   onMinimize?: () => void;
   onResetSize?: () => void;
@@ -29,7 +31,9 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   badge,
   tools,
   isPinned,
+  isMaximized = false,
   onPinToggle,
+  onToggleMaximize,
   onClose,
   onMinimize,
   onResetSize,
@@ -45,12 +49,12 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
       <div data-tauri-drag-region className="flex min-w-0 items-center gap-2.5">
         <MacTrafficLights
           onClose={onClose}
-          onMinimize={onMinimize || onClose}
-          onMaximize={onPinToggle}
+          onMinimize={onMinimize}
+          onMaximize={onToggleMaximize}
+          isMaximized={isMaximized}
           closeTitle="关闭卡片 (Esc)"
-          minimizeTitle="收起"
-          maximizeTitle={isPinned ? '取消固定悬浮窗' : '固定悬浮窗 (Pin)'}
-          isPinned={isPinned}
+          minimizeTitle="收起并保留会话"
+          maximizeTitle={isMaximized ? '还原窗口尺寸' : '全屏最大化'}
         />
 
         <div className="flex min-w-0 items-center gap-1.5 border-l border-line/70 pl-2.5">

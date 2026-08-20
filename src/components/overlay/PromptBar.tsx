@@ -14,6 +14,8 @@ import {
   Languages,
   Wand2,
   RotateCcw,
+  Pin,
+  Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -22,7 +24,7 @@ import { cn } from '@/lib/utils';
  * 包含：
  * 1. 独立白底圆角卡片容器 (rounded-2xl)
  * 2. 顶部透明无框输入框 ("向千问提问")
- * 3. 底部工具条：+ 快捷菜单、⚡ 模式/模型选择、≡ 更多、Mic、圆形发送按钮
+ * 3. 底部工具条：+ 快捷预设、⚡极速/🧠深度思考双模芯片、≡ 更多功能矩阵、Mic、圆形发送按钮
  * ───────────────────────────────────────────────────────── */
 
 export interface ActionChip {
@@ -70,9 +72,16 @@ export interface PromptBarProps {
   title?: string;
   selectedModel?: string;
   availableModels?: string[];
+  thinkingMode?: 'quick' | 'deep';
+  isPinned?: boolean;
   sendKeyShortcut?: 'Enter' | 'Ctrl+Enter';
   onModelChange?: (model: string) => void;
+  onThinkingModeChange?: (mode: 'quick' | 'deep') => void;
   onRegenerate?: () => void;
+  onNewChat?: () => void;
+  onExportMarkdown?: () => void;
+  onTogglePin?: () => void;
+  onOpenSettings?: () => void;
   className?: string;
 }
 
@@ -87,9 +96,16 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   title = '千问',
   selectedModel = '',
   availableModels = [],
+  thinkingMode = 'quick',
+  isPinned = false,
   sendKeyShortcut = 'Enter',
   onModelChange,
+  onThinkingModeChange,
   onRegenerate,
+  onNewChat,
+  onExportMarkdown,
+  onTogglePin,
+  onOpenSettings,
   className,
 }) => {
   const [showPlusMenu, setShowPlusMenu] = useState(false);
@@ -141,6 +157,11 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     onSubmit(chip.prompt);
   };
 
+  const toggleThinkingMode = () => {
+    const nextMode = thinkingMode === 'quick' ? 'deep' : 'quick';
+    onThinkingModeChange?.(nextMode);
+  };
+
   const inputPlaceholder = placeholder || `向${title}提问`;
 
   return (
@@ -171,7 +192,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
         </div>
       )}
 
-      {/* 2. 模型选择下拉菜单 (⚡ 快速 ∨) */}
+      {/* 2. 模型选择下拉菜单 */}
       {showModelMenu && availableModels.length > 0 && (
         <div className="absolute bottom-full left-8 mb-2 z-50 min-w-44 max-h-56 overflow-y-auto rounded-xl border border-zinc-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-xl dark:border-zinc-700/80 dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-150 custom-scrollbar">
           <div className="px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
@@ -203,9 +224,9 @@ export const PromptBar: React.FC<PromptBarProps> = ({
         </div>
       )}
 
-      {/* 3. 更多选项下拉菜单 (≡ 更多) */}
+      {/* 3. 现代化「≡ 更多」功能矩阵 */}
       {showMoreMenu && (
-        <div className="absolute bottom-full left-20 mb-2 z-50 w-40 rounded-xl border border-zinc-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-xl dark:border-zinc-700/80 dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute bottom-full left-24 mb-2 z-50 w-48 rounded-xl border border-zinc-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-xl dark:border-zinc-700/80 dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-150">
           <div className="flex flex-col gap-0.5">
             {onRegenerate && (
               <button
@@ -218,7 +239,65 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                 className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer disabled:opacity-50"
               >
                 <RotateCcw size={13} className="shrink-0 text-zinc-500" />
-                <span>重新生成回答</span>
+                <span>重新生成当前回答</span>
+              </button>
+            )}
+
+            {onNewChat && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMoreMenu(false);
+                  onNewChat();
+                }}
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer"
+              >
+                <Sparkles size={13} className="shrink-0 text-indigo-500" />
+                <span>开启新会话 / 清空追问</span>
+              </button>
+            )}
+
+            {onExportMarkdown && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMoreMenu(false);
+                  onExportMarkdown();
+                }}
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer"
+              >
+                <FileText size={13} className="shrink-0 text-zinc-500" />
+                <span>导出完整对话 (Markdown)</span>
+              </button>
+            )}
+
+            <div className="my-1 h-px bg-zinc-200/80 dark:bg-zinc-700/70" />
+
+            {onTogglePin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMoreMenu(false);
+                  onTogglePin();
+                }}
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer"
+              >
+                <Pin size={13} className={cn('shrink-0 text-blue-500', isPinned && 'fill-current')} />
+                <span>{isPinned ? '取消固定悬浮窗' : '固定悬浮窗 (Pin)'}</span>
+              </button>
+            )}
+
+            {onOpenSettings && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMoreMenu(false);
+                  onOpenSettings();
+                }}
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer"
+              >
+                <Settings size={13} className="shrink-0 text-zinc-500" />
+                <span>API 卡片设置...</span>
               </button>
             )}
           </div>
@@ -228,7 +307,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       {/* 4. 样图同款独立胶囊提问卡片容器 */}
       <div
         className={cn(
-          'flex flex-col rounded-[18px] bg-white/90 dark:bg-zinc-900/80 p-3 pt-2.5 shadow-sm border border-zinc-200/90 dark:border-zinc-700/80',
+          'flex flex-col rounded-[18px] bg-white dark:bg-[#18181b] p-3 pt-2.5 shadow-sm border border-zinc-200/90 dark:border-zinc-700/80',
           'transition-all duration-150 focus-within:border-zinc-400/90 dark:focus-within:border-zinc-500/80 focus-within:shadow-md'
         )}
       >
@@ -250,7 +329,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 
         {/* 底部工具行 */}
         <div className="mt-2 flex items-center justify-between">
-          {/* 左侧操作组：+ 快捷菜单、⚡ 快速/模型选择、≡ 更多 */}
+          {/* 左侧操作组：+ 快捷菜单、⚡极速/🧠深度思考双模芯片、≡ 更多 */}
           <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
             {/* + 按钮 */}
             <button
@@ -266,28 +345,49 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               <Plus size={15} strokeWidth={2} />
             </button>
 
-            {/* ⚡ 快速 / 模型 ∨ 按钮 */}
-            <button
-              type="button"
-              onClick={() => {
-                if (availableModels.length > 0) {
-                  setShowModelMenu((prev) => !prev);
-                  setShowPlusMenu(false);
-                  setShowMoreMenu(false);
-                }
-              }}
-              className={cn(
-                'flex h-6 items-center gap-1 rounded-md px-1.5 text-[12.5px] font-medium text-zinc-700 transition-colors',
-                'hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer'
-              )}
-              title={selectedModel ? `当前模型: ${selectedModel}` : '选择模型'}
-            >
-              <Zap size={12} className="shrink-0 text-amber-500 fill-amber-500" />
-              <span className="max-w-28 truncate">
-                {selectedModel ? (selectedModel.length > 8 ? '快速' : selectedModel) : '快速'}
-              </span>
-              <ChevronDown size={11} strokeWidth={2.4} className="shrink-0 text-zinc-400" />
-            </button>
+            {/* ⚡ 极速 / 🧠 深度思考 双模分体芯片 */}
+            <div className="flex items-center rounded-md bg-zinc-100/90 dark:bg-zinc-800/90 p-0.5 border border-zinc-200/60 dark:border-zinc-700/60">
+              {/* 主模式切换按钮 */}
+              <button
+                type="button"
+                onClick={toggleThinkingMode}
+                className={cn(
+                  'flex h-5.5 items-center gap-1 rounded px-1.5 text-[12px] font-medium transition-all duration-150 cursor-pointer',
+                  thinkingMode === 'deep'
+                    ? 'text-purple-600 dark:text-purple-400 font-semibold'
+                    : 'text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100'
+                )}
+                title={thinkingMode === 'deep' ? '当前模式: 深度思考 (点击切换为极速模式)' : '当前模式: 极速模式 (点击切换为深度思考)'}
+              >
+                {thinkingMode === 'deep' ? (
+                  <>
+                    <Brain size={12} className="shrink-0 text-purple-500 animate-pulse" />
+                    <span>深度思考</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap size={12} className="shrink-0 text-amber-500 fill-amber-500" />
+                    <span>极速模式</span>
+                  </>
+                )}
+              </button>
+
+              {/* 右侧下拉箭头 (选择模型) */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (availableModels.length > 0) {
+                    setShowModelMenu((prev) => !prev);
+                    setShowPlusMenu(false);
+                    setShowMoreMenu(false);
+                  }
+                }}
+                className="flex h-5.5 w-4 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer"
+                title={selectedModel ? `当前模型: ${selectedModel} (点击切换)` : '选择模型'}
+              >
+                <ChevronDown size={11} strokeWidth={2.4} />
+              </button>
+            </div>
 
             {/* ≡ 更多 按钮 */}
             <button
@@ -298,7 +398,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                 setShowModelMenu(false);
               }}
               className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[12.5px] font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer"
-              title="更多选项"
+              title="更多功能"
             >
               <AlignLeft size={13} className="shrink-0 text-zinc-500" />
               <span>更多</span>
