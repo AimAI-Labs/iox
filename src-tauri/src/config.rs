@@ -108,6 +108,63 @@ pub struct ActionConfig {
     pub auto_submit: Option<bool>,
 }
 
+fn default_font_size() -> u32 {
+    13
+}
+
+fn default_context_turns() -> u32 {
+    5
+}
+
+fn default_send_shortcut() -> String {
+    "Enter".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiCardConfig {
+    #[serde(default = "default_api_card_size")]
+    pub card_size: (f64, f64),
+    #[serde(default)]
+    pub auto_pin_on_open: bool,
+    #[serde(default)]
+    pub auto_focus_input: bool,
+    #[serde(default = "default_true")]
+    pub thinking_default_open: bool,
+    #[serde(default = "default_true")]
+    pub auto_collapse_thinking_on_done: bool,
+    #[serde(default = "default_true")]
+    pub show_duration: bool,
+    #[serde(default = "default_font_size")]
+    pub font_size: u32,
+    #[serde(default)]
+    pub code_block_wrap: bool,
+    #[serde(default)]
+    pub code_block_line_numbers: bool,
+    #[serde(default = "default_context_turns")]
+    pub context_turns: u32,
+    #[serde(default = "default_send_shortcut")]
+    pub send_key_shortcut: String,
+}
+
+impl Default for ApiCardConfig {
+    fn default() -> Self {
+        Self {
+            card_size: (600.0, 900.0),
+            auto_pin_on_open: false,
+            auto_focus_input: false,
+            thinking_default_open: true,
+            auto_collapse_thinking_on_done: true,
+            show_duration: true,
+            font_size: 13,
+            code_block_wrap: false,
+            code_block_line_numbers: false,
+            context_turns: 5,
+            send_key_shortcut: "Enter".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
@@ -115,6 +172,8 @@ pub struct AppConfig {
     pub blacklist: Vec<String>,
     pub providers: Vec<ProviderConfig>,
     pub actions: Vec<ActionConfig>,
+    #[serde(default)]
+    pub api_card: ApiCardConfig,
 }
 
 impl Default for AppConfig {
@@ -326,6 +385,7 @@ impl Default for AppConfig {
                     enabled: true,
                 },
             ],
+            api_card: ApiCardConfig::default(),
         }
     }
 }
@@ -379,6 +439,12 @@ impl AppConfig {
                         }
                     }
 
+                    // 3. 自动向前兼容：将历史 general.api_card_size 同步至 api_card.card_size
+                    if config.general.api_card_size != (600.0, 900.0) && config.api_card.card_size == (600.0, 900.0) {
+                        config.api_card.card_size = config.general.api_card_size;
+                        modified = true;
+                    }
+
                     if modified {
                         let _ = config.save();
                     }
@@ -409,6 +475,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_api_card_config_defaults() {
+        let default_config = AppConfig::default();
+        assert_eq!(default_config.api_card.card_size, (600.0, 900.0));
+        assert!(!default_config.api_card.auto_pin_on_open);
+        assert!(!default_config.api_card.auto_focus_input);
+        assert!(default_config.api_card.thinking_default_open);
+        assert!(default_config.api_card.auto_collapse_thinking_on_done);
+        assert!(default_config.api_card.show_duration);
+        assert_eq!(default_config.api_card.font_size, 13);
+        assert!(!default_config.api_card.code_block_wrap);
+        assert!(!default_config.api_card.code_block_line_numbers);
+        assert_eq!(default_config.api_card.context_turns, 5);
+        assert_eq!(default_config.api_card.send_key_shortcut, "Enter");
+    }
+
+    #[test]
+    fn test_api_card_legacy_migration() {
+        let legacy_json = r#"{
+            "general": {
+                "autoPopupOnSelection": true,
+                "minSelectionLength": 1,
+                "triggerModifier": "None",
+                "globalHotkey": "Alt+Space",
+                "theme": "system",
+                "autoStart": false,
+                "apiCardSize": [720.0, 850.0]
+            },
+            "blacklist": [],
+            "providers": [],
+            "actions": []
+        }"#;
+        let mut config: AppConfig = serde_json::from_str(legacy_json).expect("Deserialize legacy config");
+        if config.general.api_card_size != (600.0, 900.0) && config.api_card.card_size == (600.0, 900.0) {
+            config.api_card.card_size = config.general.api_card_size;
+        }
+        assert_eq!(config.api_card.card_size, (720.0, 850.0));
+    }
+
+    #[test]
     fn test_default_config_serialization() {
         let config = AppConfig::default();
         let json = serde_json::to_string_pretty(&config).expect("Serialize default config");
@@ -418,6 +523,7 @@ mod tests {
         assert_eq!(deserialized.general.overlay_opacity, 90);
         assert_eq!(deserialized.general.web_window_size, (860.0, 640.0));
         assert_eq!(deserialized.general.api_card_size, (600.0, 900.0));
+        assert_eq!(deserialized.api_card.card_size, (600.0, 900.0));
         assert_eq!(config.providers.len(), deserialized.providers.len());
         assert_eq!(config.actions.len(), deserialized.actions.len());
     }

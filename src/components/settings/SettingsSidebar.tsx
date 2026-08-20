@@ -1,5 +1,5 @@
 import React from "react";
-import { Cpu, Zap, Globe, Sliders, Shield, Save } from "lucide-react";
+import { Cpu, Zap, Layers, Globe, Sliders, Shield, Save } from "lucide-react";
 import { Button } from "@/components/ui";
 import { IOXLogo } from "@/components/common";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ interface SettingsSidebarProps {
 const navItems: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: "providers", label: "模型服务商", icon: Cpu },
   { id: "actions", label: "动作管理", icon: Zap },
+  { id: "api_card", label: "API 卡片", icon: Layers },
   { id: "web", label: "Web 浮窗", icon: Globe },
   { id: "general", label: "划词与通用", icon: Sliders },
   { id: "blacklist", label: "应用黑名单", icon: Shield },

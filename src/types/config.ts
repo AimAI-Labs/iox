@@ -44,11 +44,26 @@ export interface ActionConfig {
   autoSubmit?: boolean;
 }
 
+export interface ApiCardConfig {
+  cardSize: [number, number];
+  autoPinOnOpen: boolean;
+  autoFocusInput: boolean;
+  thinkingDefaultOpen: boolean;
+  autoCollapseThinkingOnDone: boolean;
+  showDuration: boolean;
+  fontSize: number;
+  codeBlockWrap: boolean;
+  codeBlockLineNumbers: boolean;
+  contextTurns: number;
+  sendKeyShortcut: 'Enter' | 'Ctrl+Enter';
+}
+
 export interface AppConfig {
   general: GeneralConfig;
   blacklist: string[];
   providers: ProviderConfig[];
   actions: ActionConfig[];
+  apiCard: ApiCardConfig;
 }
 
 export interface WebHubTabItem {
@@ -68,6 +83,6 @@ export interface PickedProcessInfo {
   windowTitle: string;
 }
 
-export type SettingsTab = 'providers' | 'actions' | 'web' | 'general' | 'blacklist';
+export type SettingsTab = 'providers' | 'actions' | 'api_card' | 'web' | 'general' | 'blacklist';
 
 

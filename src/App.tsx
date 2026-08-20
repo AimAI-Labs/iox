@@ -152,10 +152,12 @@ export function App() {
             providers={config.providers}
             selectedModel={overlayState.selectedModel}
             streamText={overlayState.streamText}
+            selectedText={overlayState.selectedText}
             isLoading={overlayState.isLoading}
             isPinned={overlayState.isPinned}
             isClosing={overlayState.isClosing}
             error={overlayState.error}
+            apiCard={config.apiCard}
             onModelChange={overlayState.handleModelChange}
             onSendFollowUp={overlayState.handleSendFollowUp}
             onCancel={overlayState.handleCancel}

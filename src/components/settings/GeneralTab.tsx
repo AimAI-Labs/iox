@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Monitor, Moon, Sun, Sparkles, RefreshCcw } from "lucide-react";
+import React from "react";
+import { Monitor, Moon, Sun, Sparkles } from "lucide-react";
 import { GeneralConfig } from "@/types/config";
 import {
   Card,
@@ -10,7 +10,6 @@ import {
   Slider,
   Switch,
   Separator,
-  Button,
 } from "@/components/ui";
 import { IOXLogo } from "@/components/common";
 
@@ -23,44 +22,6 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   general,
   onUpdateGeneral,
 }) => {
-  const [currentW, currentH] = general.apiCardSize || [600, 900];
-  const [widthInput, setWidthInput] = useState(String(Math.round(currentW)));
-  const [heightInput, setHeightInput] = useState(String(Math.round(currentH)));
-
-  // 当外部配置改变时，同步更新输入框
-  useEffect(() => {
-    setWidthInput(String(Math.round(currentW)));
-    setHeightInput(String(Math.round(currentH)));
-  }, [currentW, currentH]);
-
-  const commitSizeChange = () => {
-    let w = parseInt(widthInput, 10);
-    let h = parseInt(heightInput, 10);
-    if (isNaN(w) || w < 360) w = 360;
-    if (w > 2560) w = 2560;
-    if (isNaN(h) || h < 300) h = 300;
-    if (h > 1600) h = 1600;
-
-    setWidthInput(String(w));
-    setHeightInput(String(h));
-
-    if (w !== Math.round(currentW) || h !== Math.round(currentH)) {
-      onUpdateGeneral({ apiCardSize: [w, h] });
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      commitSizeChange();
-      (e.target as HTMLInputElement).blur();
-    }
-  };
-
-  const handleResetSize = () => {
-    setWidthInput("600");
-    setHeightInput("900");
-    onUpdateGeneral({ apiCardSize: [600, 900] });
-  };
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -270,70 +231,6 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* API Card Size & Reset */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <Label className="text-xs text-foreground font-medium">
-                API 流式卡片尺寸与重置
-              </Label>
-              <p className="text-[11px] text-muted-foreground">
-                展开流式卡片时的默认宽高，拖拽卡片右下角可自由缩放并自动记忆
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <div className="relative flex items-center">
-                <span className="absolute left-2 text-[10px] font-mono text-muted-foreground select-none pointer-events-none">
-                  W
-                </span>
-                <Input
-                  type="number"
-                  min={360}
-                  max={2560}
-                  value={widthInput}
-                  onChange={(e) => setWidthInput(e.target.value)}
-                  onBlur={commitSizeChange}
-                  onKeyDown={handleKeyDown}
-                  className="h-7 w-[72px] pl-6 pr-1 text-xs font-mono"
-                  placeholder="600"
-                />
-              </div>
-
-              <span className="text-xs text-muted-foreground select-none">×</span>
-
-              <div className="relative flex items-center">
-                <span className="absolute left-2 text-[10px] font-mono text-muted-foreground select-none pointer-events-none">
-                  H
-                </span>
-                <Input
-                  type="number"
-                  min={300}
-                  max={1600}
-                  value={heightInput}
-                  onChange={(e) => setHeightInput(e.target.value)}
-                  onBlur={commitSizeChange}
-                  onKeyDown={handleKeyDown}
-                  className="h-7 w-[72px] pl-6 pr-1 text-xs font-mono"
-                  placeholder="900"
-                />
-              </div>
-
-              <span className="text-[11px] text-muted-foreground mr-1 select-none">px</span>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleResetSize}
-                className="h-7 text-xs gap-1 border-border/70 hover:border-primary/50 px-2 cursor-pointer"
-                title="恢复至推荐默认尺寸 600 × 900"
-              >
-                <RefreshCcw size={11} />
-                <span>重置</span>
-              </Button>
             </div>
           </div>
 

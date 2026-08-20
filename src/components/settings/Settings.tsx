@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
-import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig } from "@/types/config";
+import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig, ApiCardConfig } from "@/types/config";
 import { useTheme } from "@/hooks/useTheme";
 import { MacTitleBar } from "@/components/MacTitleBar";
 import { SettingsSidebar, SettingsTab } from "@/components/settings/SettingsSidebar";
 import { ProvidersTab } from "@/components/settings/ProvidersTab";
 import { ActionsTab } from "@/components/settings/actions";
+import { ApiCardTab } from "@/components/settings/ApiCardTab";
 import { WebviewTab } from "@/components/settings/WebviewTab";
 import { GeneralTab } from "@/components/settings/GeneralTab";
 import { BlacklistTab } from "@/components/settings/BlacklistTab";
@@ -32,7 +33,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     listen<string>("open_settings_tab", (event) => {
       if (
         event.payload &&
-        ["providers", "actions", "web", "general", "blacklist"].includes(event.payload)
+        ["providers", "actions", "api_card", "web", "general", "blacklist"].includes(event.payload)
       ) {
         setActiveTab(event.payload as SettingsTab);
       }
@@ -177,6 +178,17 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     }));
   };
 
+  // 更新 ApiCard 配置
+  const updateApiCard = (updated: Partial<ApiCardConfig>) => {
+    setFormData((prev) => ({
+      ...prev,
+      apiCard: {
+        ...prev.apiCard,
+        ...updated,
+      },
+    }));
+  };
+
   // 添加黑名单
   const addBlacklist = (processName: string) => {
     const name = processName.trim();
@@ -237,6 +249,17 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
                   onUpdateAction={updateAction}
                   onRemoveAction={removeAction}
                   onReorderActions={reorderActions}
+                />
+              </div>
+            )}
+
+            {activeTab === "api_card" && (
+              <div className="flex-1 overflow-y-auto p-5">
+                <ApiCardTab
+                  apiCard={formData.apiCard}
+                  actions={formData.actions}
+                  onUpdateApiCard={updateApiCard}
+                  onNavigateToActions={() => setActiveTab("actions")}
                 />
               </div>
             )}

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { ActionConfig, ProviderConfig } from '@/types/config';
+import { ActionConfig, ProviderConfig, ApiCardConfig } from '@/types/config';
 import { CardHeader } from '@/components/overlay/CardHeader';
 import { LoadingState } from '@/components/overlay/LoadingState';
 import { ThinkingBlock } from '@/components/overlay/ThinkingBlock';
@@ -28,6 +28,7 @@ export interface ResultCardProps {
   isPinned: boolean;
   isClosing?: boolean;
   error: string | null;
+  apiCard?: ApiCardConfig;
   onModelChange: (model: string) => void;
   onSendFollowUp: (prompt: string) => void;
   onCancel: () => void;
@@ -75,6 +76,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   isPinned,
   isClosing = false,
   error,
+  apiCard,
   onModelChange,
   onSendFollowUp,
   onCancel,
@@ -84,7 +86,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 }) => {
   const { copied, copy } = useCopyFeedback(2000);
   const [followUpInput, setFollowUpInput] = useState('');
-  const [isThinkingOpen, setIsThinkingOpen] = useState(true);
+  const [isThinkingOpen, setIsThinkingOpen] = useState(apiCard?.thinkingDefaultOpen ?? true);
   const bodyRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
 
@@ -114,16 +116,20 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     return parseThinkingAndMain(streamText);
   }, [streamText]);
 
-  // 当处于思考中时自动保持展开，思考结束后自动收起
+  // 当处于思考中时根据配置展开，思考结束后根据配置自动收起
   const prevThinkingRef = useRef(isThinking);
   useEffect(() => {
     if (isThinking) {
-      setIsThinkingOpen(true);
+      if (apiCard?.thinkingDefaultOpen ?? true) {
+        setIsThinkingOpen(true);
+      }
     } else if (prevThinkingRef.current && !isThinking) {
-      setIsThinkingOpen(false);
+      if (apiCard?.autoCollapseThinkingOnDone ?? true) {
+        setIsThinkingOpen(false);
+      }
     }
     prevThinkingRef.current = isThinking;
-  }, [isThinking]);
+  }, [isThinking, apiCard?.thinkingDefaultOpen, apiCard?.autoCollapseThinkingOnDone]);
 
   // 结构化多轮对话气泡流 (Conversation Turns)
   const conversationTurns = useMemo(() => {
@@ -235,7 +241,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       <div
         ref={bodyRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-3 pb-2 text-[13px] text-ink select-text custom-scrollbar"
+        style={{ fontSize: `${apiCard?.fontSize || 13}px` }}
+        className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-3 pb-2 text-ink select-text custom-scrollbar"
       >
         {/* 初始用户选中文本气泡 (如果存在) */}
         {selectedText && (
@@ -305,7 +312,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                             {selectedModel}
                           </span>
                         )}
-                        {isLast && !isLoading && totalDuration !== undefined && (
+                        {isLast && !isLoading && totalDuration !== undefined && (apiCard?.showDuration ?? true) && (
                           <span className="font-mono text-ink-3 tabular-nums">
                             for {totalDuration.toFixed(1)}s
                           </span>
@@ -318,6 +325,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                           thinkingText={turnThinking}
                           isThinking={turnIsThinking}
                           isOpen={isThinkingOpen}
+                          autoCollapseOnDone={apiCard?.autoCollapseThinkingOnDone ?? true}
                           onToggleOpen={handleToggleThinking}
                         />
                       )}
@@ -327,7 +335,13 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                         <div className="markdown-body">
                           <ReactMarkdown
                             components={{
-                              code: CodeBlock as any,
+                              code: (props: any) => (
+                                <CodeBlock
+                                  {...props}
+                                  codeBlockWrap={apiCard?.codeBlockWrap}
+                                  codeBlockLineNumbers={apiCard?.codeBlockLineNumbers}
+                                />
+                              ),
                               pre: ({ children }: any) => <>{children}</>,
                             }}
                           >
@@ -343,7 +357,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                       {isLast && !isLoading && turnMain && (
                         <ResponseToolbar
                           text={turnMain}
-                          durationSeconds={totalDuration}
+                          durationSeconds={apiCard?.showDuration !== false ? totalDuration : undefined}
                           hasThinking={Boolean(turnThinking)}
                           isThinkingOpen={isThinkingOpen}
                           onToggleThinking={handleToggleThinking}
@@ -377,6 +391,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         title={action.name || '千问'}
         selectedModel={selectedModel}
         availableModels={availableModels}
+        sendKeyShortcut={apiCard?.sendKeyShortcut}
         onModelChange={onModelChange}
         onRegenerate={handleRegenerate}
       />

@@ -13,6 +13,7 @@ export interface ThinkingBlockProps {
   thinkingText: string;
   isThinking: boolean;
   isOpen?: boolean;
+  autoCollapseOnDone?: boolean;
   onToggleOpen?: () => void;
   className?: string;
 }
@@ -21,6 +22,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   thinkingText,
   isThinking,
   isOpen: controlledIsOpen,
+  autoCollapseOnDone = true,
   onToggleOpen: controlledToggleOpen,
   className,
 }) => {
@@ -54,11 +56,11 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
       const finalSec = ((Date.now() - startTimeRef.current) / 1000).toFixed(1);
       setElapsedSeconds(parseFloat(finalSec));
     }
-    // 思考结束且用户未手动展开过，自动折叠
-    if (!userToggledRef.current && !isControlled) {
+    // 思考结束且用户未手动展开过，若开启自动折叠则收起
+    if (!userToggledRef.current && !isControlled && autoCollapseOnDone) {
       setInternalIsOpen(false);
     }
-  }, [isThinking, isControlled]);
+  }, [isThinking, isControlled, autoCollapseOnDone]);
 
   useLayoutEffect(() => {
     if (traceRef.current) {

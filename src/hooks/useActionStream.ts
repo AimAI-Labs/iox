@@ -173,7 +173,14 @@ export function useActionStream({
       onSetLoading(true);
       onSetError(null);
 
-      const followUpCombined = `原始上下文：\n${selectedText}\n\n追问：\n${followUpPrompt}`;
+      // 根据配置截取最近 N 轮历史对话
+      const maxTurns = config?.apiCard?.contextTurns ?? 5;
+      const historyParts = streamText.split(/\n\n---\n\*\*追问：\*\*\s*/);
+      const recentHistory = historyParts.slice(-maxTurns).join('\n\n---\n**追问：** ');
+
+      const followUpCombined = selectedText
+        ? `原始选中文本：\n${selectedText}\n\n前序对话：\n${recentHistory}\n\n最新追问：\n${followUpPrompt}`
+        : `前序对话：\n${recentHistory}\n\n最新追问：\n${followUpPrompt}`;
 
       try {
         await invoke('trigger_api_action', {
@@ -187,7 +194,16 @@ export function useActionStream({
         onSetLoading(false);
       }
     },
-    [activeAction, streamText, selectedText, selectedModel, onSetStreamText, onSetLoading, onSetError]
+    [
+      activeAction,
+      config?.apiCard?.contextTurns,
+      streamText,
+      selectedText,
+      selectedModel,
+      onSetStreamText,
+      onSetLoading,
+      onSetError,
+    ]
   );
 
   // 切换模型

@@ -28,7 +28,7 @@ export function useOverlayState(config: AppConfig | null) {
   } = useOverlayLifecycle({
     actions: config?.actions,
     iconOnly: config?.general.iconOnlyBubble,
-    apiCardSize: config?.general.apiCardSize,
+    apiCard: config?.apiCard,
     isPinned: state.isPinned,
     currentMode: state.mode,
     setIsPinned: (pinned) => dispatch({ type: 'SET_PINNED', isPinned: pinned }),

@@ -236,6 +236,7 @@ fn save_api_card_size(
     if width >= 320.0 && height >= 200.0 {
         let mut config = state.config.lock().unwrap();
         config.general.api_card_size = (width.round(), height.round());
+        config.api_card.card_size = (width.round(), height.round());
         let _ = config.save();
         let _ = app.emit("config_updated", &*config);
     }

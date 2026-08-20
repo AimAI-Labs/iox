@@ -70,6 +70,7 @@ export interface PromptBarProps {
   title?: string;
   selectedModel?: string;
   availableModels?: string[];
+  sendKeyShortcut?: 'Enter' | 'Ctrl+Enter';
   onModelChange?: (model: string) => void;
   onRegenerate?: () => void;
   className?: string;
@@ -86,6 +87,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   title = '千问',
   selectedModel = '',
   availableModels = [],
+  sendKeyShortcut = 'Enter',
   onModelChange,
   onRegenerate,
   className,
@@ -118,10 +120,18 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (!value.trim() || isLoading || disabled) return;
-      onSubmit(value);
+    if (sendKeyShortcut === 'Ctrl+Enter') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!value.trim() || isLoading || disabled) return;
+        onSubmit(value);
+      }
+    } else {
+      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        if (!value.trim() || isLoading || disabled) return;
+        onSubmit(value);
+      }
     }
   };
 
@@ -331,7 +341,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                     ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm hover:opacity-90 cursor-pointer'
                     : 'bg-zinc-200/80 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed'
                 )}
-                title="发送 (Enter)"
+                title={sendKeyShortcut === 'Ctrl+Enter' ? '发送 (Ctrl+Enter)' : '发送 (Enter)'}
               >
                 <ArrowUp size={16} strokeWidth={2.4} />
               </button>

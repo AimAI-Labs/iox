@@ -1,13 +1,13 @@
 import { useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { OverlayMode } from '@/state/overlayReducer';
-import { ActionConfig } from '@/types/config';
+import { ActionConfig, ApiCardConfig } from '@/types/config';
 import { calculateBubbleWidth } from '@/utils/bubbleWidth';
 
 interface UseOverlayLifecycleProps {
   actions?: ActionConfig[];
   iconOnly?: boolean;
-  apiCardSize?: [number, number];
+  apiCard?: ApiCardConfig;
   isPinned: boolean;
   currentMode: OverlayMode;
   setIsPinned: (pinned: boolean) => void;
@@ -18,7 +18,7 @@ interface UseOverlayLifecycleProps {
 export function useOverlayLifecycle({
   actions,
   iconOnly = false,
-  apiCardSize,
+  apiCard,
   isPinned,
   currentMode,
   setIsPinned,
@@ -33,8 +33,8 @@ export function useOverlayLifecycle({
   actionsRef.current = actions;
   const iconOnlyRef = useRef<boolean>(iconOnly);
   iconOnlyRef.current = iconOnly;
-  const apiCardSizeRef = useRef<[number, number] | undefined>(apiCardSize);
-  apiCardSizeRef.current = apiCardSize;
+  const apiCardRef = useRef<ApiCardConfig | undefined>(apiCard);
+  apiCardRef.current = apiCard;
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 调整窗口尺寸并同步模式到 Rust 端
@@ -51,13 +51,20 @@ export function useOverlayLifecycle({
         const width = calculateBubbleWidth(actionsRef.current, iconOnlyRef.current);
         await invoke('resize_overlay', { width, height: 46, allowFocus: false });
       } else {
-        const defaultCardSize = apiCardSizeRef.current || [600, 900];
+        const defaultCardSize = apiCardRef.current?.cardSize || [600, 900];
         const width = customSize?.width || defaultCardSize[0] || 600;
         const height = customSize?.height || defaultCardSize[1] || 900;
-        await invoke('resize_overlay', { width, height, allowFocus });
+        const shouldFocus = allowFocus || (apiCardRef.current?.autoFocusInput ?? false);
+        await invoke('resize_overlay', { width, height, allowFocus: shouldFocus });
+
+        // 若配置了展开时自动 Pin 固定，自动同步钉住状态
+        if (apiCardRef.current?.autoPinOnOpen && !isPinnedRef.current) {
+          setIsPinned(true);
+          invoke('set_pin_state', { pinned: true }).catch(() => {});
+        }
       }
     },
-    []
+    [setIsPinned]
   );
 
   // 一键重置卡片尺寸为 600x900px

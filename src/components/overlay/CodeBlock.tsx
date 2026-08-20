@@ -11,12 +11,16 @@ export interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
   inline?: boolean;
   className?: string;
   children?: React.ReactNode;
+  codeBlockWrap?: boolean;
+  codeBlockLineNumbers?: boolean;
 }
 
 export const CodeBlock: React.FC<CodeBlockProps> = ({
   inline,
   className,
   children,
+  codeBlockWrap = false,
+  codeBlockLineNumbers = false,
   ...props
 }) => {
   const [copied, setCopied] = useState(false);
@@ -24,7 +28,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   const language = match ? match[1] : '';
   const rawCode = String(children).replace(/\n$/, '');
 
-  // 拆分行以支持 BUI 优雅行号
+  // 拆分行以支持行号与换行渲染
   const lines = useMemo(() => rawCode.split('\n'), [rawCode]);
 
   // 行内代码 — BUI 凹陷 chip
@@ -85,10 +89,19 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       <pre className="overflow-x-auto bg-inset px-3 py-2.5 font-mono text-[11.5px] leading-[1.7] text-ink-2 select-text custom-scrollbar">
         {lines.map((line, index) => (
           <div key={index} className="flex">
-            <span className="w-5 shrink-0 select-none pr-2.5 text-right text-[10.5px] leading-[1.86] text-ink-3/60">
-              {index + 1}
+            {codeBlockLineNumbers && (
+              <span className="w-5 shrink-0 select-none pr-2.5 text-right text-[10.5px] leading-[1.86] text-ink-3/60">
+                {index + 1}
+              </span>
+            )}
+            <span
+              className={cn(
+                'flex-1',
+                codeBlockWrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
+              )}
+            >
+              {line}
             </span>
-            <span className="whitespace-pre">{line}</span>
           </div>
         ))}
       </pre>
