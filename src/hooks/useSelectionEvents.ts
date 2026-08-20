@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { OverlayMode } from '@/state/overlayReducer';
@@ -10,6 +10,7 @@ interface SelectionEventPayload {
 }
 
 interface UseSelectionEventsProps {
+  isPinned: boolean;
   onSelectionTriggered: (text: string) => void;
   onRequestHide: () => void;
   cancelCloseTimer: () => void;
@@ -17,11 +18,15 @@ interface UseSelectionEventsProps {
 }
 
 export function useSelectionEvents({
+  isPinned,
   onSelectionTriggered,
   onRequestHide,
   cancelCloseTimer,
   updateWindowSize,
 }: UseSelectionEventsProps) {
+  const isPinnedRef = useRef(isPinned);
+  isPinnedRef.current = isPinned;
+
   useEffect(() => {
     const unlistenSelection = listen<SelectionEventPayload>('selection-triggered', (event) => {
       cancelCloseTimer();
@@ -31,6 +36,9 @@ export function useSelectionEvents({
     });
 
     const unlistenRequestHide = listen('request-overlay-hide', () => {
+      if (isPinnedRef.current) {
+        return;
+      }
       onRequestHide();
     });
 
@@ -40,3 +48,4 @@ export function useSelectionEvents({
     };
   }, [onSelectionTriggered, onRequestHide, cancelCloseTimer, updateWindowSize]);
 }
+

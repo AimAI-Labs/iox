@@ -7,6 +7,16 @@ export default {
   ],
   theme: {
     extend: {
+      spacing: {
+        /* BUI 分数级刻度 */
+        "5.5": "1.375rem",
+        "6.5": "1.625rem",
+        "7.5": "1.875rem",
+        "8.5": "2.125rem",
+        "9.5": "2.375rem",
+        "95": "23.75rem",
+        "105": "26.25rem",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -48,11 +58,40 @@ export default {
           600: "#2563eb",
           700: "#1d4ed8",
         },
+        /* ── BUI (beautifului.dev) 设计令牌 ─────────────────── */
+        ink: {
+          DEFAULT: "var(--ink)",
+          2: "var(--ink-2)",
+          3: "var(--ink-3)",
+        },
+        surface: "var(--surface)",
+        "surface-solid": "var(--surface-solid)",
+        field: "var(--field)",
+        inset: "var(--inset)",
+        line: {
+          DEFAULT: "var(--line)",
+          strong: "var(--line-strong)",
+        },
+        hover: {
+          DEFAULT: "var(--hover)",
+          2: "var(--hover-2)",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        /* BUI 圆角体系 */
+        card: "14px",
+        control: "8px",
+        chip: "6px",
+      },
+      boxShadow: {
+        /* BUI 阴影体系 */
+        card: "0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 32px rgba(0, 0, 0, 0.09)",
+        hairline: "0 1px 2px rgba(0, 0, 0, 0.035)",
+        raised: "0 4px 24px rgba(0, 0, 0, 0.14)",
+        overlay: "0 16px 48px rgba(0, 0, 0, 0.2)",
       },
       keyframes: {
         "fade-in": {
@@ -83,6 +122,15 @@ export default {
           "0%, 100%": { opacity: "0.4", transform: "scale(1)" },
           "50%": { opacity: "0.8", transform: "scale(1.05)" },
         },
+        /* BUI 动效关键帧 */
+        "fade-up": {
+          "0%": { opacity: "0", transform: "translateY(4px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "pop-in": {
+          "0%": { opacity: "0", transform: "scale(0.96)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.15s ease-out",
@@ -92,6 +140,9 @@ export default {
         "spring-popup": "capsule-in 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "pulse-subtle": "pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         "glow-pulse": "glow-pulse 2.5s ease-in-out infinite",
+        /* BUI 签名缓动 cubic-bezier(0.23, 1, 0.32, 1) */
+        "fade-up": "fade-up 320ms cubic-bezier(0.23, 1, 0.32, 1)",
+        "pop-in": "pop-in 200ms cubic-bezier(0.23, 1, 0.32, 1)",
       },
     },
   },

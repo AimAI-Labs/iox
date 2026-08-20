@@ -35,6 +35,7 @@ export function useOverlayState(config: AppConfig | null) {
 
   // 2. 选词触发与退场事件监听
   useSelectionEvents({
+    isPinned: state.isPinned,
     onSelectionTriggered: (text) => dispatch({ type: 'SELECTION_TRIGGERED', text }),
     onRequestHide: executeGracefulHide,
     cancelCloseTimer,

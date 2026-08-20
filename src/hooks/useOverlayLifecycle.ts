@@ -50,18 +50,28 @@ export function useOverlayLifecycle({
     []
   );
 
-  // 执行平滑退场动画并隐藏窗口
-  const executeGracefulHide = useCallback(() => {
-    if (isPinnedRef.current) return;
-    setIsClosing(true);
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-    }
-    closeTimerRef.current = setTimeout(async () => {
-      await invoke('hide_overlay');
-      onHideComplete();
-    }, 100);
-  }, [setIsClosing, onHideComplete]);
+  // 组件加载时同步初始钉住状态至 Rust 后端
+  const hasSyncedInitialPin = useRef(false);
+  if (!hasSyncedInitialPin.current) {
+    hasSyncedInitialPin.current = true;
+    invoke('set_pin_state', { pinned: isPinned }).catch(() => {});
+  }
+
+  // 执行平滑退场动画并隐藏窗口 (force = true 时允许主动关闭固定窗口)
+  const executeGracefulHide = useCallback(
+    (force = false) => {
+      if (isPinnedRef.current && !force) return;
+      setIsClosing(true);
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+      }
+      closeTimerRef.current = setTimeout(async () => {
+        await invoke('hide_overlay');
+        onHideComplete();
+      }, 100);
+    },
+    [setIsClosing, onHideComplete]
+  );
 
   // 取消退场定时器（当新划词触发时调用）
   const cancelCloseTimer = useCallback(() => {
@@ -78,12 +88,10 @@ export function useOverlayLifecycle({
     invoke('set_pin_state', { pinned: next }).catch(() => {});
   }, [setIsPinned]);
 
-  // 关闭悬浮窗
+  // 主动关闭悬浮窗（隐藏窗口，保留用户记忆的钉住偏好）
   const handleClose = useCallback(async () => {
-    setIsPinned(false);
-    await invoke('set_pin_state', { pinned: false }).catch(() => {});
-    executeGracefulHide();
-  }, [setIsPinned, executeGracefulHide]);
+    executeGracefulHide(true);
+  }, [executeGracefulHide]);
 
   return {
     updateWindowSize,

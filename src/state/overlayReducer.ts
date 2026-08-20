@@ -16,6 +16,14 @@ export interface OverlayState {
   animKey: number;
 }
 
+const getInitialPinnedState = (): boolean => {
+  try {
+    return localStorage.getItem('iox_overlay_pinned') === 'true';
+  } catch {
+    return false;
+  }
+};
+
 export const initialOverlayState: OverlayState = {
   mode: 'bubble',
   visible: false,
@@ -24,7 +32,7 @@ export const initialOverlayState: OverlayState = {
   selectedModel: '',
   streamText: '',
   isLoading: false,
-  isPinned: false,
+  isPinned: getInitialPinnedState(),
   error: null,
   isClosing: false,
   animKey: 0,
@@ -58,7 +66,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         streamText: '',
         error: null,
         isLoading: false,
-        isPinned: false,
+        isPinned: state.isPinned, // 记忆并保留钉住状态
         isClosing: false,
         animKey: state.animKey + 1,
       };
@@ -125,6 +133,9 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
       };
 
     case 'SET_PINNED':
+      try {
+        localStorage.setItem('iox_overlay_pinned', String(action.isPinned));
+      } catch {}
       return {
         ...state,
         isPinned: action.isPinned,
@@ -153,6 +164,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
     case 'RESET_STATE':
       return {
         ...initialOverlayState,
+        isPinned: state.isPinned,
         animKey: state.animKey + 1,
       };
 

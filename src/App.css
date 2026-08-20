@@ -4,6 +4,30 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────
+   BUI (beautifului.dev) 动效关键帧
+   签名缓动: cubic-bezier(0.23, 1, 0.32, 1)
+   ───────────────────────────────────────────────────────── */
+
+/* 像素网格加载器 — 单元亮度波前脉冲 */
+@keyframes pixel-on {
+  0%, 100% { opacity: 0.15; }
+  40% { opacity: 1; }
+}
+
+/* 流光渐变文字 — 用于加载/思考中的状态标签 */
+@keyframes shimmer-text {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 流式文字浮现 — 词语从模糊中解析 */
+@keyframes stream-in {
+  0% { opacity: 0; filter: blur(4px); }
+  100% { opacity: 1; filter: blur(0); }
+}
+
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -39,6 +63,19 @@
     --primary-color: #2563eb;
     --success: #10b981;
     --danger: #ef4444;
+
+    /* ── BUI (beautifului.dev) 设计令牌 ─────────────────── */
+    --ink: #1f1e1c;
+    --ink-2: #57544e;
+    --ink-3: #99958e;
+    --surface: rgba(255, 255, 255, var(--overlay-opacity, 0.95));
+    --surface-solid: #ffffff;
+    --field: rgba(0, 0, 0, 0.045);
+    --inset: rgba(0, 0, 0, 0.05);
+    --line: rgba(0, 0, 0, 0.09);
+    --line-strong: rgba(0, 0, 0, 0.16);
+    --hover: rgba(0, 0, 0, 0.05);
+    --hover-2: rgba(0, 0, 0, 0.07);
   }
 
   .dark {
@@ -71,6 +108,19 @@
     --text-muted: #a1a1aa;
     --text-subtle: #71717a;
     --primary-color: #3b82f6;
+
+    /* ── BUI (beautifului.dev) 设计令牌 ─────────────────── */
+    --ink: #f0efec;
+    --ink-2: #a5a29b;
+    --ink-3: #76736c;
+    --surface: rgba(22, 23, 26, var(--overlay-opacity, 0.90));
+    --surface-solid: #1f2023;
+    --field: rgba(255, 255, 255, 0.055);
+    --inset: rgba(255, 255, 255, 0.045);
+    --line: rgba(255, 255, 255, 0.09);
+    --line-strong: rgba(255, 255, 255, 0.17);
+    --hover: rgba(255, 255, 255, 0.055);
+    --hover-2: rgba(255, 255, 255, 0.085);
   }
 
   * {

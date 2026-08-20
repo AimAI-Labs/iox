@@ -1,23 +1,29 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ActionConfig, ProviderConfig } from '@/types/config';
 import { CardHeader } from '@/components/overlay/CardHeader';
+import { LoadingState } from '@/components/overlay/LoadingState';
+import { ThinkingBlock } from '@/components/overlay/ThinkingBlock';
+import { CodeBlock } from '@/components/overlay/CodeBlock';
+import { PromptBar } from '@/components/overlay/PromptBar';
+import { ResponseToolbar } from '@/components/overlay/ResponseToolbar';
+import { UserBubble } from '@/components/overlay/UserBubble';
+import { ResizeHandle } from '@/components/overlay/ResizeHandle';
+import { DynamicIcon } from '@/components/Icons';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
-import {
-  Copy,
-  Check,
-  Send,
-  Square,
-  ChevronDown,
-  AlertCircle,
-} from 'lucide-react';
+import { AlertCircle, RotateCcw, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+/* ─────────────────────────────────────────────────────────
+ * 流式结果卡片 (参考千问桌面端布局)
+ * ───────────────────────────────────────────────────────── */
 
 export interface ResultCardProps {
   action: ActionConfig;
   providers: ProviderConfig[];
   selectedModel: string;
   streamText: string;
+  selectedText?: string;
   isLoading: boolean;
   isPinned: boolean;
   isClosing?: boolean;
@@ -29,11 +35,41 @@ export interface ResultCardProps {
   onClose: () => void;
 }
 
+// 辅助函数：解析思维链 (<think>...</think>) 与正文内容
+function parseThinkingAndMain(text: string) {
+  if (!text) {
+    return { thinkingText: '', mainText: '', isThinking: false };
+  }
+
+  const openTag = '<think>';
+  const closeTag = '</think>';
+  const openIndex = text.indexOf(openTag);
+
+  if (openIndex === -1) {
+    return { thinkingText: '', mainText: text, isThinking: false };
+  }
+
+  const closeIndex = text.indexOf(closeTag, openIndex);
+
+  if (closeIndex === -1) {
+    // 思考中，标签尚未闭合
+    const thinking = text.slice(openIndex + openTag.length);
+    const prefix = text.slice(0, openIndex);
+    return { thinkingText: thinking, mainText: prefix, isThinking: true };
+  }
+
+  // 思考已闭合
+  const thinking = text.slice(openIndex + openTag.length, closeIndex);
+  const main = text.slice(0, openIndex) + text.slice(closeIndex + closeTag.length);
+  return { thinkingText: thinking, mainText: main.trimStart(), isThinking: false };
+}
+
 export const ResultCard: React.FC<ResultCardProps> = ({
   action,
   providers,
   selectedModel,
   streamText,
+  selectedText = '',
   isLoading,
   isPinned,
   isClosing = false,
@@ -46,90 +82,143 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 }) => {
   const { copied, copy } = useCopyFeedback(2000);
   const [followUpInput, setFollowUpInput] = useState('');
-  const [showModelPicker, setShowModelPicker] = useState(false);
+  const [isThinkingOpen, setIsThinkingOpen] = useState(true);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const isAutoScrollRef = useRef(true);
+
+  // 耗时计时
+  const [totalDuration, setTotalDuration] = useState<number | undefined>(undefined);
+  const requestStartTimeRef = useRef<number | null>(null);
 
   const provider = providers.find((p) => p.id === action.providerId);
   const availableModels = provider?.models || [];
 
-  // 自动滚屏到底部
+  // 监听请求起止以计算总耗时
   useEffect(() => {
-    if (bodyRef.current && isLoading) {
+    if (isLoading) {
+      if (requestStartTimeRef.current === null) {
+        requestStartTimeRef.current = Date.now();
+      }
+      setTotalDuration(undefined);
+    } else if (requestStartTimeRef.current !== null) {
+      const sec = ((Date.now() - requestStartTimeRef.current) / 1000).toFixed(1);
+      setTotalDuration(parseFloat(sec));
+      requestStartTimeRef.current = null;
+    }
+  }, [isLoading]);
+
+  // 解析当前最新的思维链与正文状态
+  const { thinkingText, mainText, isThinking } = useMemo(() => {
+    return parseThinkingAndMain(streamText);
+  }, [streamText]);
+
+  // 当处于思考中时自动保持展开，思考结束后自动收起
+  const prevThinkingRef = useRef(isThinking);
+  useEffect(() => {
+    if (isThinking) {
+      setIsThinkingOpen(true);
+    } else if (prevThinkingRef.current && !isThinking) {
+      setIsThinkingOpen(false);
+    }
+    prevThinkingRef.current = isThinking;
+  }, [isThinking]);
+
+  // 结构化多轮对话气泡流 (Conversation Turns)
+  const conversationTurns = useMemo(() => {
+    const parts = streamText.split(/\n\n---\n\*\*追问：\*\*\s*/);
+    if (parts.length <= 1) {
+      return [
+        {
+          id: 'turn-0',
+          userPrompt: '',
+          rawAssistantText: streamText,
+        },
+      ];
+    }
+
+    return parts.map((part, index) => {
+      if (index === 0) {
+        return {
+          id: 'turn-0',
+          userPrompt: '',
+          rawAssistantText: part,
+        };
+      }
+      const firstNewline = part.indexOf('\n\n');
+      if (firstNewline === -1) {
+        return {
+          id: `turn-${index}`,
+          userPrompt: part.trim(),
+          rawAssistantText: '',
+        };
+      }
+      return {
+        id: `turn-${index}`,
+        userPrompt: part.slice(0, firstNewline).trim(),
+        rawAssistantText: part.slice(firstNewline + 2),
+      };
+    });
+  }, [streamText]);
+
+  // 智能自动滚屏
+  useEffect(() => {
+    if (bodyRef.current && isAutoScrollRef.current && isLoading) {
       bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
     }
-  }, [streamText, isLoading]);
+  }, [streamText, isLoading, thinkingText, isThinkingOpen]);
 
-  const handleFollowUpSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!followUpInput.trim() || isLoading) return;
-    onSendFollowUp(followUpInput);
+  const handleScroll = () => {
+    if (!bodyRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = bodyRef.current;
+    // 如果用户距离底部超过 40px，则暂停自动滚动
+    isAutoScrollRef.current = scrollHeight - (scrollTop + clientHeight) < 40;
+  };
+
+  const handleFollowUpSubmit = (prompt: string) => {
+    if (!prompt.trim() || isLoading) return;
+    onSendFollowUp(prompt);
     setFollowUpInput('');
+    isAutoScrollRef.current = true;
+  };
+
+  const handleRegenerate = () => {
+    if (isLoading) return;
+    onModelChange(selectedModel);
+  };
+
+  const handleToggleThinking = () => {
+    setIsThinkingOpen((prev) => !prev);
   };
 
   return (
     <div
       className={cn(
-        "flex flex-col w-full h-full",
-        "bg-[var(--bg-overlay-card)] text-foreground backdrop-blur-2xl",
-        "border border-black/10 dark:border-white/10",
-        "rounded-xl overflow-hidden",
-        isClosing ? "animate-capsule-out" : "animate-in fade-in zoom-in-95 duration-150"
+        'relative flex flex-col w-full h-full select-none',
+        'bg-[#fcfcfd]/95 dark:bg-[#18181b]/95 text-zinc-900 dark:text-zinc-100 backdrop-blur-2xl',
+        'rounded-[20px] overflow-hidden shadow-2xl border border-zinc-200/80 dark:border-zinc-800/80',
+        isClosing
+          ? 'animate-capsule-out'
+          : 'animate-in fade-in zoom-in-95 duration-150'
       )}
     >
-      {/* 统一卡片头部 */}
+      {/* 1. 样图风格极简卡片头部 */}
       <CardHeader
         icon={action.icon}
         title={action.name}
-        badge={
-          availableModels.length > 0 ? (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowModelPicker((prev) => !prev)}
-                onMouseDown={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-black/5 dark:bg-white/5 text-muted-foreground hover:text-foreground border border-black/5 dark:border-white/10 transition-colors cursor-pointer"
-                title="切换模型"
-              >
-                <span>{selectedModel || '默认模型'}</span>
-                <ChevronDown size={11} className="opacity-60" />
-              </button>
-
-              {showModelPicker && (
-                <div className="absolute top-full mt-1.5 left-0 z-50 min-w-[150px] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-xl shadow-xl p-1 animate-in fade-in zoom-in-95 duration-100">
-                  {availableModels.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => {
-                        onModelChange(m);
-                        setShowModelPicker(false);
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      className={cn(
-                        "w-full text-left px-2.5 py-1.5 text-xs rounded-lg transition-colors cursor-pointer",
-                        m === selectedModel
-                          ? "bg-primary/10 text-primary font-medium"
-                          : "text-foreground hover:bg-black/5 dark:hover:bg-white/5"
-                      )}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : undefined
-        }
         tools={
-          streamText ? (
+          mainText ? (
             <button
               type="button"
-              onClick={() => copy(streamText)}
+              onClick={() => copy(mainText)}
               onMouseDown={(e) => e.stopPropagation()}
-              className="inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer mr-0.5"
-              title="复制回答"
+              className="mr-0.5 flex size-7 items-center justify-center rounded-lg text-zinc-500 transition-colors duration-100 hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 active:scale-95 cursor-pointer"
+              title="复制完整回答"
             >
-              {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+              {copied ? (
+                <Check size={14} className="text-emerald-600" />
+              ) : (
+                <Copy size={14} strokeWidth={1.8} />
+              )}
             </button>
           ) : undefined
         }
@@ -138,65 +227,159 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         onClose={onClose}
       />
 
-      {/* 渲染正文区 */}
+
+      {/* 2. 正文与对话流内容区 */}
       <div
         ref={bodyRef}
-        className="flex-1 p-4 overflow-y-auto select-text text-foreground text-xs leading-relaxed bg-transparent"
+        onScroll={handleScroll}
+        className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-3 pb-2 text-[13px] text-ink select-text custom-scrollbar"
       >
+        {/* 初始用户选中文本气泡 (如果存在) */}
+        {selectedText && (
+          <UserBubble content={selectedText} isInitialContext={true} />
+        )}
+
         {error ? (
-          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs">
-            <AlertCircle size={15} className="shrink-0" />
-            <span>{error}</span>
+          /* BUI 错误提示卡 */
+          <div className="flex flex-col gap-2 rounded-[10px] border border-red-500/20 bg-red-500/5 p-3 text-red-600 dark:text-red-400 animate-fade-up">
+            <div className="flex items-center gap-2 text-[13px] font-medium">
+              <AlertCircle size={14} className="shrink-0" />
+              <span>请求发生异常</span>
+            </div>
+            <p className="pl-6 text-[12px] leading-relaxed break-words opacity-90">
+              {error}
+            </p>
+            <div className="flex items-center gap-1.5 pl-6">
+              <button
+                type="button"
+                onClick={handleRegenerate}
+                className="inline-flex h-6 items-center gap-1 rounded-[6px] bg-red-500/90 px-2 text-[11.5px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-red-500 active:scale-[0.96] cursor-pointer"
+              >
+                <RotateCcw size={11} />
+                <span>重试</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => copy(error)}
+                className="inline-flex h-6 items-center gap-1 rounded-[6px] bg-field px-2 text-[11.5px] text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink active:scale-[0.96] cursor-pointer"
+              >
+                <Copy size={11} />
+                <span>复制错误信息</span>
+              </button>
+            </div>
           </div>
         ) : streamText ? (
-          <div className="markdown-body">
-            <ReactMarkdown>{streamText}</ReactMarkdown>
-            {isLoading && <span className="inline-block w-1.5 h-4 ml-0.5 bg-primary animate-pulse" />}
+          /* 正常对话流渲染 */
+          <div className="flex flex-col gap-3">
+            {conversationTurns.map((turn, index) => {
+              const isLast = index === conversationTurns.length - 1;
+              const {
+                thinkingText: turnThinking,
+                mainText: turnMain,
+                isThinking: turnIsThinking,
+              } = parseThinkingAndMain(turn.rawAssistantText);
+
+              return (
+                <div key={turn.id} className="flex flex-col gap-1.5">
+                  {/* 用户追问气泡 */}
+                  {turn.userPrompt && (
+                    <UserBubble content={turn.userPrompt} />
+                  )}
+
+                  {/* BUI Section 轮次块 */}
+                  {(turnThinking || turnMain || turnIsThinking || isLast) && (
+                    <div className="flex flex-col">
+                      {/* Section 头部 — 动作名 + 模型 + 耗时 */}
+                      <div className="mb-1 flex items-center gap-1.5 text-[12px] leading-[1.3] select-none">
+                        <DynamicIcon
+                          name={action.icon}
+                          size={13}
+                          className="shrink-0 text-ink-3"
+                        />
+                        <span className="font-medium text-ink">{action.name}</span>
+                        {selectedModel && (
+                          <span className="max-w-44 truncate text-ink-3">
+                            {selectedModel}
+                          </span>
+                        )}
+                        {isLast && !isLoading && totalDuration !== undefined && (
+                          <span className="font-mono text-ink-3 tabular-nums">
+                            for {totalDuration.toFixed(1)}s
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 思维链折叠组件 */}
+                      {(turnThinking || turnIsThinking) && (
+                        <ThinkingBlock
+                          thinkingText={turnThinking}
+                          isThinking={turnIsThinking}
+                          isOpen={isThinkingOpen}
+                          onToggleOpen={handleToggleThinking}
+                        />
+                      )}
+
+                      {/* Markdown 正文 */}
+                      {turnMain && (
+                        <div className="markdown-body">
+                          <ReactMarkdown
+                            components={{
+                              code: CodeBlock as any,
+                              pre: ({ children }: any) => <>{children}</>,
+                            }}
+                          >
+                            {turnMain}
+                          </ReactMarkdown>
+                          {isLoading && isLast && !turnIsThinking && (
+                            <span className="ml-0.5 inline-block h-3.5 w-[3px] translate-y-0.5 rounded-full bg-primary align-middle animate-pulse" />
+                          )}
+                        </div>
+                      )}
+
+                      {/* 最后一轮完成时的结果工具栏 */}
+                      {isLast && !isLoading && turnMain && (
+                        <ResponseToolbar
+                          text={turnMain}
+                          durationSeconds={totalDuration}
+                          hasThinking={Boolean(turnThinking)}
+                          isThinkingOpen={isThinkingOpen}
+                          onToggleThinking={handleToggleThinking}
+                          onCopy={() => copy(turnMain)}
+                          isCopied={copied}
+                          onRegenerate={handleRegenerate}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.3s]" />
-              <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:-0.15s]" />
-              <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" />
-            </div>
-            <p className="text-xs">AI 正在思考中...</p>
+          /* 首字等待 — BUI Pixel-Grid LoadingState */
+          <div className="pt-1.5">
+            <LoadingState label="AI 正在深入思考分析中..." />
           </div>
         )}
       </div>
 
-      {/* 底部追问栏 */}
-      <div className="p-2.5 px-3 border-t border-black/10 dark:border-white/10 bg-transparent">
-        <form onSubmit={handleFollowUpSubmit} className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="追问或进一步要求... (Enter 发送)"
-            value={followUpInput}
-            onChange={(e) => setFollowUpInput(e.target.value)}
-            disabled={isLoading}
-            className="flex-1 h-8 px-3 text-xs bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all select-text"
-          />
-          {isLoading ? (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="inline-flex items-center justify-center w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors cursor-pointer"
-              title="停止生成"
-            >
-              <Square size={13} />
-            </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={!followUpInput.trim()}
-              className="inline-flex items-center justify-center w-8 h-8 bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-primary-foreground rounded-lg transition-all active:scale-95 cursor-pointer"
-              title="发送追问"
-            >
-              <Send size={13} />
-            </button>
-          )}
-        </form>
-      </div>
+      {/* 3. 样图风格独立胶囊提问栏 */}
+      <PromptBar
+        value={followUpInput}
+        onChange={setFollowUpInput}
+        onSubmit={handleFollowUpSubmit}
+        onCancel={onCancel}
+        isLoading={isLoading}
+        disabled={Boolean(error)}
+        title={action.name || '千问'}
+        selectedModel={selectedModel}
+        availableModels={availableModels}
+        onModelChange={onModelChange}
+        onRegenerate={handleRegenerate}
+      />
+
+      {/* 4. 右下角原生缩放手柄 */}
+      <ResizeHandle />
     </div>
   );
 };

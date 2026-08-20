@@ -407,9 +407,11 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
             } else if msg == WM_LBUTTONUP {
                 let mut is_drag = false;
                 let mut is_double_or_triple = false;
+                let mut start_point: Option<(i32, i32)> = None;
 
                 if let Ok(mut state) = CLICK_STATE.lock() {
                     let start_pos = state.last_down_pos.take();
+                    start_point = start_pos;
                     let now = Instant::now();
                     let dbl_click_time_ms = GetDoubleClickTime() as u128;
 
@@ -456,9 +458,14 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                 }
 
                 if (is_drag || is_double_or_triple) && !is_dragging_overlay() {
-                    // 若点击在悬浮窗内部，不触发选词逻辑
+                    // 若按下或抬起落在悬浮窗内部，属于悬浮窗内部文本选择/交互，不触发全局选词取词
                     let inside_overlay = if let Some(ref handle) = app_handle {
-                        is_point_inside_overlay(handle, x, y)
+                        let is_p2_inside = is_point_inside_overlay(handle, x, y);
+                        let is_p1_inside = match start_point {
+                            Some(p1) => is_point_inside_overlay(handle, p1.0, p1.1),
+                            None => false,
+                        };
+                        is_p1_inside || is_p2_inside
                     } else {
                         false
                     };
