@@ -20,6 +20,7 @@ export function useOverlayState(config: AppConfig | null) {
   // 1. 生命周期与动画控制
   const {
     updateWindowSize,
+    handleResetCardSize,
     executeGracefulHide,
     cancelCloseTimer,
     handlePinToggle,
@@ -27,7 +28,9 @@ export function useOverlayState(config: AppConfig | null) {
   } = useOverlayLifecycle({
     actions: config?.actions,
     iconOnly: config?.general.iconOnlyBubble,
+    apiCardSize: config?.general.apiCardSize,
     isPinned: state.isPinned,
+    currentMode: state.mode,
     setIsPinned: (pinned) => dispatch({ type: 'SET_PINNED', isPinned: pinned }),
     setIsClosing: (closing) => dispatch({ type: 'SET_CLOSING', isClosing: closing }),
     onHideComplete: () => dispatch({ type: 'HIDE_COMPLETE' }),
@@ -86,5 +89,7 @@ export function useOverlayState(config: AppConfig | null) {
     handleCancel,
     handleClose,
     handlePinToggle,
+    handleResetCardSize,
+    updateWindowSize,
   };
 }

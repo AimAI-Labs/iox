@@ -36,9 +36,6 @@ export function useSelectionEvents({
     });
 
     const unlistenRequestHide = listen('request-overlay-hide', () => {
-      if (isPinnedRef.current) {
-        return;
-      }
       onRequestHide();
     });
 

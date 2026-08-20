@@ -45,15 +45,19 @@ export function App() {
   // 全局 Esc 键与鼠标侧键监听
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && windowLabel === 'overlay' && !overlayState.isPinned) {
-        overlayState.handleClose();
+      if (e.key === 'Escape' && windowLabel === 'overlay') {
+        if (overlayState.mode === 'bubble' || !overlayState.isPinned) {
+          overlayState.handleClose();
+        }
       }
     };
 
     const handleMouseDown = (e: MouseEvent) => {
       // 3: 鼠标后退侧键, 4: 鼠标前进侧键
-      if ((e.button === 3 || e.button === 4) && windowLabel === 'overlay' && !overlayState.isPinned) {
-        overlayState.handleClose();
+      if ((e.button === 3 || e.button === 4) && windowLabel === 'overlay') {
+        if (overlayState.mode === 'bubble' || !overlayState.isPinned) {
+          overlayState.handleClose();
+        }
       }
     };
 
@@ -66,6 +70,37 @@ export function App() {
       window.removeEventListener('auxclick', handleMouseDown);
     };
   }, [windowLabel, overlayState]);
+
+  // 监听 Overlay 在 Card 模式下的手动拖拽缩放，防抖自动记忆尺寸
+  useEffect(() => {
+    if (windowLabel !== 'overlay') return;
+
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleResize = () => {
+      if (overlayState.mode !== 'card') return;
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(async () => {
+        try {
+          const win = getCurrentWebviewWindow();
+          const size = await win.innerSize();
+          const scale = await win.scaleFactor();
+          const w = Math.round(size.width / scale);
+          const h = Math.round(size.height / scale);
+          if (w >= 360 && h >= 300) {
+            await invoke('save_api_card_size', { width: w, height: h });
+          }
+        } catch {
+          // ignore
+        }
+      }, 300);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [windowLabel, overlayState.mode]);
 
   if (loading || !config) {
     return (
@@ -126,6 +161,7 @@ export function App() {
             onCancel={overlayState.handleCancel}
             onPinToggle={overlayState.handlePinToggle}
             onClose={overlayState.handleClose}
+            onResetSize={overlayState.handleResetCardSize}
           />
         ) : null}
       </div>

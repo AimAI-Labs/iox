@@ -33,6 +33,7 @@ export interface ResultCardProps {
   onCancel: () => void;
   onPinToggle: () => void;
   onClose: () => void;
+  onResetSize?: () => void;
 }
 
 // 辅助函数：解析思维链 (<think>...</think>) 与正文内容
@@ -79,6 +80,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   onCancel,
   onPinToggle,
   onClose,
+  onResetSize,
 }) => {
   const { copied, copy } = useCopyFeedback(2000);
   const [followUpInput, setFollowUpInput] = useState('');
@@ -225,6 +227,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         isPinned={isPinned}
         onPinToggle={onPinToggle}
         onClose={onClose}
+        onResetSize={onResetSize}
       />
 
 
@@ -379,7 +382,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       />
 
       {/* 4. 右下角原生缩放手柄 */}
-      <ResizeHandle />
+      <ResizeHandle onReset={onResetSize} />
     </div>
   );
 };

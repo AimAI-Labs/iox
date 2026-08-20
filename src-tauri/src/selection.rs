@@ -112,9 +112,9 @@ pub fn is_overlay_visible(app: &AppHandle) -> bool {
     false
 }
 
-/// 尝试隐藏未固定的 Overlay 窗口
+/// 尝试隐藏未固定的 Overlay 窗口（若处于 Card 态且被钉住则不隐藏；Bubble 模式下即使处于钉住偏好也必须隐藏）
 pub fn hide_overlay_if_unpinned(app: &AppHandle) {
-    if is_overlay_pinned() {
+    if is_overlay_pinned() && !is_overlay_bubble_mode() {
         return;
     }
     if let Some(window) = app.get_webview_window("overlay") {
@@ -132,7 +132,7 @@ pub fn hide_overlay_if_unpinned(app: &AppHandle) {
 
 /// 优雅请求隐藏 Overlay（向前端广播退场动画事件，并设置 280ms 延时兜底，带 HIDE_SEQ 防抖）
 pub fn request_hide_overlay_gracefully(app: &AppHandle) {
-    if is_overlay_pinned() {
+    if is_overlay_pinned() && !is_overlay_bubble_mode() {
         return;
     }
     if !is_overlay_visible(app) {
@@ -614,6 +614,7 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
                     let _ = handle.emit("selection-triggered", payload);
                     
                     // 动态计算胶囊气泡所需物理宽度并调度窗口定位与展示
+                    crate::overlay_state::set_overlay_bubble_mode(true);
                     let bubble_width = crate::window_manager::calculate_bubble_bar_width(&actions, icon_only);
                     crate::window_manager::show_overlay_at(&handle, cursor_pos.0, cursor_pos.1, bubble_width, 46);
                 }

@@ -199,6 +199,7 @@ fn toggle_maximize_main_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn hide_overlay(app: AppHandle) -> Result<(), String> {
+    overlay_state::set_overlay_bubble_mode(true);
     // 刻意不复位 Pin 状态：钉住是跨会话的用户偏好（由前端 localStorage 记忆），
     // 主动关闭仅结束当前窗口会话；隐藏后的残留 pin 不会拦截后续划词
     // （selection.rs 已用「钉住 && 可见 && 卡片态」组合条件防死锁）
@@ -223,6 +224,22 @@ fn set_drag_state(dragging: bool) {
 #[tauri::command]
 fn set_overlay_mode(mode: String) {
     overlay_state::set_overlay_bubble_mode(mode == "bubble");
+}
+
+#[tauri::command]
+fn save_api_card_size(
+    app: AppHandle,
+    state: State<AppState>,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    if width >= 320.0 && height >= 200.0 {
+        let mut config = state.config.lock().unwrap();
+        config.general.api_card_size = (width.round(), height.round());
+        let _ = config.save();
+        let _ = app.emit("config_updated", &*config);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -496,6 +513,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             save_config,
+            save_api_card_size,
             trigger_api_action,
             trigger_web_action,
             cancel_action,

@@ -212,7 +212,7 @@ pub fn show_overlay_at(
     }
 }
 
-/// 调整悬浮窗尺寸（从气泡态切换到卡片态，或卡片态折叠）
+/// 调整悬浮窗尺寸（从气泡态切换到卡片态，或卡片态折叠/重置）
 pub fn resize_overlay_window(
     window: &WebviewWindow,
     width: i32,
@@ -239,23 +239,41 @@ pub fn resize_overlay_window(
                 if current_width == phys_width && current_height == phys_height && !allow_focus {
                     return;
                 }
+
+                // 获取当前屏幕工作区，防止 600x900px 大卡片在屏幕边缘展开时溢出
+                let work_area = get_screen_work_area(rect.left, rect.top);
+                let mut target_x = rect.left;
+                let mut target_y = rect.top;
+
+                if target_x + phys_width > work_area.2 - 8 {
+                    target_x = (work_area.2 - phys_width - 8).max(work_area.0 + 8);
+                }
+                if target_y + phys_height > work_area.3 - 8 {
+                    target_y = (work_area.3 - phys_height - 8).max(work_area.1 + 8);
+                }
+                if target_x < work_area.0 + 8 {
+                    target_x = work_area.0 + 8;
+                }
+                if target_y < work_area.1 + 8 {
+                    target_y = work_area.1 + 8;
+                }
+
+                let flags = if allow_focus {
+                    SWP_SHOWWINDOW
+                } else {
+                    SWP_NOACTIVATE | SWP_SHOWWINDOW
+                };
+
+                SetWindowPos(
+                    hwnd_raw,
+                    HWND_TOPMOST,
+                    target_x,
+                    target_y,
+                    phys_width,
+                    phys_height,
+                    flags,
+                );
             }
-
-            let flags = if allow_focus {
-                SWP_NOMOVE | SWP_SHOWWINDOW
-            } else {
-                SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW
-            };
-
-            SetWindowPos(
-                hwnd_raw,
-                HWND_TOPMOST,
-                0,
-                0,
-                phys_width,
-                phys_height,
-                flags,
-            );
         }
     }
 }

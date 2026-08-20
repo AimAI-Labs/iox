@@ -2,13 +2,13 @@ import React from 'react';
 import { useWindowDrag } from '@/hooks/useWindowDrag';
 import { DynamicIcon } from '@/components/Icons';
 import { MacTrafficLights } from '@/components/MacTrafficLights';
-import { Pin } from 'lucide-react';
+import { Pin, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────────────────────────────────
  * Mac 风格卡片头部导航栏
  * 左侧：Mac 交通灯三色圆点 + 动作图标 + 标题
- * 右侧：操作工具组 + 钉住 (Pin) 按钮
+ * 右侧：操作工具组 + 重置尺寸 + 钉住 (Pin) 按钮
  * ───────────────────────────────────────────────────────── */
 
 export interface CardHeaderProps {
@@ -20,6 +20,7 @@ export interface CardHeaderProps {
   onPinToggle: () => void;
   onClose: () => void;
   onMinimize?: () => void;
+  onResetSize?: () => void;
 }
 
 export const CardHeader: React.FC<CardHeaderProps> = ({
@@ -31,6 +32,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   onPinToggle,
   onClose,
   onMinimize,
+  onResetSize,
 }) => {
   const { handleMouseDown } = useWindowDrag();
 
@@ -69,9 +71,21 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
         </div>
       </div>
 
-      {/* 右侧：工具按钮组 + 钉住 (Pin) 按钮 */}
+      {/* 右侧：工具按钮组 + 重置尺寸 + 钉住 (Pin) 按钮 */}
       <div data-tauri-drag-region className="flex shrink-0 items-center gap-1">
         {tools}
+
+        {onResetSize && (
+          <button
+            type="button"
+            onClick={onResetSize}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="flex size-6 items-center justify-center rounded-md text-zinc-500 transition-colors duration-150 hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer"
+            title="恢复默认卡片尺寸 (600 × 900)"
+          >
+            <RotateCcw size={12} />
+          </button>
+        )}
 
         <button
           type="button"

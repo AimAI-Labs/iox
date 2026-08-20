@@ -11,6 +11,7 @@ export interface GeneralConfig {
   autoCopyOnWebAction: boolean;
   overlayOpacity?: number;
   webWindowSize?: [number, number];
+  apiCardSize?: [number, number];
   iconOnlyBubble?: boolean;
   enableFloatingBall?: boolean;
   floatingBallAutoHide?: boolean;

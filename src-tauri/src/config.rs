@@ -14,6 +14,10 @@ fn default_web_window_size() -> (f64, f64) {
     (860.0, 640.0)
 }
 
+fn default_api_card_size() -> (f64, f64) {
+    (600.0, 900.0)
+}
+
 fn default_true() -> bool {
     true
 }
@@ -39,6 +43,8 @@ pub struct GeneralConfig {
     pub overlay_opacity: u32,
     #[serde(default = "default_web_window_size")]
     pub web_window_size: (f64, f64),
+    #[serde(default = "default_api_card_size")]
+    pub api_card_size: (f64, f64),
     #[serde(default)]
     pub icon_only_bubble: bool,
     #[serde(default = "default_true")]
@@ -62,6 +68,7 @@ impl Default for GeneralConfig {
             auto_copy_on_web_action: false,
             overlay_opacity: 90,
             web_window_size: (860.0, 640.0),
+            api_card_size: (600.0, 900.0),
             icon_only_bubble: false,
             enable_floating_ball: true,
             floating_ball_auto_hide: true,
@@ -410,6 +417,7 @@ mod tests {
         assert_eq!(deserialized.general.web_window_mode, "multi_window");
         assert_eq!(deserialized.general.overlay_opacity, 90);
         assert_eq!(deserialized.general.web_window_size, (860.0, 640.0));
+        assert_eq!(deserialized.general.api_card_size, (600.0, 900.0));
         assert_eq!(config.providers.len(), deserialized.providers.len());
         assert_eq!(config.actions.len(), deserialized.actions.len());
     }
@@ -432,10 +440,12 @@ mod tests {
         let config: AppConfig = serde_json::from_str(raw_json).expect("Deserialize legacy config");
         assert_eq!(config.general.overlay_opacity, 90);
         assert_eq!(config.general.web_window_size, (860.0, 640.0));
+        assert_eq!(config.general.api_card_size, (600.0, 900.0));
 
         let default_config = AppConfig::default();
         assert_eq!(default_config.general.overlay_opacity, 90);
         assert_eq!(default_config.general.web_window_size, (860.0, 640.0));
+        assert_eq!(default_config.general.api_card_size, (600.0, 900.0));
     }
 
     #[test]

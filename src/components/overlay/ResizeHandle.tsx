@@ -7,7 +7,11 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
  * 整个 resize 循环 (WM_SYSCOMMAND SC_SIZE)，零 IPC 洪泛
  * ───────────────────────────────────────────────────────── */
 
-export const ResizeHandle: React.FC = () => {
+export interface ResizeHandleProps {
+  onReset?: () => void;
+}
+
+export const ResizeHandle: React.FC<ResizeHandleProps> = ({ onReset }) => {
   const handleMouseDown = useCallback(async (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -19,18 +23,30 @@ export const ResizeHandle: React.FC = () => {
     }
   }, []);
 
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (onReset) {
+        onReset();
+      }
+    },
+    [onReset]
+  );
+
   return (
     <div
       onMouseDown={handleMouseDown}
-      className="absolute right-0 bottom-0 z-20 flex size-4 cursor-nwse-resize items-end justify-end p-0.5 select-none"
-      title="拖拽调整大小"
+      onDoubleClick={handleDoubleClick}
+      className="absolute right-0 bottom-0 z-20 flex size-4 cursor-nwse-resize items-end justify-end p-0.5 select-none transition-transform hover:scale-110 active:scale-95"
+      title="拖拽调整大小 (双击恢复默认尺寸 600×900)"
     >
       {/* BUI 极简三点角标 */}
       <svg
         width="8"
         height="8"
         viewBox="0 0 8 8"
-        className="text-ink-3/50"
+        className="text-ink-3/50 hover:text-ink-3 transition-colors"
         fill="currentColor"
         aria-hidden="true"
       >
