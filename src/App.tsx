@@ -30,8 +30,13 @@ export function App() {
 
   const overlayState = useOverlayState(config);
 
-  // 统一应用与监听主题及透明度
-  useTheme(config?.general.theme, config?.general.overlayOpacity);
+  // 主窗口的主题由 Settings 组件独占管理（支持即时预览），
+  // overlay 和 floating_ball 窗口由此处管理
+  const isMainWindow = windowLabel === 'main';
+  useTheme(
+    isMainWindow ? undefined : config?.general.theme,
+    isMainWindow ? undefined : config?.general.overlayOpacity
+  );
 
   const handleOpenSettings = async (tab?: string) => {
     try {
@@ -158,10 +163,14 @@ export function App() {
             isClosing={overlayState.isClosing}
             error={overlayState.error}
             apiCard={config.apiCard}
+            thinkingMode={overlayState.thinkingMode}
+            onProviderChange={overlayState.handleProviderChange}
             onModelChange={overlayState.handleModelChange}
+            onThinkingModeChange={overlayState.handleThinkingModeChange}
             onSendFollowUp={overlayState.handleSendFollowUp}
             onRegenerateCurrentTurn={overlayState.handleRegenerateCurrentTurn}
             onNewChat={overlayState.handleNewChat}
+            onRestoreSession={overlayState.handleRestoreSession}
             onExportMarkdown={overlayState.handleExportMarkdown}
             onOpenSettings={() => handleOpenSettings('api_card')}
             onCancel={overlayState.handleCancel}

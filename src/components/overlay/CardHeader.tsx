@@ -2,13 +2,13 @@ import React from 'react';
 import { useWindowDrag } from '@/hooks/useWindowDrag';
 import { DynamicIcon } from '@/components/Icons';
 import { MacTrafficLights } from '@/components/MacTrafficLights';
-import { Pin, RotateCcw } from 'lucide-react';
+import { Pin, RotateCcw, Plus, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────────────────────────────────
  * Mac 风格卡片头部导航栏
- * 左侧：Mac 交通灯三色圆点 + 动作图标 + 标题
- * 右侧：操作工具组 + 重置尺寸 + 钉住 (Pin) 按钮
+ * 左侧：Mac 交通灯三色圆点 + 动作图标 + 标题 + [+] 新建会话
+ * 右侧：操作工具组 + 会话历史 + 重置尺寸 + 钉住 (Pin) 按钮
  * ───────────────────────────────────────────────────────── */
 
 export interface CardHeaderProps {
@@ -18,6 +18,9 @@ export interface CardHeaderProps {
   tools?: React.ReactNode;
   isPinned: boolean;
   isMaximized?: boolean;
+  sessionCount?: number;
+  onNewChat?: () => void;
+  onToggleSessions?: () => void;
   onPinToggle: () => void;
   onToggleMaximize?: () => void;
   onClose: () => void;
@@ -32,6 +35,9 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   tools,
   isPinned,
   isMaximized = false,
+  sessionCount,
+  onNewChat,
+  onToggleSessions,
   onPinToggle,
   onToggleMaximize,
   onClose,
@@ -45,8 +51,8 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
       onMouseDown={handleMouseDown}
       className="flex shrink-0 items-center justify-between border-b border-line/60 bg-transparent px-3 py-2 select-none cursor-grab active:cursor-grabbing"
     >
-      {/* 左侧：Mac 交通灯三色圆点 + 动作图标 + 标题 */}
-      <div data-tauri-drag-region className="flex min-w-0 items-center gap-2.5">
+      {/* 左侧：Mac 交通灯三色圆点 + 动作图标 + 标题 + [+] 新建会话按钮 */}
+      <div data-tauri-drag-region className="flex min-w-0 items-center gap-2">
         <MacTrafficLights
           onClose={onClose}
           onMinimize={onMinimize}
@@ -57,7 +63,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
           maximizeTitle={isMaximized ? '还原窗口尺寸' : '全屏最大化'}
         />
 
-        <div className="flex min-w-0 items-center gap-1.5 border-l border-line/70 pl-2.5">
+        <div className="flex min-w-0 items-center gap-1.5 border-l border-line/70 pl-2">
           {icon && (
             <DynamicIcon
               name={icon}
@@ -67,17 +73,46 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
           )}
           <span
             data-tauri-drag-region
-            className="truncate text-[13px] font-medium text-zinc-900 dark:text-zinc-100 cursor-grab active:cursor-grabbing"
+            className="truncate text-[13px] font-medium text-zinc-900 dark:text-zinc-100 cursor-grab active:cursor-grabbing max-w-36"
           >
             {title}
           </span>
           {badge}
+
+          {/* [+] 开启新会话按钮 */}
+          {onNewChat && (
+            <button
+              type="button"
+              onClick={onNewChat}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="flex size-5 items-center justify-center rounded text-zinc-400 hover:bg-zinc-200/70 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors cursor-pointer ml-0.5"
+              title="开启新对话 (+)"
+            >
+              <Plus size={13} strokeWidth={2.4} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 右侧：工具按钮组 + 重置尺寸 + 钉住 (Pin) 按钮 */}
+      {/* 右侧：工具按钮组 + 会话历史 + 重置尺寸 + 钉住 (Pin) 按钮 */}
       <div data-tauri-drag-region className="flex shrink-0 items-center gap-1">
         {tools}
+
+        {/* 会话历史列表按钮 */}
+        {onToggleSessions && (
+          <button
+            type="button"
+            onClick={onToggleSessions}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="flex size-6 items-center justify-center rounded-md text-zinc-500 transition-colors duration-150 hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer relative"
+            title="查看历史对话记录"
+          >
+            <MessageSquare size={13} strokeWidth={1.8} />
+            {sessionCount !== undefined && sessionCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex size-2 rounded-full bg-blue-500" />
+            )}
+          </button>
+        )}
 
         {onResetSize && (
           <button
@@ -114,6 +149,3 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
     </div>
   );
 };
-
-
-

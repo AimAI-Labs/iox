@@ -11,8 +11,10 @@ import { ResponseToolbar } from '@/components/overlay/ResponseToolbar';
 import { UserBubble } from '@/components/overlay/UserBubble';
 import { ResizeHandle } from '@/components/overlay/ResizeHandle';
 import { ContextMenu } from '@/components/overlay/ContextMenu';
+import { SessionPanel } from '@/components/overlay/SessionPanel';
 import { DynamicIcon } from '@/components/Icons';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
+import { useChatSessions } from '@/hooks/useChatSessions';
 import { AlertCircle, RotateCcw, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,10 +33,14 @@ export interface ResultCardProps {
   isClosing?: boolean;
   error: string | null;
   apiCard?: ApiCardConfig;
+  thinkingMode?: 'quick' | 'deep';
+  onProviderChange?: (providerId: string) => void;
   onModelChange: (model: string) => void;
+  onThinkingModeChange?: (mode: 'quick' | 'deep') => void;
   onSendFollowUp: (prompt: string) => void;
-  onRegenerateCurrentTurn?: (thinkingAugment?: string) => void;
+  onRegenerateCurrentTurn?: () => void;
   onNewChat?: () => void;
+  onRestoreSession?: (text: string, model?: string, providerId?: string) => void;
   onExportMarkdown?: () => void;
   onOpenSettings?: () => void;
   onCancel: () => void;
@@ -83,10 +89,14 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   isClosing = false,
   error,
   apiCard,
+  thinkingMode = 'quick',
+  onProviderChange,
   onModelChange,
+  onThinkingModeChange,
   onSendFollowUp,
   onRegenerateCurrentTurn,
   onNewChat,
+  onRestoreSession,
   onExportMarkdown,
   onOpenSettings,
   onCancel,
@@ -97,12 +107,26 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const { copied, copy } = useCopyFeedback(2000);
   const [followUpInput, setFollowUpInput] = useState('');
   const [isThinkingOpen, setIsThinkingOpen] = useState(apiCard?.thinkingDefaultOpen ?? true);
-  const [thinkingMode, setThinkingMode] = useState<'quick' | 'deep'>('quick');
   const [isMaximized, setIsMaximized] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; visible: boolean }>({
     x: 0,
     y: 0,
     visible: false,
+  });
+
+  // 多会话管理 Hook
+  const chatSessions = useChatSessions({
+    activeAction: action,
+    selectedModel,
+    selectedText,
+    streamText,
+    isLoading,
+    onRestoreSession: (saved) => {
+      onRestoreSession?.(saved.streamText, saved.model, saved.providerId);
+    },
+    onResetToNewChat: () => {
+      onNewChat?.();
+    },
   });
 
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -139,15 +163,11 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const handleRegenerate = React.useCallback(() => {
     if (isLoading) return;
     if (onRegenerateCurrentTurn) {
-      const augment =
-        thinkingMode === 'deep'
-          ? '[深度思考模式] 请进行严谨的逐步拆解与深度推理：'
-          : undefined;
-      onRegenerateCurrentTurn(augment);
+      onRegenerateCurrentTurn();
     } else {
       onModelChange(selectedModel);
     }
-  }, [isLoading, onRegenerateCurrentTurn, thinkingMode, onModelChange, selectedModel]);
+  }, [isLoading, onRegenerateCurrentTurn, onModelChange, selectedModel]);
 
   // 监听全局 Ctrl+R 快捷重新生成
   useEffect(() => {
@@ -248,11 +268,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   const handleFollowUpSubmit = (prompt: string) => {
     if (!prompt.trim() || isLoading) return;
-    const finalPrompt =
-      thinkingMode === 'deep'
-        ? `[深度思考模式] 请进行严谨的逐步拆解与深度推理：\n${prompt}`
-        : prompt;
-    onSendFollowUp(finalPrompt);
+    onSendFollowUp(prompt);
     setFollowUpInput('');
     isAutoScrollRef.current = true;
   };
@@ -263,9 +279,9 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   return (
     <div
-      onContextMenu={handleContextMenu}
+      onContextMenu={(e) => e.preventDefault()}
       className={cn(
-        'relative flex flex-col w-full h-full select-none',
+        'relative flex flex-col w-full h-full',
         'bg-[#fcfcfd]/95 dark:bg-[#18181b]/95 text-zinc-900 dark:text-zinc-100 backdrop-blur-2xl',
         'rounded-[20px] overflow-hidden shadow-2xl border border-zinc-200/80 dark:border-zinc-800/80',
         isClosing
@@ -277,6 +293,9 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       <CardHeader
         icon={action.icon}
         title={action.name}
+        sessionCount={chatSessions.sessions.length}
+        onNewChat={chatSessions.handleNewSession}
+        onToggleSessions={chatSessions.togglePanel}
         tools={
           mainText ? (
             <button
@@ -306,6 +325,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       {/* 2. 正文与对话流内容区 */}
       <div
         ref={bodyRef}
+        onContextMenu={handleContextMenu}
         onScroll={handleScroll}
         style={{ fontSize: `${apiCard?.fontSize || 13}px` }}
         className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-3 pb-2 text-ink select-text custom-scrollbar"
@@ -454,19 +474,16 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         onCancel={onCancel}
         isLoading={isLoading}
         disabled={Boolean(error)}
-        title={action.name || '千问'}
+        title={action.name || 'AI'}
+        providers={providers}
+        selectedProviderId={action.providerId}
         selectedModel={selectedModel}
         availableModels={availableModels}
         thinkingMode={thinkingMode}
-        isPinned={isPinned}
         sendKeyShortcut={apiCard?.sendKeyShortcut}
+        onProviderChange={onProviderChange}
         onModelChange={onModelChange}
-        onThinkingModeChange={setThinkingMode}
-        onRegenerate={handleRegenerate}
-        onNewChat={onNewChat}
-        onExportMarkdown={onExportMarkdown}
-        onTogglePin={onPinToggle}
-        onOpenSettings={onOpenSettings}
+        onThinkingModeChange={onThinkingModeChange}
       />
 
       {/* 4. 右下角原生缩放手柄 */}
@@ -491,11 +508,23 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         }}
         onCopyAllMarkdown={onExportMarkdown}
         onRegenerateCurrent={handleRegenerate}
-        onNewChat={onNewChat}
+        onNewChat={chatSessions.handleNewSession}
         onTogglePin={onPinToggle}
         onToggleMaximize={handleToggleMaximize}
         onResetSize={onResetSize}
         onOpenSettings={onOpenSettings}
+      />
+
+      {/* 6. 多会话历史侧滑面板 */}
+      <SessionPanel
+        isOpen={chatSessions.isPanelOpen}
+        sessions={chatSessions.sessions}
+        currentSessionId={chatSessions.currentSessionId}
+        onClose={() => chatSessions.setIsPanelOpen(false)}
+        onSelectSession={chatSessions.handleSwitchSession}
+        onNewSession={chatSessions.handleNewSession}
+        onDeleteSession={chatSessions.handleDeleteSession}
+        onClearAll={chatSessions.handleClearAllSessions}
       />
     </div>
   );

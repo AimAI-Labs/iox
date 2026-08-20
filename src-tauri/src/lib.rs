@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod chat_store;
 pub mod config;
 pub mod overlay_state;
 pub mod picker;
@@ -71,6 +72,7 @@ fn trigger_api_action(
     text: String,
     model_override: Option<String>,
     prompt_override: Option<String>,
+    thinking_enabled: Option<bool>,
 ) -> Result<(), String> {
     let (provider, model, prompt_template) = {
         let config = state.config.lock().unwrap();
@@ -115,6 +117,7 @@ fn trigger_api_action(
             model,
             None,
             user_prompt,
+            thinking_enabled.unwrap_or(false),
         )
         .await;
     });
@@ -562,7 +565,12 @@ pub fn run() {
             start_floating_ball_dragging,
             toggle_floating_ball,
             get_current_selection,
-            set_floating_ball_expanded
+            set_floating_ball_expanded,
+            chat_store::list_chat_sessions,
+            chat_store::get_chat_session,
+            chat_store::save_chat_session,
+            chat_store::delete_chat_session,
+            chat_store::clear_all_chat_sessions
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

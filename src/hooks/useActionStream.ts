@@ -26,6 +26,7 @@ interface UseActionStreamProps {
   selectedModel: string;
   streamText: string;
   isPinned: boolean;
+  thinkingMode: 'quick' | 'deep';
   onStartAction: (action: ActionConfig, model?: string) => void;
   onAppendToken: (token: string) => void;
   onStreamDone: () => void;
@@ -34,6 +35,8 @@ interface UseActionStreamProps {
   onSetLoading: (loading: boolean) => void;
   onSetError: (error: string | null) => void;
   onSetModel: (model: string) => void;
+  onSetProvider: (providerId: string, defaultModel: string) => void;
+  onSetThinkingMode: (mode: 'quick' | 'deep') => void;
   updateWindowSize: (
     mode: OverlayMode,
     allowFocus?: boolean,
@@ -49,6 +52,7 @@ export function useActionStream({
   selectedModel,
   streamText,
   isPinned,
+  thinkingMode,
   onStartAction,
   onAppendToken,
   onStreamDone,
@@ -57,6 +61,8 @@ export function useActionStream({
   onSetLoading,
   onSetError,
   onSetModel,
+  onSetProvider,
+  onSetThinkingMode,
   updateWindowSize,
   executeGracefulHide,
 }: UseActionStreamProps) {
@@ -89,6 +95,21 @@ export function useActionStream({
       unlistenError.then((fn) => fn());
     };
   }, [onAppendToken, onStreamDone, onStreamError]);
+
+  // 判断当前供应商是否支持 API 级深度思考（目前适配 DeepSeek 及其兼容端点）
+  const isThinkingApiSupported = useCallback(
+    (providerId?: string) => {
+      const pid = providerId || activeAction?.providerId;
+      if (!pid || !config?.providers) return false;
+      const provider = config.providers.find((p) => p.id === pid);
+      if (!provider) return false;
+      return (
+        provider.id.toLowerCase().includes('deepseek') ||
+        provider.baseUrl.toLowerCase().includes('deepseek')
+      );
+    },
+    [activeAction?.providerId, config?.providers]
+  );
 
   // 触发动作
   const handleTriggerAction = useCallback(
@@ -140,12 +161,15 @@ export function useActionStream({
       onStartAction(action, defaultModel);
       await updateWindowSize('card', true);
 
+      const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported(action.providerId);
+
       try {
         await invoke('trigger_api_action', {
           actionId: action.id,
           text: selectedText,
           modelOverride: defaultModel,
           promptOverride: action.promptTemplate,
+          thinkingEnabled: useThinkingApi,
         });
       } catch (err) {
         onSetError(String(err));
@@ -156,6 +180,8 @@ export function useActionStream({
       config?.providers,
       selectedText,
       isPinned,
+      thinkingMode,
+      isThinkingApiSupported,
       executeGracefulHide,
       updateWindowSize,
       onStartAction,
@@ -182,12 +208,15 @@ export function useActionStream({
         ? `原始选中文本：\n${selectedText}\n\n前序对话：\n${recentHistory}\n\n最新追问：\n${followUpPrompt}`
         : `前序对话：\n${recentHistory}\n\n最新追问：\n${followUpPrompt}`;
 
+      const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported();
+
       try {
         await invoke('trigger_api_action', {
           actionId: activeAction.id,
           text: followUpCombined,
           modelOverride: selectedModel,
           promptOverride: '{text}',
+          thinkingEnabled: useThinkingApi,
         });
       } catch (err) {
         onSetError(String(err));
@@ -200,6 +229,50 @@ export function useActionStream({
       streamText,
       selectedText,
       selectedModel,
+      thinkingMode,
+      isThinkingApiSupported,
+      onSetStreamText,
+      onSetLoading,
+      onSetError,
+    ]
+  );
+
+  // 切换供应商
+  const handleProviderChange = useCallback(
+    async (newProviderId: string) => {
+      if (!activeAction || !config?.providers) return;
+      const provider = config.providers.find((p) => p.id === newProviderId);
+      if (!provider) return;
+      const newModel = provider.defaultModel || provider.models[0] || 'default';
+
+      onSetProvider(newProviderId, newModel);
+      onSetStreamText('');
+      onSetLoading(true);
+      onSetError(null);
+
+      const updatedAction = { ...activeAction, providerId: newProviderId };
+      const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported(newProviderId);
+
+      try {
+        await invoke('trigger_api_action', {
+          actionId: updatedAction.id,
+          text: selectedText,
+          modelOverride: newModel,
+          promptOverride: updatedAction.promptTemplate,
+          thinkingEnabled: useThinkingApi,
+        });
+      } catch (err) {
+        onSetError(String(err));
+        onSetLoading(false);
+      }
+    },
+    [
+      activeAction,
+      config?.providers,
+      thinkingMode,
+      selectedText,
+      isThinkingApiSupported,
+      onSetProvider,
       onSetStreamText,
       onSetLoading,
       onSetError,
@@ -215,90 +288,112 @@ export function useActionStream({
       onSetLoading(true);
       onSetError(null);
 
+      const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported();
+
       try {
         await invoke('trigger_api_action', {
           actionId: activeAction.id,
           text: selectedText,
           modelOverride: newModel,
           promptOverride: activeAction.promptTemplate,
+          thinkingEnabled: useThinkingApi,
         });
       } catch (err) {
         onSetError(String(err));
         onSetLoading(false);
       }
     },
-    [activeAction, selectedText, onSetModel, onSetStreamText, onSetLoading, onSetError]
-  );
-
-  // 针对当前轮次重新生成 (保留前序多轮历史)
-  const handleRegenerateCurrentTurn = useCallback(
-    async (thinkingPromptAugment?: string) => {
-      if (!activeAction) return;
-
-      onSetLoading(true);
-      onSetError(null);
-
-      const parts = streamText.split(/\n\n---\n\*\*追问：\*\*\s*/);
-      if (parts.length <= 1) {
-        // 第一轮回答重新生成
-        onSetStreamText('');
-        const promptTemplate = thinkingPromptAugment
-          ? `${thinkingPromptAugment}\n\n${activeAction.promptTemplate || '{text}'}`
-          : activeAction.promptTemplate;
-
-        try {
-          await invoke('trigger_api_action', {
-            actionId: activeAction.id,
-            text: selectedText,
-            modelOverride: selectedModel,
-            promptOverride: promptTemplate,
-          });
-        } catch (err) {
-          onSetError(String(err));
-          onSetLoading(false);
-        }
-      } else {
-        // 多轮追问：保留前 N-1 轮历史，仅重置最新一轮
-        const lastPart = parts[parts.length - 1];
-        const firstNewline = lastPart.indexOf('\n\n');
-        const latestPrompt = firstNewline === -1 ? lastPart.trim() : lastPart.slice(0, firstNewline).trim();
-
-        const precedingParts = parts.slice(0, -1);
-        const maxTurns = config?.apiCard?.contextTurns ?? 5;
-        const recentHistory = precedingParts.slice(-maxTurns).join('\n\n---\n**追问：** ');
-
-        // 重置 streamText 为去掉最新轮 assistant 内容的状态
-        const baseStreamText = precedingParts.join('\n\n---\n**追问：** ') + `\n\n---\n**追问：** ${latestPrompt}\n\n`;
-        onSetStreamText(baseStreamText);
-
-        const followUpCombined = selectedText
-          ? `原始选中文本：\n${selectedText}\n\n前序对话：\n${recentHistory}\n\n最新追问：\n${latestPrompt}`
-          : `前序对话：\n${recentHistory}\n\n最新追问：\n${latestPrompt}`;
-
-        try {
-          await invoke('trigger_api_action', {
-            actionId: activeAction.id,
-            text: followUpCombined,
-            modelOverride: selectedModel,
-            promptOverride: '{text}',
-          });
-        } catch (err) {
-          onSetError(String(err));
-          onSetLoading(false);
-        }
-      }
-    },
     [
       activeAction,
-      streamText,
       selectedText,
-      selectedModel,
-      config?.apiCard?.contextTurns,
+      thinkingMode,
+      isThinkingApiSupported,
+      onSetModel,
       onSetStreamText,
       onSetLoading,
       onSetError,
     ]
   );
+
+  // 切换思考模式
+  const handleThinkingModeChange = useCallback(
+    (mode: 'quick' | 'deep') => {
+      onSetThinkingMode(mode);
+    },
+    [onSetThinkingMode]
+  );
+
+  // 针对当前轮次重新生成 (保留前序多轮历史)
+  const handleRegenerateCurrentTurn = useCallback(async () => {
+    if (!activeAction) return;
+
+    onSetLoading(true);
+    onSetError(null);
+
+    const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported();
+
+    const parts = streamText.split(/\n\n---\n\*\*追问：\*\*\s*/);
+    if (parts.length <= 1) {
+      // 第一轮回答重新生成
+      onSetStreamText('');
+
+      try {
+        await invoke('trigger_api_action', {
+          actionId: activeAction.id,
+          text: selectedText,
+          modelOverride: selectedModel,
+          promptOverride: activeAction.promptTemplate,
+          thinkingEnabled: useThinkingApi,
+        });
+      } catch (err) {
+        onSetError(String(err));
+        onSetLoading(false);
+      }
+    } else {
+      // 多轮追问：保留前 N-1 轮历史，仅重置最新一轮
+      const lastPart = parts[parts.length - 1];
+      const firstNewline = lastPart.indexOf('\n\n');
+      const latestPrompt =
+        firstNewline === -1 ? lastPart.trim() : lastPart.slice(0, firstNewline).trim();
+
+      const precedingParts = parts.slice(0, -1);
+      const maxTurns = config?.apiCard?.contextTurns ?? 5;
+      const recentHistory = precedingParts.slice(-maxTurns).join('\n\n---\n**追问：** ');
+
+      // 重置 streamText 为去掉最新轮 assistant 内容的状态
+      const baseStreamText =
+        precedingParts.join('\n\n---\n**追问：** ') + `\n\n---\n**追问：** ${latestPrompt}\n\n`;
+      onSetStreamText(baseStreamText);
+
+      const followUpCombined = selectedText
+        ? `原始选中文本：\n${selectedText}\n\n前序对话：\n${recentHistory}\n\n最新追问：\n${latestPrompt}`
+        : `前序对话：\n${recentHistory}\n\n最新追问：\n${latestPrompt}`;
+
+      try {
+        await invoke('trigger_api_action', {
+          actionId: activeAction.id,
+          text: followUpCombined,
+          modelOverride: selectedModel,
+          promptOverride: '{text}',
+          thinkingEnabled: useThinkingApi,
+        });
+      } catch (err) {
+        onSetError(String(err));
+        onSetLoading(false);
+      }
+    }
+  }, [
+    activeAction,
+    streamText,
+    selectedText,
+    selectedModel,
+    thinkingMode,
+    isThinkingApiSupported,
+    config?.apiCard?.contextTurns,
+    onSetStreamText,
+    onSetLoading,
+    onSetError,
+  ]);
 
   // 开启新会话 (清空追问历史，保留选中文本)
   const handleNewChat = useCallback(() => {
@@ -322,6 +417,20 @@ export function useActionStream({
     }
   }, [activeAction?.name, selectedModel, selectedText, streamText]);
 
+  // 恢复历史会话内容
+  const handleRestoreSession = useCallback(
+    (sessionText: string, model?: string, providerId?: string) => {
+      onSetStreamText(sessionText);
+      if (model) onSetModel(model);
+      if (providerId) {
+        onSetProvider(providerId, model || 'default');
+      }
+      onSetLoading(false);
+      onSetError(null);
+    },
+    [onSetStreamText, onSetModel, onSetProvider, onSetLoading, onSetError]
+  );
+
   // 停止生成
   const handleCancel = useCallback(async () => {
     if (activeAction) {
@@ -333,9 +442,12 @@ export function useActionStream({
   return {
     handleTriggerAction,
     handleSendFollowUp,
+    handleProviderChange,
     handleModelChange,
+    handleThinkingModeChange,
     handleRegenerateCurrentTurn,
     handleNewChat,
+    handleRestoreSession,
     handleExportMarkdown,
     handleCancel,
   };

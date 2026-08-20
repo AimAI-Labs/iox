@@ -12,16 +12,31 @@ struct ChatMessage {
     content: String,
 }
 
+/// DeepSeek 深度思考配置
+#[derive(Debug, Serialize)]
+struct ThinkingConfig {
+    #[serde(rename = "type")]
+    thinking_type: String,
+}
+
 #[derive(Debug, Serialize)]
 struct ChatCompletionRequest {
     model: String,
     messages: Vec<ChatMessage>,
     stream: bool,
+    /// DeepSeek 深度思考开关
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<ThinkingConfig>,
+    /// DeepSeek 推理深度 ("low" | "high" | "max")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamDelta {
     content: Option<String>,
+    /// DeepSeek 推理内容 (思维链)
+    reasoning_content: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,6 +53,9 @@ struct StreamResponse {
 }
 
 /// 异步执行 OpenAI 兼容协议流式请求
+///
+/// 当 `thinking_enabled` 为 true 时，请求体中附带 DeepSeek 深度思考参数，
+/// 并将 `reasoning_content` 包裹为 `<think>...</think>` 标签发送给前端。
 pub async fn execute_stream_request(
     app: AppHandle,
     ai_manager: AiManager,
@@ -46,6 +64,7 @@ pub async fn execute_stream_request(
     model: String,
     system_prompt: Option<String>,
     user_prompt: String,
+    thinking_enabled: bool,
 ) {
     let cancel_token = CancellationToken::new();
     ai_manager
@@ -53,12 +72,15 @@ pub async fn execute_stream_request(
         .await;
 
     let mut messages = Vec::new();
-    if let Some(sys) = system_prompt {
-        if !sys.trim().is_empty() {
-            messages.push(ChatMessage {
-                role: "system".to_string(),
-                content: sys,
-            });
+    // 深度思考模式下 DeepSeek 不支持 system prompt，需跳过
+    if !thinking_enabled {
+        if let Some(sys) = system_prompt {
+            if !sys.trim().is_empty() {
+                messages.push(ChatMessage {
+                    role: "system".to_string(),
+                    content: sys,
+                });
+            }
         }
     }
     messages.push(ChatMessage {
@@ -70,10 +92,22 @@ pub async fn execute_stream_request(
         model,
         messages,
         stream: true,
+        thinking: if thinking_enabled {
+            Some(ThinkingConfig {
+                thinking_type: "enabled".to_string(),
+            })
+        } else {
+            None
+        },
+        reasoning_effort: if thinking_enabled {
+            Some("high".to_string())
+        } else {
+            None
+        },
     };
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
+        .timeout(std::time::Duration::from_secs(120))
         .build();
 
     let client = match client {
@@ -128,10 +162,19 @@ pub async fn execute_stream_request(
     }
 
     let mut stream = response.bytes_stream().eventsource();
+    // 追踪是否已发送过 <think> 开标签（用于 reasoning_content → <think> 包裹）
+    let mut reasoning_started = false;
 
     loop {
         tokio::select! {
             _ = cancel_token.cancelled() => {
+                // 如果在推理过程中被取消，先闭合 <think> 标签
+                if reasoning_started {
+                    let _ = app.emit("action-stream-token", serde_json::json!({
+                        "actionId": action_id,
+                        "token": "</think>"
+                    }));
+                }
                 let _ = app.emit("action-stream-done", serde_json::json!({ "actionId": action_id, "canceled": true }));
                 break;
             }
@@ -139,6 +182,13 @@ pub async fn execute_stream_request(
                 match item {
                     Some(Ok(event)) => {
                         if event.data == "[DONE]" {
+                            // 流结束时如果仍在推理中，闭合标签
+                            if reasoning_started {
+                                let _ = app.emit("action-stream-token", serde_json::json!({
+                                    "actionId": action_id,
+                                    "token": "</think>"
+                                }));
+                            }
                             let _ = app.emit("action-stream-done", serde_json::json!({ "actionId": action_id }));
                             break;
                         }
@@ -146,7 +196,30 @@ pub async fn execute_stream_request(
                             if let Some(choices) = parsed.choices {
                                 for choice in choices {
                                     if let Some(delta) = choice.delta {
+                                        // 处理 reasoning_content (DeepSeek 思维链)
+                                        if let Some(reasoning) = delta.reasoning_content {
+                                            if !reasoning_started {
+                                                reasoning_started = true;
+                                                let _ = app.emit("action-stream-token", serde_json::json!({
+                                                    "actionId": action_id,
+                                                    "token": "<think>"
+                                                }));
+                                            }
+                                            let _ = app.emit("action-stream-token", serde_json::json!({
+                                                "actionId": action_id,
+                                                "token": reasoning
+                                            }));
+                                        }
+                                        // 处理正文 content
                                         if let Some(content) = delta.content {
+                                            // 从推理切换到正文时，闭合 <think> 标签
+                                            if reasoning_started {
+                                                reasoning_started = false;
+                                                let _ = app.emit("action-stream-token", serde_json::json!({
+                                                    "actionId": action_id,
+                                                    "token": "</think>"
+                                                }));
+                                            }
                                             let _ = app.emit("action-stream-token", serde_json::json!({
                                                 "actionId": action_id,
                                                 "token": content
@@ -158,6 +231,12 @@ pub async fn execute_stream_request(
                         }
                     }
                     Some(Err(e)) => {
+                        if reasoning_started {
+                            let _ = app.emit("action-stream-token", serde_json::json!({
+                                "actionId": action_id,
+                                "token": "</think>"
+                            }));
+                        }
                         let _ = app.emit("action-stream-error", serde_json::json!({
                             "actionId": action_id,
                             "error": format!("SSE parse error: {}", e)
@@ -165,6 +244,12 @@ pub async fn execute_stream_request(
                         break;
                     }
                     None => {
+                        if reasoning_started {
+                            let _ = app.emit("action-stream-token", serde_json::json!({
+                                "actionId": action_id,
+                                "token": "</think>"
+                            }));
+                        }
                         let _ = app.emit("action-stream-done", serde_json::json!({ "actionId": action_id }));
                         break;
                     }

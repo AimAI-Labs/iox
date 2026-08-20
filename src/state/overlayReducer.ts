@@ -14,6 +14,8 @@ export interface OverlayState {
   error: string | null;
   isClosing: boolean;
   animKey: number;
+  thinkingMode: 'quick' | 'deep';
+  currentSessionId: string | null;
 }
 
 // 跨会话记忆钉住偏好：重启/隐藏后恢复，配合后端
@@ -38,6 +40,8 @@ export const initialOverlayState: OverlayState = {
   error: null,
   isClosing: false,
   animKey: 0,
+  thinkingMode: 'quick',
+  currentSessionId: null,
 };
 
 export type OverlayAction =
@@ -51,6 +55,9 @@ export type OverlayAction =
   | { type: 'SET_LOADING'; isLoading: boolean }
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'SET_MODEL'; model: string }
+  | { type: 'SET_PROVIDER'; providerId: string; defaultModel: string }
+  | { type: 'SET_THINKING_MODE'; mode: 'quick' | 'deep' }
+  | { type: 'SET_CURRENT_SESSION_ID'; sessionId: string | null }
   | { type: 'SET_PINNED'; isPinned: boolean }
   | { type: 'SET_CLOSING'; isClosing: boolean }
   | { type: 'HIDE_COMPLETE' }
@@ -132,6 +139,27 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
       return {
         ...state,
         selectedModel: action.model,
+      };
+
+    case 'SET_PROVIDER':
+      return {
+        ...state,
+        activeAction: state.activeAction
+          ? { ...state.activeAction, providerId: action.providerId }
+          : null,
+        selectedModel: action.defaultModel,
+      };
+
+    case 'SET_THINKING_MODE':
+      return {
+        ...state,
+        thinkingMode: action.mode,
+      };
+
+    case 'SET_CURRENT_SESSION_ID':
+      return {
+        ...state,
+        currentSessionId: action.sessionId,
       };
 
     case 'SET_PINNED':

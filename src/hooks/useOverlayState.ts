@@ -49,9 +49,12 @@ export function useOverlayState(config: AppConfig | null) {
   const {
     handleTriggerAction,
     handleSendFollowUp,
+    handleProviderChange,
     handleModelChange,
+    handleThinkingModeChange,
     handleRegenerateCurrentTurn,
     handleNewChat,
+    handleRestoreSession,
     handleExportMarkdown,
     handleCancel,
   } = useActionStream({
@@ -61,6 +64,7 @@ export function useOverlayState(config: AppConfig | null) {
     selectedModel: state.selectedModel,
     streamText: state.streamText,
     isPinned: state.isPinned,
+    thinkingMode: state.thinkingMode,
     onStartAction: (action, model) =>
       dispatch({ type: 'START_ACTION', action, model }),
     onAppendToken: (token) => dispatch({ type: 'APPEND_STREAM_TOKEN', token }),
@@ -70,6 +74,10 @@ export function useOverlayState(config: AppConfig | null) {
     onSetLoading: (isLoading) => dispatch({ type: 'SET_LOADING', isLoading }),
     onSetError: (error) => dispatch({ type: 'SET_ERROR', error }),
     onSetModel: (model) => dispatch({ type: 'SET_MODEL', model }),
+    onSetProvider: (providerId, defaultModel) =>
+      dispatch({ type: 'SET_PROVIDER', providerId, defaultModel }),
+    onSetThinkingMode: (mode) =>
+      dispatch({ type: 'SET_THINKING_MODE', mode }),
     updateWindowSize,
     executeGracefulHide,
   });
@@ -86,11 +94,15 @@ export function useOverlayState(config: AppConfig | null) {
     isLoading: state.isLoading,
     isPinned: state.isPinned,
     error: state.error,
+    thinkingMode: state.thinkingMode,
     handleTriggerAction,
     handleSendFollowUp,
+    handleProviderChange,
     handleModelChange,
+    handleThinkingModeChange,
     handleRegenerateCurrentTurn,
     handleNewChat,
+    handleRestoreSession,
     handleExportMarkdown,
     handleCancel,
     handleClose,
