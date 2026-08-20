@@ -12,6 +12,9 @@ export interface GeneralConfig {
   overlayOpacity?: number;
   webWindowSize?: [number, number];
   iconOnlyBubble?: boolean;
+  enableFloatingBall?: boolean;
+  floatingBallAutoHide?: boolean;
+  floatingBallPos?: [number, number];
 }
 
 export interface ProviderConfig {

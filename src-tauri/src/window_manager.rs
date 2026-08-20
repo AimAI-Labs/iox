@@ -270,6 +270,255 @@ pub fn hide_overlay_window(window: &WebviewWindow) {
     let _ = window.hide();
 }
 
+/// 计算常驻悬浮球贴边吸附后的目标坐标与吸附边缘 ("left" | "right")
+pub fn calculate_floating_ball_snap(
+    x: i32,
+    y: i32,
+    ball_size: i32,
+    work_area: (i32, i32, i32, i32),
+) -> (i32, i32, &'static str) {
+    let (wa_left, wa_top, wa_right, wa_bottom) = work_area;
+    let dist_to_left = (x - wa_left).abs();
+    let dist_to_right = (wa_right - (x + ball_size)).abs();
+
+    let (target_x, edge) = if dist_to_left < dist_to_right {
+        (wa_left, "left")
+    } else {
+        (wa_right - ball_size, "right")
+    };
+
+    let min_y = wa_top + 10;
+    let max_y = wa_bottom - ball_size - 10;
+    let target_y = y.clamp(min_y, max_y);
+
+    (target_x, target_y, edge)
+}
+
+/// 获取指定屏幕坐标处显示器的有效工作区 (left, top, right, bottom)
+pub fn get_screen_work_area(x: i32, y: i32) -> (i32, i32, i32, i32) {
+    unsafe {
+        let pt = POINT { x, y };
+        let hmonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        if GetMonitorInfoW(hmonitor, &mut mi) != 0 {
+            (mi.rcWork.left, mi.rcWork.top, mi.rcWork.right, mi.rcWork.bottom)
+        } else {
+            (0, 0, 1920, 1080)
+        }
+    }
+}
+
+/// 将悬浮球平滑吸附到最近的屏幕边缘并返回其逻辑坐标与边缘位置
+pub fn snap_floating_ball(
+    window: &WebviewWindow,
+    current_x: i32,
+    current_y: i32,
+    ball_size: i32,
+) -> (i32, i32, String) {
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    let phys_size = (ball_size as f64 * scale_factor).round() as i32;
+    let phys_x = (current_x as f64 * scale_factor).round() as i32;
+    let phys_y = (current_y as f64 * scale_factor).round() as i32;
+
+    let work_area = get_screen_work_area(phys_x, phys_y);
+    let (target_phys_x, target_phys_y, edge) =
+        calculate_floating_ball_snap(phys_x, phys_y, phys_size, work_area);
+
+    if let Ok(hwnd) = window.hwnd() {
+        let hwnd_raw = hwnd.0 as HWND;
+        apply_no_activate_style(hwnd_raw);
+        unsafe {
+            SetWindowPos(
+                hwnd_raw,
+                HWND_TOPMOST,
+                target_phys_x,
+                target_phys_y,
+                phys_size,
+                phys_size,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            );
+        }
+    }
+
+    let logical_x = (target_phys_x as f64 / scale_factor).round() as i32;
+    let logical_y = (target_phys_y as f64 / scale_factor).round() as i32;
+
+    (logical_x, logical_y, edge.to_string())
+}
+
+/// 初始化常驻悬浮球（注入样式、定位并显示）
+pub fn init_floating_ball(window: &WebviewWindow, saved_pos: (i32, i32)) -> (i32, i32, String) {
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    let phys_size = (60.0 * scale_factor).round() as i32;
+
+    let (phys_x, phys_y) = if saved_pos == (0, 0) {
+        let work_area = get_screen_work_area(100, 100);
+        (work_area.2 - phys_size, (work_area.1 + work_area.3) / 2)
+    } else {
+        (
+            (saved_pos.0 as f64 * scale_factor).round() as i32,
+            (saved_pos.1 as f64 * scale_factor).round() as i32,
+        )
+    };
+
+    let work_area = get_screen_work_area(phys_x, phys_y);
+    let (target_phys_x, target_phys_y, edge) =
+        calculate_floating_ball_snap(phys_x, phys_y, phys_size, work_area);
+
+    if let Ok(hwnd) = window.hwnd() {
+        let hwnd_raw = hwnd.0 as HWND;
+        apply_no_activate_style(hwnd_raw);
+        unsafe {
+            SetWindowPos(
+                hwnd_raw,
+                HWND_TOPMOST,
+                target_phys_x,
+                target_phys_y,
+                phys_size,
+                phys_size,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            );
+            ShowWindow(hwnd_raw, SW_SHOWNOACTIVATE);
+        }
+    }
+    let _ = window.show();
+
+    let logical_x = (target_phys_x as f64 / scale_factor).round() as i32;
+    let logical_y = (target_phys_y as f64 / scale_factor).round() as i32;
+    (logical_x, logical_y, edge.to_string())
+}
+
+/// 切换悬浮球展开菜单/收起球形态（原子性同步计算位置与大小，并按需切换焦点能力）
+pub fn set_floating_ball_expanded(
+    window: &WebviewWindow,
+    expanded: bool,
+    target_width: i32,
+    target_height: i32,
+) -> (i32, i32, String) {
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+
+    if let Ok(hwnd) = window.hwnd() {
+        let hwnd_raw = hwnd.0 as HWND;
+        unsafe {
+            let mut current_rect: RECT = std::mem::zeroed();
+            GetWindowRect(hwnd_raw, &mut current_rect);
+
+            let work_area = get_screen_work_area(current_rect.left, current_rect.top);
+            let dist_to_left = (current_rect.left - work_area.0).abs();
+            let dist_to_right = (work_area.2 - current_rect.right).abs();
+            let edge = if dist_to_left < dist_to_right {
+                "left"
+            } else {
+                "right"
+            };
+
+            if expanded {
+                let phys_w = (target_width as f64 * scale_factor).round() as i32;
+                let phys_h = (target_height as f64 * scale_factor).round() as i32;
+
+                let target_phys_x = if edge == "left" {
+                    work_area.0 + 8
+                } else {
+                    work_area.2 - phys_w - 8
+                };
+
+                let min_y = work_area.1 + 8;
+                let max_y = (work_area.3 - phys_h - 8).max(min_y);
+                let target_phys_y = current_rect.top.clamp(min_y, max_y);
+
+                remove_no_activate_style(hwnd_raw);
+                SetWindowPos(
+                    hwnd_raw,
+                    HWND_TOPMOST,
+                    target_phys_x,
+                    target_phys_y,
+                    phys_w,
+                    phys_h,
+                    SWP_SHOWWINDOW,
+                );
+                let _ = window.set_focus();
+
+                let logical_x = (target_phys_x as f64 / scale_factor).round() as i32;
+                let logical_y = (target_phys_y as f64 / scale_factor).round() as i32;
+                (logical_x, logical_y, edge.to_string())
+            } else {
+                let phys_size = (60.0 * scale_factor).round() as i32;
+                let target_phys_x = if edge == "left" {
+                    work_area.0
+                } else {
+                    work_area.2 - phys_size
+                };
+
+                let min_y = work_area.1 + 10;
+                let max_y = (work_area.3 - phys_size - 10).max(min_y);
+                let target_phys_y = current_rect.top.clamp(min_y, max_y);
+
+                apply_no_activate_style(hwnd_raw);
+                SetWindowPos(
+                    hwnd_raw,
+                    HWND_TOPMOST,
+                    target_phys_x,
+                    target_phys_y,
+                    phys_size,
+                    phys_size,
+                    SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+
+                let logical_x = (target_phys_x as f64 / scale_factor).round() as i32;
+                let logical_y = (target_phys_y as f64 / scale_factor).round() as i32;
+                (logical_x, logical_y, edge.to_string())
+            }
+        }
+    } else {
+        (0, 0, "right".to_string())
+    }
+}
+
+/// 悬浮球硬件级实时拖拽循环
+pub fn run_floating_ball_drag_loop(window: &WebviewWindow) -> (i32, i32) {
+    if let Ok(hwnd) = window.hwnd() {
+        let hwnd_raw = hwnd.0 as HWND;
+        unsafe {
+            let mut cursor_start: POINT = std::mem::zeroed();
+            let mut win_rect: RECT = std::mem::zeroed();
+
+            if GetCursorPos(&mut cursor_start) != 0 && GetWindowRect(hwnd_raw, &mut win_rect) != 0 {
+                let offset_x = cursor_start.x - win_rect.left;
+                let offset_y = cursor_start.y - win_rect.top;
+
+                while (GetAsyncKeyState(VK_LBUTTON as i32) as u16 & 0x8000) != 0 {
+                    let mut current_cursor: POINT = std::mem::zeroed();
+                    if GetCursorPos(&mut current_cursor) != 0 {
+                        let new_x = current_cursor.x - offset_x;
+                        let new_y = current_cursor.y - offset_y;
+                        SetWindowPos(
+                            hwnd_raw,
+                            HWND_TOPMOST,
+                            new_x,
+                            new_y,
+                            0,
+                            0,
+                            SWP_NOSIZE | SWP_NOACTIVATE,
+                        );
+                    }
+                    thread::sleep(Duration::from_millis(8));
+                }
+
+                let mut final_rect: RECT = std::mem::zeroed();
+                if GetWindowRect(hwnd_raw, &mut final_rect) != 0 {
+                    let scale_factor = window.scale_factor().unwrap_or(1.0);
+                    return (
+                        (final_rect.left as f64 / scale_factor).round() as i32,
+                        (final_rect.top as f64 / scale_factor).round() as i32,
+                    );
+                }
+            }
+        }
+    }
+    (0, 0)
+}
+
 /// 在独立阻塞线程中执行 120FPS 物理光标硬件级实时拖拽循环（0 IPC 开销，彻底消除卡顿）
 pub fn run_overlay_drag_loop(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("overlay") {
@@ -502,4 +751,34 @@ mod tests {
         let icon_only_width = calculate_bubble_bar_width(&sample_actions, true);
         assert!(icon_only_width >= 240 && icon_only_width <= 280, "Calculated icon_only width was {}", icon_only_width);
     }
+
+    #[test]
+    fn test_floating_ball_snap_edge_calc() {
+        let work_area = (0, 0, 1920, 1080); // left, top, right, bottom
+        
+        // 靠近屏幕左侧 (x=100, y=300)
+        let (target_x, target_y, edge) = calculate_floating_ball_snap(100, 300, 60, work_area);
+        assert_eq!(target_x, 0);
+        assert_eq!(target_y, 300);
+        assert_eq!(edge, "left");
+
+        // 靠近屏幕右侧 (x=1800, y=300)
+        let (target_x, target_y, edge) = calculate_floating_ball_snap(1800, 300, 60, work_area);
+        assert_eq!(target_x, 1920 - 60);
+        assert_eq!(target_y, 300);
+        assert_eq!(edge, "right");
+
+        // 靠近屏幕顶部越界 (x=1800, y=-50) -> clamp 到 top + 10
+        let (target_x, target_y, edge) = calculate_floating_ball_snap(1800, -50, 60, work_area);
+        assert_eq!(target_x, 1920 - 60);
+        assert_eq!(target_y, 10);
+        assert_eq!(edge, "right");
+
+        // 靠近屏幕底部越界 (x=100, y=2000) -> clamp 到 bottom - 60 - 10
+        let (target_x, target_y, edge) = calculate_floating_ball_snap(100, 2000, 60, work_area);
+        assert_eq!(target_x, 0);
+        assert_eq!(target_y, 1080 - 60 - 10);
+        assert_eq!(edge, "left");
+    }
 }
+

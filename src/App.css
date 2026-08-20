@@ -374,6 +374,62 @@
   background: transparent;
 }
 
+/* ==========================================================================
+   常驻悬浮球 (Floating Ball) 样式与动效系统
+   ========================================================================== */
+
+.floating-ball-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow: visible;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+.floating-ball {
+  user-select: none;
+  touch-action: none;
+  border-radius: 9999px !important;
+  box-sizing: border-box;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, box-shadow 0.25s ease;
+  will-change: transform, opacity;
+}
+
+/* 停靠左边缘闲置折叠 */
+.floating-ball.is-docked-left.is-idle {
+  transform: translateX(-28px);
+  opacity: 0.45;
+}
+
+/* 停靠右边缘闲置折叠 */
+.floating-ball.is-docked-right.is-idle {
+  transform: translateX(28px);
+  opacity: 0.45;
+}
+
+.floating-ball.is-idle:hover {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+/* 悬浮球内部图标顺时针 360° 旋转，移出逆时针 360° 回正 */
+.floating-ball-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(0deg);
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.floating-ball:hover .floating-ball-icon {
+  transform: rotate(360deg);
+}
+
 
 
 

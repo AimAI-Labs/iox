@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useConfig } from '@/hooks/useConfig';
 import { useTheme } from '@/hooks/useTheme';
 import { useOverlayState } from '@/hooks/useOverlayState';
-import { BubbleBar, ResultCard } from '@/components/overlay';
+import { BubbleBar, ResultCard, FloatingBall } from '@/components/overlay';
 import { Toaster } from 'sonner';
 import './App.css';
 
@@ -88,7 +88,12 @@ export function App() {
     );
   }
 
-  // 1. Overlay 悬浮窗视图 (保持同步直出渲染，零时延)
+  // 1. 常驻悬浮球视图
+  if (windowLabel === 'floating_ball') {
+    return <FloatingBall config={config} />;
+  }
+
+  // 2. Overlay 悬浮窗视图 (保持同步直出渲染，零时延)
   if (windowLabel === 'overlay') {
     if (!overlayState.visible) {
       return null;

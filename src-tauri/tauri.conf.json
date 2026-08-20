@@ -40,6 +40,22 @@
         "shadow": false,
         "visible": false,
         "dragDropEnabled": false
+      },
+      {
+        "label": "floating_ball",
+        "title": "IOX Floating Ball",
+        "width": 60,
+        "height": 60,
+        "minWidth": 60,
+        "minHeight": 60,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {

@@ -14,6 +14,14 @@ fn default_web_window_size() -> (f64, f64) {
     (860.0, 640.0)
 }
 
+fn default_true() -> bool {
+    true
+}
+
+fn default_floating_ball_pos() -> (i32, i32) {
+    (0, 0)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GeneralConfig {
@@ -33,6 +41,12 @@ pub struct GeneralConfig {
     pub web_window_size: (f64, f64),
     #[serde(default)]
     pub icon_only_bubble: bool,
+    #[serde(default = "default_true")]
+    pub enable_floating_ball: bool,
+    #[serde(default = "default_true")]
+    pub floating_ball_auto_hide: bool,
+    #[serde(default = "default_floating_ball_pos")]
+    pub floating_ball_pos: (i32, i32),
 }
 
 impl Default for GeneralConfig {
@@ -49,6 +63,9 @@ impl Default for GeneralConfig {
             overlay_opacity: 90,
             web_window_size: (860.0, 640.0),
             icon_only_bubble: false,
+            enable_floating_ball: true,
+            floating_ball_auto_hide: true,
+            floating_ball_pos: (0, 0),
         }
     }
 }
@@ -490,4 +507,26 @@ mod tests {
         assert_eq!(action.submit_selector, None);
         assert_eq!(action.auto_submit, None);
     }
+
+    #[test]
+    fn test_floating_ball_config_defaults() {
+        let raw_json = r#"{
+            "general": {
+                "autoPopupOnSelection": true,
+                "minSelectionLength": 1,
+                "triggerModifier": "None",
+                "globalHotkey": "Alt+Space",
+                "theme": "system",
+                "autoStart": false
+            },
+            "blacklist": [],
+            "providers": [],
+            "actions": []
+        }"#;
+        let config: AppConfig = serde_json::from_str(raw_json).expect("Deserialize config without floating ball");
+        assert!(config.general.enable_floating_ball);
+        assert!(config.general.floating_ball_auto_hide);
+        assert_eq!(config.general.floating_ball_pos, (0, 0));
+    }
 }
+

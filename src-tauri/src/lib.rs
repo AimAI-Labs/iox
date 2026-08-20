@@ -26,9 +26,21 @@ fn get_config(state: State<AppState>) -> AppConfig {
 #[tauri::command]
 fn save_config(app: AppHandle, new_config: AppConfig, state: State<AppState>) -> Result<(), String> {
     new_config.save()?;
-    let mut config = state.config.lock().unwrap();
-    *config = new_config.clone();
+    {
+        let mut config = state.config.lock().unwrap();
+        *config = new_config.clone();
+    }
     let _ = app.emit("config_updated", &new_config);
+
+    // 即时同步常驻悬浮球窗口的显示/隐藏
+    if let Some(window) = app.get_webview_window("floating_ball") {
+        if new_config.general.enable_floating_ball {
+            let pos = new_config.general.floating_ball_pos;
+            window_manager::init_floating_ball(&window, pos);
+        } else {
+            let _ = window.hide();
+        }
+    }
     Ok(())
 }
 
@@ -332,11 +344,113 @@ async fn fetch_provider_models(
     ai::fetch_provider_models(base_url, api_key).await
 }
 
+#[tauri::command]
+fn init_floating_ball(app: AppHandle, state: State<AppState>) -> Result<(i32, i32, String), String> {
+    if let Some(window) = app.get_webview_window("floating_ball") {
+        let pos = {
+            let config = state.config.lock().unwrap();
+            config.general.floating_ball_pos
+        };
+        let res = window_manager::init_floating_ball(&window, pos);
+        Ok(res)
+    } else {
+        Err("Floating ball window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn snap_floating_ball(
+    app: AppHandle,
+    state: State<AppState>,
+    x: i32,
+    y: i32,
+) -> Result<(i32, i32, String), String> {
+    if let Some(window) = app.get_webview_window("floating_ball") {
+        let (logical_x, logical_y, edge) = window_manager::snap_floating_ball(&window, x, y, 60);
+        if let Ok(mut config) = state.config.lock() {
+            config.general.floating_ball_pos = (logical_x, logical_y);
+            let _ = config.save();
+        }
+        Ok((logical_x, logical_y, edge))
+    } else {
+        Err("Floating ball window not found".to_string())
+    }
+}
+
+#[tauri::command]
+async fn start_floating_ball_dragging(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(i32, i32, String), String> {
+    let window = app
+        .get_webview_window("floating_ball")
+        .ok_or_else(|| "Floating ball window not found".to_string())?;
+
+    let (drag_x, drag_y) = tauri::async_runtime::spawn_blocking(move || {
+        window_manager::run_floating_ball_drag_loop(&window)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if let Some(win) = app.get_webview_window("floating_ball") {
+        let (logical_x, logical_y, edge) = window_manager::snap_floating_ball(&win, drag_x, drag_y, 60);
+        if let Ok(mut config) = state.config.lock() {
+            config.general.floating_ball_pos = (logical_x, logical_y);
+            let _ = config.save();
+        }
+        Ok((logical_x, logical_y, edge))
+    } else {
+        Err("Floating ball window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn toggle_floating_ball(app: AppHandle, state: State<AppState>, visible: bool) -> Result<(), String> {
+    let updated_config = {
+        let mut config = state.config.lock().unwrap();
+        config.general.enable_floating_ball = visible;
+        let _ = config.save();
+        config.clone()
+    };
+    let _ = app.emit("config_updated", &updated_config);
+
+    if let Some(window) = app.get_webview_window("floating_ball") {
+        if visible {
+            let pos = updated_config.general.floating_ball_pos;
+            window_manager::init_floating_ball(&window, pos);
+        } else {
+            let _ = window.hide();
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_current_selection() -> Result<Option<String>, String> {
+    let text = selection::extract_selected_text_safely();
+    Ok(text)
+}
+
+#[tauri::command]
+fn set_floating_ball_expanded(
+    app: AppHandle,
+    expanded: bool,
+    width: i32,
+    height: i32,
+) -> Result<(i32, i32, String), String> {
+    if let Some(window) = app.get_webview_window("floating_ball") {
+        let res = window_manager::set_floating_ball_expanded(&window, expanded, width, height);
+        Ok(res)
+    } else {
+        Err("Floating ball window not found".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial_config = AppConfig::load();
     let app_state = AppState {
-        config: Mutex::new(initial_config),
+        config: Mutex::new(initial_config.clone()),
         ai_manager: AiManager::new(),
         web_hub_state: Mutex::new(ai::WebHubState::default()),
     };
@@ -344,7 +458,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(app_state)
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle().clone();
             if let Some(main_win) = app.get_webview_window("main") {
                 if let Ok(hwnd) = main_win.hwnd() {
@@ -353,6 +467,15 @@ pub fn run() {
                 let icon = tauri::include_image!("icons/icon.png");
                 let _ = main_win.set_icon(icon);
             }
+
+            // 初始化桌面常驻悬浮球
+            if initial_config.general.enable_floating_ball {
+                if let Some(fb_win) = app.get_webview_window("floating_ball") {
+                    let pos = initial_config.general.floating_ball_pos;
+                    window_manager::init_floating_ball(&fb_win, pos);
+                }
+            }
+
             // 启动全局鼠标划词钩子
             selection::start_mouse_hook(handle);
             // 初始化常驻系统托盘
@@ -394,7 +517,13 @@ pub fn run() {
             reload_web_hub_active_tab,
             start_window_picker,
             cancel_window_picker,
-            fetch_provider_models
+            fetch_provider_models,
+            init_floating_ball,
+            snap_floating_ball,
+            start_floating_ball_dragging,
+            toggle_floating_ball,
+            get_current_selection,
+            set_floating_ball_expanded
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

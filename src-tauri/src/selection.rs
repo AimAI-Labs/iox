@@ -42,9 +42,9 @@ static CLICK_STATE: Mutex<ClickState> = Mutex::new(ClickState {
 const IOX_EXTRA_INFO: usize = 0x494F58; // "IOX"
 const LLKHF_INJECTED_FLAG: u32 = 0x00000010;
 
-/// 检查指定屏幕物理坐标 (x, y) 是否落在 Overlay 窗口内
-pub fn is_point_inside_overlay(app: &AppHandle, x: i32, y: i32) -> bool {
-    if let Some(window) = app.get_webview_window("overlay") {
+/// 检查指定屏幕物理坐标 (x, y) 是否落在指定窗口内
+pub fn is_point_inside_window(app: &AppHandle, label: &str, x: i32, y: i32) -> bool {
+    if let Some(window) = app.get_webview_window(label) {
         if let Ok(hwnd) = window.hwnd() {
             unsafe {
                 let hwnd_raw = hwnd.0 as HWND;
@@ -58,6 +58,11 @@ pub fn is_point_inside_overlay(app: &AppHandle, x: i32, y: i32) -> bool {
         }
     }
     false
+}
+
+/// 检查指定屏幕物理坐标 (x, y) 是否落在 Overlay 或 Floating Ball 窗口内
+pub fn is_point_inside_overlay(app: &AppHandle, x: i32, y: i32) -> bool {
+    is_point_inside_window(app, "overlay", x, y) || is_point_inside_window(app, "floating_ball", x, y)
 }
 
 /// 检查屏幕物理坐标 (x, y) 是否位于目标窗口的 Client（工作区/客户区）内

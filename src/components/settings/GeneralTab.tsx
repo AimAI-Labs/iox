@@ -236,6 +236,48 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 
           <Separator />
 
+          {/* Floating Ball Controls */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-xs text-foreground font-medium">
+                桌面常驻悬浮球
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                在屏幕边缘常驻圆形快捷球，支持随时拖拽、单击提问与双击打开设置
+              </p>
+            </div>
+            <Switch
+              checked={general.enableFloatingBall ?? true}
+              onCheckedChange={(checked) =>
+                onUpdateGeneral({ enableFloatingBall: checked })
+              }
+            />
+          </div>
+
+          {(general.enableFloatingBall ?? true) && (
+            <>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-xs text-foreground font-medium">
+                    悬浮球贴边自动半隐藏
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    悬浮球吸附在屏幕边缘闲置 2.5 秒后自动向边缘缩进 50% 并半透明化
+                  </p>
+                </div>
+                <Switch
+                  checked={general.floatingBallAutoHide ?? true}
+                  onCheckedChange={(checked) =>
+                    onUpdateGeneral({ floatingBallAutoHide: checked })
+                  }
+                />
+              </div>
+            </>
+          )}
+
+          <Separator />
+
           {/* Auto Start */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
