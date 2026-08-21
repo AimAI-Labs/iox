@@ -169,7 +169,9 @@ fn toggle_maximize_overlay(app: AppHandle) -> Result<bool, String> {
 fn show_main_window(app: AppHandle, target_tab: Option<String>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         if let Ok(hwnd) = window.hwnd() {
-            window_manager::apply_main_window_native_style(hwnd.0 as _);
+            let hwnd_raw = hwnd.0 as _;
+            window_manager::apply_main_window_native_style(hwnd_raw);
+            window_manager::bring_window_to_foreground(hwnd_raw);
         }
         let _ = window.show();
         let _ = window.unminimize();

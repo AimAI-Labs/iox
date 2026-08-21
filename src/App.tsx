@@ -36,7 +36,8 @@ export function App() {
   const handleOpenSettings = async (tab?: string) => {
     try {
       overlayState.handleClose();
-      await invoke('show_main_window', { targetTab: tab });
+      const targetTab = typeof tab === 'string' ? tab : undefined;
+      await invoke('show_main_window', { targetTab });
     } catch (e) {
       console.error('Failed to open settings window:', e);
     }
@@ -145,7 +146,7 @@ export function App() {
             iconOnly={config.general.iconOnlyBubble}
             onActionClick={overlayState.handleTriggerAction}
             onActionContextMenu={overlayState.handleTriggerActionWithoutText}
-            onOpenSettings={handleOpenSettings}
+            onOpenSettings={() => handleOpenSettings()}
           />
         ) : overlayState.activeAction ? (
           <ResultCard

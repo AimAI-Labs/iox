@@ -225,7 +225,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         {(onOpenSettings || isPreview) && (
           <button
             type="button"
-            onClick={!isPreview ? onOpenSettings : undefined}
+            onClick={!isPreview && onOpenSettings ? () => onOpenSettings() : undefined}
             onMouseDown={(e) => e.stopPropagation()}
             onContextMenu={(e) => {
               e.preventDefault();

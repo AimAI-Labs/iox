@@ -4,6 +4,7 @@ use tauri::{AppHandle, Manager, WebviewWindow};
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Dwm::*;
 use windows_sys::Win32::Graphics::Gdi::*;
+use windows_sys::Win32::System::Threading::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
@@ -29,6 +30,34 @@ pub fn apply_main_window_native_style(hwnd: HWND) {
             &backdrop_type as *const _ as *const _,
             std::mem::size_of::<u32>() as u32,
         );
+    }
+}
+
+/// 强制唤醒并将指定 HWND 窗口置于 Windows 最前台并激活键盘焦点（穿透 Windows 前台锁定限制）
+pub fn bring_window_to_foreground(hwnd: HWND) {
+    unsafe {
+        if IsIconic(hwnd) != 0 {
+            ShowWindow(hwnd, SW_RESTORE);
+        } else {
+            ShowWindow(hwnd, SW_SHOW);
+        }
+
+        let foreground_hwnd = GetForegroundWindow();
+        if foreground_hwnd != hwnd {
+            let foreground_thread_id = GetWindowThreadProcessId(foreground_hwnd, std::ptr::null_mut());
+            let current_thread_id = windows_sys::Win32::System::Threading::GetCurrentThreadId();
+
+            if foreground_thread_id != current_thread_id && foreground_thread_id != 0 {
+                AttachThreadInput(current_thread_id, foreground_thread_id, 1);
+                SetForegroundWindow(hwnd);
+                BringWindowToTop(hwnd);
+                AttachThreadInput(current_thread_id, foreground_thread_id, 0);
+            } else {
+                SetForegroundWindow(hwnd);
+                BringWindowToTop(hwnd);
+            }
+        }
+        SetActiveWindow(hwnd);
     }
 }
 
