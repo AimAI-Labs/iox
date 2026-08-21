@@ -144,6 +144,7 @@ export function App() {
             isClosing={overlayState.isClosing}
             iconOnly={config.general.iconOnlyBubble}
             onActionClick={overlayState.handleTriggerAction}
+            onActionContextMenu={overlayState.handleTriggerActionWithoutText}
             onOpenSettings={handleOpenSettings}
           />
         ) : overlayState.activeAction ? (

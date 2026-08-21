@@ -12,6 +12,7 @@ export interface BubbleBarProps {
   selectedText?: string;
   isClosing?: boolean;
   onActionClick: (action: ActionConfig) => void;
+  onActionContextMenu?: (action: ActionConfig) => void;
   onOpenSettings?: () => void;
   onReorderActions?: (newActions: ActionConfig[]) => void;
   isPreview?: boolean;
@@ -23,6 +24,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   selectedText = '',
   isClosing = false,
   onActionClick,
+  onActionContextMenu,
   onOpenSettings,
   onReorderActions,
   isPreview = false,
@@ -88,6 +90,10 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         {/* 1. 左侧拖拽指示手柄 */}
         <div
           onMouseDown={!isPreview ? handleMouseDown : undefined}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           className={cn(
             "flex items-center justify-center w-4 h-5 rounded shrink-0",
             "text-zinc-400 dark:text-zinc-500",
@@ -142,6 +148,10 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                   key={action.id}
                   onClick={(e) => handleQuickCopy(action, e)}
                   onMouseDown={(e) => e.stopPropagation()}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
                   {...dragHandlers}
                   className={cn(
                     "group relative inline-flex items-center rounded shrink-0",
@@ -175,6 +185,13 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                 key={action.id}
                 onClick={() => onActionClick(action)}
                 onMouseDown={(e) => e.stopPropagation()}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!isPreview && onActionContextMenu) {
+                    onActionContextMenu(action);
+                  }
+                }}
                 {...dragHandlers}
                 className={cn(
                   "group relative inline-flex items-center rounded shrink-0",
@@ -210,6 +227,10 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
             type="button"
             onClick={!isPreview ? onOpenSettings : undefined}
             onMouseDown={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             className={cn(
               "relative flex items-center justify-center w-6 h-6 rounded-md shrink-0",
               "bg-gradient-to-tr from-blue-500/10 to-indigo-500/10 dark:from-blue-400/15 dark:to-indigo-400/15",

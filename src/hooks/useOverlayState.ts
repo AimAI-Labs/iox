@@ -48,6 +48,7 @@ export function useOverlayState(config: AppConfig | null) {
   // 3. 动作调度与流式处理
   const {
     handleTriggerAction,
+    handleTriggerActionWithoutText,
     handleSendFollowUp,
     handleProviderChange,
     handleModelChange,
@@ -67,6 +68,8 @@ export function useOverlayState(config: AppConfig | null) {
     thinkingMode: state.thinkingMode,
     onStartAction: (action, model) =>
       dispatch({ type: 'START_ACTION', action, model }),
+    onStartEmptyAction: (action, model) =>
+      dispatch({ type: 'START_EMPTY_CARD_ACTION', action, model }),
     onAppendToken: (token) => dispatch({ type: 'APPEND_STREAM_TOKEN', token }),
     onStreamDone: () => dispatch({ type: 'STREAM_DONE' }),
     onStreamError: (error) => dispatch({ type: 'STREAM_ERROR', error }),
@@ -97,6 +100,7 @@ export function useOverlayState(config: AppConfig | null) {
     error: state.error,
     thinkingMode: state.thinkingMode,
     handleTriggerAction,
+    handleTriggerActionWithoutText,
     handleSendFollowUp,
     handleProviderChange,
     handleModelChange,

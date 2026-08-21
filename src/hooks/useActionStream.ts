@@ -28,6 +28,7 @@ interface UseActionStreamProps {
   isPinned: boolean;
   thinkingMode: 'quick' | 'deep';
   onStartAction: (action: ActionConfig, model?: string) => void;
+  onStartEmptyAction?: (action: ActionConfig, model?: string) => void;
   onAppendToken: (token: string) => void;
   onStreamDone: () => void;
   onStreamError: (error: string) => void;
@@ -55,6 +56,7 @@ export function useActionStream({
   isPinned,
   thinkingMode,
   onStartAction,
+  onStartEmptyAction,
   onAppendToken,
   onStreamDone,
   onStreamError,
@@ -189,6 +191,57 @@ export function useActionStream({
       onStartAction,
       onSetError,
       onSetLoading,
+    ]
+  );
+
+  // 触发动作（空文本直达模式：API 展开空白卡片并不发请求，Web 打开纯净首页并不改剪贴板）
+  const handleTriggerActionWithoutText = useCallback(
+    async (action: ActionConfig) => {
+      // 1. 快捷复制模式：右键直接忽略
+      if (action.actionType === 'copy') {
+        return;
+      }
+
+      // 2. Web 官网原生浮窗模式
+      if (action.actionType === 'web') {
+        try {
+          await invoke('trigger_web_action', {
+            actionId: action.id,
+            text: '',
+            copyToClipboard: false,
+          });
+          if (!isPinned) {
+            executeGracefulHide();
+          }
+        } catch (err) {
+          onSetError(String(err));
+        }
+        return;
+      }
+
+      // 3. API 流式卡片模式 (进入空白新对话)
+      const provider = config?.providers.find((p) => p.id === action.providerId);
+      const defaultModel = provider?.defaultModel || 'default';
+
+      if (onStartEmptyAction) {
+        onStartEmptyAction(action, defaultModel);
+      } else {
+        onStartAction(action, defaultModel);
+        onSetStreamText('');
+        onSetLoading(false);
+      }
+      await updateWindowSize('card', true);
+    },
+    [
+      config?.providers,
+      isPinned,
+      executeGracefulHide,
+      updateWindowSize,
+      onStartEmptyAction,
+      onStartAction,
+      onSetStreamText,
+      onSetLoading,
+      onSetError,
     ]
   );
 
@@ -399,6 +452,7 @@ export function useActionStream({
 
   return {
     handleTriggerAction,
+    handleTriggerActionWithoutText,
     handleSendFollowUp,
     handleProviderChange,
     handleModelChange,

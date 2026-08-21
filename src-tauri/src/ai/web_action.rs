@@ -56,9 +56,15 @@ pub fn execute_web_action(
     text: &str,
     copy_override: Option<bool>,
 ) -> Result<(), String> {
-    // 1. 安全复制划选文本到剪贴板
-    let should_copy = copy_override.unwrap_or(false) || config.general.auto_copy_on_web_action;
-    if should_copy && !text.trim().is_empty() {
+    let is_empty_text = text.trim().is_empty();
+
+    // 1. 安全复制划选文本到剪贴板 (仅在非空文本时执行)
+    let should_copy = if is_empty_text {
+        false
+    } else {
+        copy_override.unwrap_or(false) || config.general.auto_copy_on_web_action
+    };
+    if should_copy {
         if let Ok(mut clipboard) = Clipboard::new() {
             let _ = clipboard.set_text(text);
         }
@@ -74,9 +80,12 @@ pub fn execute_web_action(
         return Err(format!("Web action '{}' has no configured URL template", action.name));
     }
 
-    let is_url_template = template.contains("{text}");
+    let is_url_template = template.contains("{text}") || template.contains("{query}") || template.contains("{raw_text}");
     let (target_url_str, injection_script) = if is_url_template {
         (render_url_template(template, text), None)
+    } else if is_empty_text {
+        // 空文本直达模式：不注入任何 DOM 脚本与自动提交，直接直达原生官网首页
+        (template.to_string(), None)
     } else {
         let input_sel = action.input_selector.as_deref().unwrap_or_else(|| {
             if template.contains("deepseek.com") || action.id == "act_web_deepseek" {

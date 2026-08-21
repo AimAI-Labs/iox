@@ -48,6 +48,7 @@ export type OverlayAction =
   | { type: 'SELECTION_TRIGGERED'; text: string }
   | { type: 'SET_MODE'; mode: OverlayMode }
   | { type: 'START_ACTION'; action: ActionConfig; model?: string }
+  | { type: 'START_EMPTY_CARD_ACTION'; action: ActionConfig; model?: string }
   | { type: 'APPEND_STREAM_TOKEN'; token: string }
   | { type: 'STREAM_DONE' }
   | { type: 'STREAM_ERROR'; error: string }
@@ -96,6 +97,20 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         streamText: '',
         error: null,
         isLoading: true,
+        selectedModel: action.model || state.selectedModel,
+      };
+
+    case 'START_EMPTY_CARD_ACTION':
+      return {
+        ...state,
+        visible: true,
+        activeAction: action.action,
+        mode: 'card',
+        selectedText: '',
+        streamText: '',
+        error: null,
+        isLoading: false,
+        currentSessionId: null,
         selectedModel: action.model || state.selectedModel,
       };
 
