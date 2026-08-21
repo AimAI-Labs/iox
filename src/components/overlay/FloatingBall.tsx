@@ -38,6 +38,9 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
 
   // 初始化悬浮球位置与边缘状态
   useEffect(() => {
+    if (config?.general?.enableFloatingBall === false) {
+      return;
+    }
     const init = async () => {
       try {
         const res = await invoke<[number, number, string]>('init_floating_ball');
@@ -55,10 +58,13 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
     };
-  }, [resetIdleTimer]);
+  }, [config?.general?.enableFloatingBall, resetIdleTimer]);
 
   // 当展开/收起状态改变时，原子性动态调整窗口尺寸与屏幕贴边坐标
   useEffect(() => {
+    if (config?.general?.enableFloatingBall === false) {
+      return;
+    }
     const adjustWindowSize = async () => {
       try {
         const res = await invoke<[number, number, string]>('set_floating_ball_expanded', {
@@ -79,7 +85,7 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
       }
     };
     adjustWindowSize();
-  }, [isExpanded, resetIdleTimer]);
+  }, [isExpanded, config?.general?.enableFloatingBall, resetIdleTimer]);
 
   // 处理鼠标按下 (准备拖拽或点击判定)
   const handleMouseDown = (e: React.MouseEvent) => {

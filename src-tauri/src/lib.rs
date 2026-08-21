@@ -396,10 +396,14 @@ async fn fetch_provider_models(
 #[tauri::command]
 fn init_floating_ball(app: AppHandle, state: State<AppState>) -> Result<(i32, i32, String), String> {
     if let Some(window) = app.get_webview_window("floating_ball") {
-        let pos = {
+        let (pos, enabled) = {
             let config = state.config.lock().unwrap();
-            config.general.floating_ball_pos
+            (config.general.floating_ball_pos, config.general.enable_floating_ball)
         };
+        if !enabled {
+            let _ = window.hide();
+            return Ok((pos.0, pos.1, "right".to_string()));
+        }
         let res = window_manager::init_floating_ball(&window, pos);
         Ok(res)
     } else {
@@ -415,6 +419,14 @@ fn snap_floating_ball(
     y: i32,
 ) -> Result<(i32, i32, String), String> {
     if let Some(window) = app.get_webview_window("floating_ball") {
+        let enabled = {
+            let config = state.config.lock().unwrap();
+            config.general.enable_floating_ball
+        };
+        if !enabled {
+            let _ = window.hide();
+            return Ok((x, y, "right".to_string()));
+        }
         let (logical_x, logical_y, edge) = window_manager::snap_floating_ball(&window, x, y, 60);
         if let Ok(mut config) = state.config.lock() {
             config.general.floating_ball_pos = (logical_x, logical_y);
@@ -434,6 +446,15 @@ async fn start_floating_ball_dragging(
     let window = app
         .get_webview_window("floating_ball")
         .ok_or_else(|| "Floating ball window not found".to_string())?;
+
+    let enabled = {
+        let config = state.config.lock().unwrap();
+        config.general.enable_floating_ball
+    };
+    if !enabled {
+        let _ = window.hide();
+        return Ok((0, 0, "right".to_string()));
+    }
 
     let (drag_x, drag_y) = tauri::async_runtime::spawn_blocking(move || {
         window_manager::run_floating_ball_drag_loop(&window)
@@ -483,11 +504,20 @@ fn get_current_selection() -> Result<Option<String>, String> {
 #[tauri::command]
 fn set_floating_ball_expanded(
     app: AppHandle,
+    state: State<AppState>,
     expanded: bool,
     width: i32,
     height: i32,
 ) -> Result<(i32, i32, String), String> {
     if let Some(window) = app.get_webview_window("floating_ball") {
+        let enabled = {
+            let config = state.config.lock().unwrap();
+            config.general.enable_floating_ball
+        };
+        if !enabled {
+            let _ = window.hide();
+            return Ok((0, 0, "right".to_string()));
+        }
         let res = window_manager::set_floating_ball_expanded(&window, expanded, width, height);
         Ok(res)
     } else {

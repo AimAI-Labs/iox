@@ -104,6 +104,9 @@ export function App() {
   }, [windowLabel, overlayState.mode]);
 
   if (loading || !config) {
+    if (windowLabel === 'overlay' || windowLabel === 'floating_ball') {
+      return null;
+    }
     return (
       <div className="flex items-center justify-center min-h-screen bg-zinc-950">
         <div className="flex items-center gap-1.5">
@@ -126,6 +129,9 @@ export function App() {
 
   // 1. 常驻悬浮球视图
   if (windowLabel === 'floating_ball') {
+    if (config.general.enableFloatingBall === false) {
+      return null;
+    }
     return <FloatingBall config={config} />;
   }
 
