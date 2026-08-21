@@ -122,7 +122,7 @@ pub fn execute_web_action(
 
         let submit_sel = action.submit_selector.as_deref().or_else(|| {
             if template.contains("deepseek.com") || action.id == "act_web_deepseek" {
-                Some("div[role='button']:not([aria-disabled='true']), button[type='submit']")
+                Some("div[role='button'][aria-label*='发送'], div[role='button'][aria-label*='Send'], button[type='submit']")
             } else if template.contains("kimi.moonshot.cn") {
                 Some("button[data-testid*='send'], button.send-button")
             } else if template.contains("claude.ai") {

@@ -258,7 +258,7 @@ impl Default for AppConfig {
                     url_template: Some("https://chat.deepseek.com/".to_string()),
                     copy_to_clipboard: Some(false),
                     input_selector: Some("textarea#chat-input, textarea".to_string()),
-                    submit_selector: Some("div[role='button']:not([aria-disabled='true']), button[type='submit']".to_string()),
+                    submit_selector: Some("div[role='button'][aria-label*='发送'], div[role='button'][aria-label*='Send'], button[type='submit']".to_string()),
                     auto_submit: Some(true),
                     use_url_template: None,
                     enabled: true,
@@ -426,29 +426,62 @@ impl AppConfig {
                             modified = true;
                         }
 
-                        // 2. 自动向前兼容：补齐已知 SPA 官网的 DOM 注入与自动提交配置
-                        if action.action_type == "web" && action.input_selector.is_none() {
+                        // 2. 自动向前兼容：补齐与纠正已知 SPA 官网的 DOM 注入与自动提交配置
+                        if action.action_type == "web" {
                             let url = action.url_template.as_deref().unwrap_or("");
                             if url.contains("deepseek.com") || action.id == "act_web_deepseek" {
-                                action.input_selector = Some("textarea#chat-input, textarea".to_string());
-                                action.submit_selector = Some("div[role='button']:not([aria-disabled='true']), button[type='submit']".to_string());
-                                action.auto_submit = Some(true);
-                                modified = true;
+                                if action.input_selector.is_none() {
+                                    action.input_selector = Some("textarea#chat-input, textarea".to_string());
+                                    modified = true;
+                                }
+                                // 修正旧版本宽泛的 div[role='button'] 导致误点 DeepSeek 搜索功能按钮
+                                if action.submit_selector.as_deref() == Some("div[role='button']:not([aria-disabled='true']), button[type='submit']") || action.submit_selector.is_none() {
+                                    action.submit_selector = Some("div[role='button'][aria-label*='发送'], div[role='button'][aria-label*='Send'], button[type='submit']".to_string());
+                                    modified = true;
+                                }
+                                if action.auto_submit.is_none() {
+                                    action.auto_submit = Some(true);
+                                    modified = true;
+                                }
                             } else if url.contains("kimi.moonshot.cn") || action.id == "act_web_kimi" {
-                                action.input_selector = Some("div[contenteditable='true'], textarea".to_string());
-                                action.submit_selector = Some("button[data-testid*='send'], button.send-button".to_string());
-                                action.auto_submit = Some(true);
-                                modified = true;
+                                if action.input_selector.is_none() {
+                                    action.input_selector = Some("div[contenteditable='true'], textarea".to_string());
+                                    modified = true;
+                                }
+                                if action.submit_selector.is_none() {
+                                    action.submit_selector = Some("button[data-testid*='send'], button.send-button".to_string());
+                                    modified = true;
+                                }
+                                if action.auto_submit.is_none() {
+                                    action.auto_submit = Some(true);
+                                    modified = true;
+                                }
                             } else if url.contains("claude.ai") || action.id == "act_web_claude" {
-                                action.input_selector = Some("div[contenteditable='true'], fieldset textarea".to_string());
-                                action.submit_selector = Some("button[aria-label='Send Message']".to_string());
-                                action.auto_submit = Some(true);
-                                modified = true;
+                                if action.input_selector.is_none() {
+                                    action.input_selector = Some("div[contenteditable='true'], fieldset textarea".to_string());
+                                    modified = true;
+                                }
+                                if action.submit_selector.is_none() {
+                                    action.submit_selector = Some("button[aria-label='Send Message']".to_string());
+                                    modified = true;
+                                }
+                                if action.auto_submit.is_none() {
+                                    action.auto_submit = Some(true);
+                                    modified = true;
+                                }
                             } else if url.contains("doubao.com") || action.id == "act_web_doubao" {
-                                action.input_selector = Some("textarea[data-testid*='input'], textarea".to_string());
-                                action.submit_selector = Some("button[data-testid*='send']".to_string());
-                                action.auto_submit = Some(true);
-                                modified = true;
+                                if action.input_selector.is_none() {
+                                    action.input_selector = Some("textarea[data-testid*='input'], textarea".to_string());
+                                    modified = true;
+                                }
+                                if action.submit_selector.is_none() {
+                                    action.submit_selector = Some("button[data-testid*='send']".to_string());
+                                    modified = true;
+                                }
+                                if action.auto_submit.is_none() {
+                                    action.auto_submit = Some(true);
+                                    modified = true;
+                                }
                             }
                         }
                     }

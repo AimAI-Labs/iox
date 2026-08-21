@@ -20,7 +20,7 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
       actionType: 'web',
       urlTemplate: 'https://chat.deepseek.com/',
       inputSelector: 'textarea#chat-input, textarea',
-      submitSelector: "div[role='button']:not([aria-disabled='true']), button[type='submit']",
+      submitSelector: "div[role='button'][aria-label*='发送'], div[role='button'][aria-label*='Send'], button[type='submit']",
       autoSubmit: true,
       copyToClipboard: false,
       enabled: true,

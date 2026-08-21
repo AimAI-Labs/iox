@@ -103,13 +103,25 @@ pub fn build_dom_injection_script(
     function triggerSubmit(inputEl) {{
         let clicked = false;
 
-        // 1. 优先使用指定的 submitSel
+        // 1. 优先使用指定的 submitSel (需过滤掉明显的非发送功能按钮如搜索/思考/设置等)
         if (submitSel) {{
             try {{
-                const btn = document.querySelector(submitSel);
-                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {{
+                const elements = Array.from(document.querySelectorAll(submitSel));
+                for (const btn of elements) {{
+                    if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') continue;
+                    const text = (btn.textContent || '').trim();
+                    const aria = (btn.getAttribute('aria-label') || '').trim();
+                    const title = (btn.getAttribute('title') || '').trim();
+                    const combined = `${{text}} ${{aria}} ${{title}}`;
+
+                    // 严密避免误点击“联网搜索”、“深度思考”、“附件”、“设置”等按钮
+                    if (/搜索|Search|思考|Think|联网|附件|Upload|设置|Setting/i.test(combined) && !/发送|Send|Submit/i.test(combined)) {{
+                        continue;
+                    }}
+
                     btn.click();
                     clicked = true;
+                    break;
                 }}
             }} catch (_) {{}}
         }}
@@ -121,6 +133,13 @@ pub fn build_dom_injection_script(
                 const aria = b.getAttribute('aria-label') || '';
                 const title = b.getAttribute('title') || '';
                 const text = b.textContent?.trim() || '';
+                const combined = `${{text}} ${{aria}} ${{title}}`;
+
+                // 严格排除非发送按钮 (如搜索、深度思考等)
+                if (/搜索|Search|思考|Think|联网|附件|Upload|设置|Setting/i.test(combined) && !/发送|Send|Submit/i.test(combined)) {{
+                    continue;
+                }}
+
                 const isSend = /发送|Send|Submit/i.test(aria) || /发送|Send|Submit/i.test(title) || /发送|Send/i.test(text);
                 const notDisabled = !b.disabled && b.getAttribute('aria-disabled') !== 'true';
                 if (isSend && notDisabled) {{
