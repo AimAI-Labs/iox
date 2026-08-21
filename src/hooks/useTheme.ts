@@ -58,6 +58,14 @@ export function switchThemeWithTransition(
     Math.max(y, window.innerHeight - y)
   );
 
+  // 关键：在 startViewTransition 之前写入动画参数（App.css 中的
+  // theme-mask-reveal / theme-mask-shrink @keyframes 消费）。
+  // CSS 动画在伪元素树构建的首帧即生效，规避 transition.ready 回调的
+  // JS 时序窗口造成"先全屏闪现目标主题色、再重放水滴动画"的闪屏。
+  root.style.setProperty('--vt-x', `${x}px`);
+  root.style.setProperty('--vt-y', `${y}px`);
+  root.style.setProperty('--vt-r', `${endRadius}px`);
+
   // 记录本次过渡，防止后续 useEffect 重复触发造成闪屏
   lastTransitionHandled = {
     timestamp: Date.now(),
@@ -65,47 +73,9 @@ export function switchThemeWithTransition(
   };
 
   try {
-    const transition = doc.startViewTransition(() => {
+    doc.startViewTransition(() => {
       applyDOM();
     });
-
-    transition.ready
-      ?.then(() => {
-        if (willBeDark) {
-          // 浅色 -> 深色：深色新视图从点击原点向外扩散至全屏 (Expand)
-          root.animate(
-            {
-              clipPath: [
-                `circle(0px at ${x}px ${y}px)`,
-                `circle(${endRadius}px at ${x}px ${y}px)`,
-              ],
-            },
-            {
-              duration: 400,
-              easing: 'cubic-bezier(0.2, 0, 0, 1)',
-              pseudoElement: '::view-transition-new(root)',
-            }
-          );
-        } else {
-          // 深色 -> 浅色：深色旧视图向点击原点收缩 (Shrink)，露出底层浅色新视图
-          root.animate(
-            {
-              clipPath: [
-                `circle(${endRadius}px at ${x}px ${y}px)`,
-                `circle(0px at ${x}px ${y}px)`,
-              ],
-            },
-            {
-              duration: 400,
-              easing: 'cubic-bezier(0.2, 0, 0, 1)',
-              pseudoElement: '::view-transition-old(root)',
-            }
-          );
-        }
-      })
-      .catch((err: any) => {
-        console.warn('View Transition animation error:', err);
-      });
   } catch {
     applyDOM();
   }
@@ -144,6 +114,9 @@ export function useTheme(theme: ThemeMode = 'system', overlayOpacity: number = 9
   const [activeTheme, setActiveTheme] = useState<ThemeMode>(theme || 'system');
   const [activeOpacity, setActiveOpacity] = useState<number>(overlayOpacity ?? 90);
   const isInitialMountRef = useRef(true);
+  // 标记是否已完成持久化主题的首次同步，防止启动/开窗时因
+  // "system 预设 -> config 实际主题"的落差而播放一次多余的水滴动画（启动闪屏）
+  const initialThemeSyncedRef = useRef(false);
 
   useEffect(() => {
     setActiveTheme(theme || 'system');
@@ -193,17 +166,35 @@ export function useTheme(theme: ThemeMode = 'system', overlayOpacity: number = 9
         currentTheme === 'dark' ||
         (currentTheme === 'system' && mediaQuery.matches);
 
-      if (isDark) {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
+      root.classList.toggle('dark', isDark);
+    };
+
+    // 跟随系统时监听系统深浅色切换事件。
+    // 统一注册在所有分支之前，避免下方拦截分支提前 return 导致监听器丢失，
+    // 出现"切到跟随系统后系统主题变化无响应"的问题。
+    const handleChange = () => {
+      if ((activeTheme || 'system') === 'system') {
+        switchThemeWithTransition('system');
       }
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    const cleanup = () => {
+      mediaQuery.removeEventListener('change', handleChange);
     };
 
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
       applyTheme();
-      return;
+      return cleanup;
+    }
+
+    // config 就绪后的首次主题同步：直接应用目标主题而不播放过渡动画。
+    // 初始挂载时按系统偏好预设主题，若持久化主题与之不同，
+    // 该落差不应以水滴动画形式呈现（否则表现为窗口显示时的闪屏）。
+    if (!initialThemeSyncedRef.current) {
+      initialThemeSyncedRef.current = true;
+      applyTheme();
+      return cleanup;
     }
 
     const willBeDark =
@@ -217,23 +208,15 @@ export function useTheme(theme: ThemeMode = 'system', overlayOpacity: number = 9
       Date.now() - lastTransitionHandled.timestamp < 1000 &&
       lastTransitionHandled.isDark === willBeDark
     ) {
-      return;
+      return cleanup;
     }
 
     if (willBeDark === isCurrentlyDark) {
-      return;
+      return cleanup;
     }
 
     // 来自外部（系统切换或跨窗口广播）的被动变更
     switchThemeWithTransition(currentTheme);
-
-    // 当配置为跟随系统时，监听系统深浅色切换事件
-    if (currentTheme === 'system') {
-      const handleChange = () => switchThemeWithTransition('system');
-      mediaQuery.addEventListener('change', handleChange);
-      return () => {
-        mediaQuery.removeEventListener('change', handleChange);
-      };
-    }
+    return cleanup;
   }, [activeTheme]);
 }

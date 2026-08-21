@@ -582,8 +582,19 @@
 
 /* ==========================================================================
    主题切换水滴扩散与收缩圆形遮罩 (View Transition API)
+   动画完全由 CSS @keyframes 驱动（坐标/半径经 CSS 变量由 JS 预先写入），
+   在伪元素树构建的首帧即生效，规避 transition.ready + WAAPI 的 JS 时序
+   窗口导致的首帧全屏闪烁（闪屏）。
    ========================================================================== */
 
+:root {
+  /* 水滴动画参数（JS 在 startViewTransition 之前写入，伪元素自动继承） */
+  --vt-x: 50vw;
+  --vt-y: 50vh;
+  --vt-r: 100vmax;
+}
+
+/* 禁用 UA 默认 cross-fade，快照保持全屏静止，层叠关系由下方规则接管 */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
@@ -593,6 +604,7 @@
 /* 浅色模式（由深色切为浅色）：旧视图（深色）置顶并向点击原点收缩，露出底层浅色新视图 */
 ::view-transition-old(root) {
   z-index: 9999;
+  animation: theme-mask-shrink 400ms cubic-bezier(0.2, 0, 0, 1) forwards;
 }
 
 ::view-transition-new(root) {
@@ -602,9 +614,41 @@
 /* 深色模式（由浅色切为深色）：新视图（深色）置顶并从点击原点向外扩散，覆盖底层浅色旧视图 */
 .dark::view-transition-old(root) {
   z-index: 1;
+  animation: none;
 }
 
 .dark::view-transition-new(root) {
   z-index: 9999;
+  animation: theme-mask-reveal 400ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+/* 浅色 -> 深色：深色新视图从点击原点向外扩散至全屏 (Expand) */
+@keyframes theme-mask-reveal {
+  from {
+    clip-path: circle(0px at var(--vt-x) var(--vt-y));
+  }
+  to {
+    clip-path: circle(var(--vt-r) at var(--vt-x) var(--vt-y));
+  }
+}
+
+/* 深色 -> 浅色：深色旧视图向点击原点收缩 (Shrink)，露出底层浅色新视图 */
+@keyframes theme-mask-shrink {
+  from {
+    clip-path: circle(var(--vt-r) at var(--vt-x) var(--vt-y));
+  }
+  to {
+    clip-path: circle(0px at var(--vt-x) var(--vt-y));
+  }
+}
+
+/* 用户偏好减少动效时直接瞬切，杜绝任何闪烁可能 */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  .dark::view-transition-old(root),
+  .dark::view-transition-new(root) {
+    animation: none;
+  }
 }
 
