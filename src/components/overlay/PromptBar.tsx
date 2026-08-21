@@ -77,6 +77,7 @@ export interface PromptBarProps {
   onProviderChange?: (providerId: string) => void;
   onModelChange?: (model: string) => void;
   onThinkingModeChange?: (mode: 'quick' | 'deep') => void;
+  inputRef?: React.RefObject<HTMLTextAreaElement | null>;
   className?: string;
 }
 
@@ -98,6 +99,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   onProviderChange,
   onModelChange,
   onThinkingModeChange,
+  inputRef,
   className,
 }) => {
   const [showPlusMenu, setShowPlusMenu] = useState(false);
@@ -105,13 +107,43 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const [activeCascaderProviderId, setActiveCascaderProviderId] = useState<string>(
     selectedProviderId || providers[0]?.id || ''
   );
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [customHeight, setCustomHeight] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = inputRef || internalTextareaRef;
   const containerRef = useRef<HTMLDivElement>(null);
 
   const currentProvider = providers.find((p) => p.id === selectedProviderId);
   const providerName = currentProvider?.name || '选择服务商';
   const providerIconName = currentProvider?.id || currentProvider?.name || 'Cpu';
   const modelLabel = selectedModel || '选择模型';
+
+  // 计算允许的最大输入高度：最高不超过整体视图高度的 2/3 (预留底部按钮空间)
+  const getMaxHeight = () => Math.max(80, Math.floor(window.innerHeight * 0.66) - 55);
+
+  // 顶部拖拽调整高度
+  const handleDragResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    const startY = e.clientY;
+    const currentH = textareaRef.current?.clientHeight || 40;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = startY - moveEvent.clientY; // 向上拖拽增大高度
+      const maxAllowed = getMaxHeight();
+      const nextH = Math.max(28, Math.min(currentH + deltaY, maxAllowed));
+      setCustomHeight(nextH);
+    };
+
+    const onMouseUp = () => {
+      setIsDragging(false);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
 
   // 当外部 selectedProviderId 改变时同步内部激活状态
   useEffect(() => {
@@ -120,13 +152,20 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     }
   }, [selectedProviderId]);
 
-  // 自动聚焦与高度自适应
+  // 自动聚焦与高度自适应 (支持动态内容撑开与手动调整，上限为视图 2/3)
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 80)}px`;
+      const maxAllowed = getMaxHeight();
+      if (customHeight !== null) {
+        textareaRef.current.style.height = `${Math.min(customHeight, maxAllowed)}px`;
+      } else {
+        textareaRef.current.style.height = 'auto';
+        const scrollHeight = textareaRef.current.scrollHeight;
+        const target = Math.min(Math.max(scrollHeight, 24), maxAllowed);
+        textareaRef.current.style.height = `${target}px`;
+      }
     }
-  }, [value]);
+  }, [value, customHeight]);
 
   // 点击外部收起弹出层
   useEffect(() => {
@@ -312,10 +351,27 @@ export const PromptBar: React.FC<PromptBarProps> = ({
       {/* 3. 独立胶囊提问卡片容器 */}
       <div
         className={cn(
-          'flex flex-col rounded-[18px] bg-white dark:bg-[#18181b] p-3 pt-2.5 shadow-sm border border-zinc-200/90 dark:border-zinc-700/80',
+          'flex flex-col rounded-[18px] bg-white dark:bg-[#18181b] px-3 pb-3 pt-2 shadow-sm border border-zinc-200/90 dark:border-zinc-700/80',
           'transition-all duration-150 focus-within:border-zinc-400/90 dark:focus-within:border-zinc-500/80 focus-within:shadow-md'
         )}
       >
+        {/* 顶部高度调节把手 (上下拖拽调节高度，双击重置为自适应) */}
+        <div
+          onMouseDown={handleDragResize}
+          onDoubleClick={() => setCustomHeight(null)}
+          className="group/drag -mx-3 -mt-2 mb-1 flex h-2.5 cursor-row-resize items-center justify-center select-none"
+          title="上下拖拽调整输入框高度 (最高可达视图 2/3，双击恢复自适应)"
+        >
+          <div
+            className={cn(
+              'h-1 rounded-full transition-all duration-150',
+              isDragging
+                ? 'bg-blue-500 w-14'
+                : 'bg-zinc-200 group-hover/drag:bg-zinc-400 dark:bg-zinc-700/80 dark:group-hover/drag:bg-zinc-500 w-8'
+            )}
+          />
+        </div>
+
         {/* 输入区 */}
         <textarea
           ref={textareaRef}
@@ -325,9 +381,10 @@ export const PromptBar: React.FC<PromptBarProps> = ({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isLoading || disabled}
+          style={{ maxHeight: `${getMaxHeight()}px` }}
           className={cn(
             'w-full resize-none bg-transparent text-[13.5px] leading-relaxed text-zinc-900 dark:text-zinc-100',
-            'outline-none placeholder:text-zinc-400 dark:placeholder:text-zinc-500 select-text custom-scrollbar max-h-24',
+            'outline-none placeholder:text-zinc-400 dark:placeholder:text-zinc-500 select-text custom-scrollbar',
             'disabled:opacity-50'
           )}
         />

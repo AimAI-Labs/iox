@@ -2,12 +2,14 @@ import React from 'react';
 import { useWindowDrag } from '@/hooks/useWindowDrag';
 import { DynamicIcon } from '@/components/Icons';
 import { MacTrafficLights } from '@/components/MacTrafficLights';
+import { TabBar, TabItem } from '@/components/overlay/TabBar';
 import { Pin, RotateCcw, Plus, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────────────────────────────────
  * Mac 风格卡片头部导航栏
- * 左侧：Mac 交通灯三色圆点 + 动作图标 + 标题 + [+] 新建会话
+ * 左侧：Mac 交通灯三色圆点
+ * 中间：自适应多标签栏 (TabBar) 或 动作图标+标题
  * 右侧：操作工具组 + 会话历史 + 重置尺寸 + 钉住 (Pin) 按钮
  * ───────────────────────────────────────────────────────── */
 
@@ -19,6 +21,11 @@ export interface CardHeaderProps {
   isPinned: boolean;
   isMaximized?: boolean;
   sessionCount?: number;
+  tabs?: TabItem[];
+  activeTabId?: string;
+  onSelectTab?: (tabId: string) => void;
+  onCloseTab?: (tabId: string) => void;
+  onNewTab?: () => void;
   onNewChat?: () => void;
   onToggleSessions?: () => void;
   onPinToggle: () => void;
@@ -36,6 +43,11 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   isPinned,
   isMaximized = false,
   sessionCount,
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onCloseTab,
+  onNewTab,
   onNewChat,
   onToggleSessions,
   onPinToggle,
@@ -49,10 +61,10 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   return (
     <div
       onMouseDown={handleMouseDown}
-      className="flex shrink-0 items-center justify-between border-b border-line/60 bg-transparent px-3 py-2 select-none cursor-grab active:cursor-grabbing"
+      className="flex shrink-0 items-center justify-between border-b border-line/60 bg-transparent px-3 py-1.5 select-none cursor-grab active:cursor-grabbing gap-2"
     >
-      {/* 左侧：Mac 交通灯三色圆点 + 动作图标 + 标题 + [+] 新建会话按钮 */}
-      <div data-tauri-drag-region className="flex min-w-0 items-center gap-2">
+      {/* 左侧：Mac 交通灯三色圆点 */}
+      <div data-tauri-drag-region className="flex shrink-0 items-center">
         <MacTrafficLights
           onClose={onClose}
           onMinimize={onMinimize}
@@ -62,8 +74,21 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
           minimizeTitle="收起并保留会话"
           maximizeTitle={isMaximized ? '还原窗口尺寸' : '全屏最大化'}
         />
+      </div>
 
-        <div className="flex min-w-0 items-center gap-1.5 border-l border-line/70 pl-2">
+      {/* 中间：多标签栏 (TabBar) 或 默认动作标题 */}
+      {tabs && tabs.length > 0 && onSelectTab && onCloseTab && onNewTab ? (
+        <div className="flex-1 min-w-0 flex items-center overflow-hidden">
+          <TabBar
+            tabs={tabs}
+            activeTabId={activeTabId || ''}
+            onSelectTab={onSelectTab}
+            onCloseTab={onCloseTab}
+            onNewTab={onNewTab}
+          />
+        </div>
+      ) : (
+        <div data-tauri-drag-region className="flex flex-1 min-w-0 items-center gap-1.5 pl-1">
           {icon && (
             <DynamicIcon
               name={icon}
@@ -92,7 +117,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
             </button>
           )}
         </div>
-      </div>
+      )}
 
       {/* 右侧：工具按钮组 + 会话历史 + 重置尺寸 + 钉住 (Pin) 按钮 */}
       <div data-tauri-drag-region className="flex shrink-0 items-center gap-1">

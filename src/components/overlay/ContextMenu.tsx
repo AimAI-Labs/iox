@@ -14,6 +14,7 @@ import {
   Moon,
   Monitor,
 } from 'lucide-react';
+import { toggleThemeWithTransition } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 
 export interface ContextMenuProps {
@@ -231,63 +232,69 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
       <div className="my-1 h-px bg-zinc-200/70 dark:bg-white/10" />
 
-      {/* 4. 外观主题快速切换 */}
+      {/* 4. 外观主题快速切换 (纯图标精致胶囊) */}
       {onThemeChange && (
-        <div className="flex items-center justify-between px-2.5 py-1.5 text-[12px] font-medium text-zinc-600 dark:text-zinc-400">
+        <div className="flex items-center justify-between px-2.5 py-1 text-[12px] font-medium text-zinc-600 dark:text-zinc-400">
           <span>外观主题</span>
-          <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/5 p-0.5 rounded-lg border border-zinc-200/60 dark:border-white/5">
+          <div className="flex items-center gap-0.5 bg-zinc-100/90 dark:bg-white/5 p-0.5 rounded-lg border border-zinc-200/60 dark:border-white/5">
             <button
               type="button"
-              onClick={() => {
-                onThemeChange('system');
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = rect.left + rect.width / 2;
+                const y = rect.top + rect.height / 2;
+                toggleThemeWithTransition(() => onThemeChange('system'), x, y);
                 onClose();
               }}
               className={cn(
-                'flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors cursor-pointer',
+                'flex size-6 items-center justify-center rounded-md transition-all cursor-pointer',
                 currentTheme === 'system'
                   ? 'bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
-                  : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                  : 'text-zinc-400 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-white/5'
               )}
-              title="跟随系统主题"
+              title="跟随系统"
             >
-              <Monitor size={11} />
-              <span>系统</span>
+              <Monitor size={13} />
             </button>
 
             <button
               type="button"
-              onClick={() => {
-                onThemeChange('light');
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = rect.left + rect.width / 2;
+                const y = rect.top + rect.height / 2;
+                toggleThemeWithTransition(() => onThemeChange('light'), x, y);
                 onClose();
               }}
               className={cn(
-                'flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors cursor-pointer',
+                'flex size-6 items-center justify-center rounded-md transition-all cursor-pointer',
                 currentTheme === 'light'
-                  ? 'bg-white dark:bg-zinc-800 text-amber-600 dark:text-amber-400 shadow-xs font-semibold'
-                  : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                  ? 'bg-white dark:bg-zinc-800 text-amber-500 shadow-xs font-semibold'
+                  : 'text-zinc-400 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-white/5'
               )}
               title="浅色模式"
             >
-              <Sun size={11} />
-              <span>浅色</span>
+              <Sun size={13} />
             </button>
 
             <button
               type="button"
-              onClick={() => {
-                onThemeChange('dark');
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = rect.left + rect.width / 2;
+                const y = rect.top + rect.height / 2;
+                toggleThemeWithTransition(() => onThemeChange('dark'), x, y);
                 onClose();
               }}
               className={cn(
-                'flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors cursor-pointer',
+                'flex size-6 items-center justify-center rounded-md transition-all cursor-pointer',
                 currentTheme === 'dark'
-                  ? 'bg-white dark:bg-zinc-800 text-purple-600 dark:text-purple-400 shadow-xs font-semibold'
-                  : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                  ? 'bg-white dark:bg-zinc-800 text-purple-500 dark:text-purple-400 shadow-xs font-semibold'
+                  : 'text-zinc-400 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-white/5'
               )}
               title="深色模式"
             >
-              <Moon size={11} />
-              <span>深色</span>
+              <Moon size={13} />
             </button>
           </div>
         </div>

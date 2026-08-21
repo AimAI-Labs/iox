@@ -28,6 +28,31 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   const language = match ? match[1] : '';
   const rawCode = String(children).replace(/\n$/, '');
 
+  const displayLanguage = useMemo(() => {
+    if (!language) return 'code';
+    const map: Record<string, string> = {
+      js: 'JavaScript',
+      ts: 'TypeScript',
+      jsx: 'React JSX',
+      tsx: 'React TSX',
+      py: 'Python',
+      rs: 'Rust',
+      go: 'Go',
+      cpp: 'C++',
+      cs: 'C#',
+      html: 'HTML',
+      css: 'CSS',
+      json: 'JSON',
+      yaml: 'YAML',
+      sh: 'Shell',
+      bash: 'Bash',
+      powershell: 'PowerShell',
+      sql: 'SQL',
+      md: 'Markdown',
+    };
+    return map[language.toLowerCase()] || language;
+  }, [language]);
+
   // 拆分行以支持行号与换行渲染
   const lines = useMemo(() => rawCode.split('\n'), [rawCode]);
 
@@ -59,10 +84,10 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   return (
     <div className="my-2.5 overflow-hidden rounded-[10px] border border-line bg-inset shadow-hairline">
       {/* 顶部语言与复制栏 */}
-      <div className="flex items-center justify-between border-b border-line px-3 py-1.5 select-none">
+      <div className="flex items-center justify-between border-b border-line px-3 py-1.5 select-none bg-field/40">
         <span className="flex items-baseline gap-2">
-          <span className="font-mono text-[12px] font-medium text-ink">
-            {language || 'code'}
+          <span className="font-mono text-[11.5px] font-medium text-ink-2">
+            {displayLanguage}
           </span>
         </span>
 

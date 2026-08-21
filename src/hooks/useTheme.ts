@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { listen, emit } from '@tauri-apps/api/event';
 
 export type ThemeMode = 'system' | 'dark' | 'light';
@@ -6,6 +6,59 @@ export type ThemeMode = 'system' | 'dark' | 'light';
 export interface ThemeEventPayload {
   theme: ThemeMode;
   overlayOpacity?: number;
+}
+
+/**
+ * 带水滴扩散与收缩圆形遮罩 (Clip-Path) 的主题切换动效
+ */
+export function toggleThemeWithTransition(
+  applyNewTheme: () => void,
+  originX?: number,
+  originY?: number
+) {
+  // 检查浏览器/Webview 是否支持 View Transitions API
+  const doc = document as any;
+  if (!doc.startViewTransition) {
+    applyNewTheme();
+    return;
+  }
+
+  const x = originX ?? window.innerWidth / 2;
+  const y = originY ?? window.innerHeight / 2;
+  const endRadius = Math.hypot(
+    Math.max(x, window.innerWidth - x),
+    Math.max(y, window.innerHeight - y)
+  );
+
+  const transition = doc.startViewTransition(() => {
+    applyNewTheme();
+  });
+
+  transition.ready
+    ?.then(() => {
+      const isDark = document.documentElement.classList.contains('dark');
+      const clipPath = [
+        `circle(0px at ${x}px ${y}px)`,
+        `circle(${endRadius}px at ${x}px ${y}px)`,
+      ];
+
+      document.documentElement.animate(
+        {
+          clipPath: isDark ? clipPath : [...clipPath].reverse(),
+        },
+        {
+          duration: 380,
+          easing: 'cubic-bezier(0.2, 0, 0, 1)',
+          pseudoElement: isDark
+            ? '::view-transition-new(root)'
+            : '::view-transition-old(root)',
+        }
+      );
+    })
+    .catch(() => {
+      // 降级处理
+      applyNewTheme();
+    });
 }
 
 /**
@@ -27,6 +80,7 @@ export async function broadcastThemeChange(theme: ThemeMode, overlayOpacity?: nu
 export function useTheme(theme: ThemeMode = 'system', overlayOpacity: number = 90) {
   const [activeTheme, setActiveTheme] = useState<ThemeMode>(theme || 'system');
   const [activeOpacity, setActiveOpacity] = useState<number>(overlayOpacity ?? 90);
+  const isInitialMountRef = useRef(true);
 
   useEffect(() => {
     setActiveTheme(theme || 'system');
@@ -83,14 +137,19 @@ export function useTheme(theme: ThemeMode = 'system', overlayOpacity: number = 9
       }
     };
 
-    // 立即应用计算出的主题
-    applyTheme();
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      applyTheme();
+    } else {
+      toggleThemeWithTransition(applyTheme);
+    }
 
     // 当配置为跟随系统时，监听系统深浅色切换事件
     if (currentTheme === 'system') {
-      mediaQuery.addEventListener('change', applyTheme);
+      const handleChange = () => toggleThemeWithTransition(applyTheme);
+      mediaQuery.addEventListener('change', handleChange);
       return () => {
-        mediaQuery.removeEventListener('change', applyTheme);
+        mediaQuery.removeEventListener('change', handleChange);
       };
     }
   }, [activeTheme]);

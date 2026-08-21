@@ -1,8 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { invoke } from '@tauri-apps/api/core';
 import { ActionConfig, ProviderConfig, ApiCardConfig } from '@/types/config';
 import { CardHeader } from '@/components/overlay/CardHeader';
+import { TabItem } from '@/components/overlay/TabBar';
 import { LoadingState } from '@/components/overlay/LoadingState';
 import { ThinkingBlock } from '@/components/overlay/ThinkingBlock';
 import { CodeBlock } from '@/components/overlay/CodeBlock';
@@ -12,6 +16,7 @@ import { UserBubble } from '@/components/overlay/UserBubble';
 import { ResizeHandle } from '@/components/overlay/ResizeHandle';
 import { ContextMenu } from '@/components/overlay/ContextMenu';
 import { SessionPanel } from '@/components/overlay/SessionPanel';
+import { FloatingQuoteMenu } from '@/components/overlay/FloatingQuoteMenu';
 import { DynamicIcon } from '@/components/Icons';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { useChatSessions } from '@/hooks/useChatSessions';
@@ -141,10 +146,148 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     visible: false,
   });
 
+  // 选中文本悬浮引用胶囊菜单状态
+  const promptInputRef = useRef<HTMLTextAreaElement>(null);
+  const [quoteMenu, setQuoteMenu] = useState<{
+    x: number;
+    y: number;
+    visible: boolean;
+    text: string;
+  }>({
+    x: 0,
+    y: 0,
+    visible: false,
+    text: '',
+  });
+
   // 记录每个会话轮次对应的模型名称与独立耗时快照 (解耦全局 selectedModel)
   const [turnSnapshots, setTurnSnapshots] = useState<
     Record<string, { model: string; duration?: number }>
   >({});
+
+  // 顶部原生多会话 Tab 列表
+  const [tabs, setTabs] = useState<TabItem[]>(() => [
+    {
+      id: `tab_init_${Date.now()}`,
+      title: action.name || '新对话',
+      actionId: action.id,
+      providerId: action.providerId,
+      model: selectedModel || 'default',
+      selectedText,
+      streamText,
+      isLoading,
+      turnSnapshots: {},
+    },
+  ]);
+  const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0]?.id || 'tab_init');
+
+  // 当当前活动 Tab 的 streamText / selectedText / isLoading / turnSnapshots 变化时，实时同步到 tabs 数组中
+  useEffect(() => {
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id === activeTabId) {
+          let tabTitle = t.title;
+          if (!tabTitle || tabTitle === '新对话' || tabTitle === action.name) {
+            if (selectedText) {
+              tabTitle = selectedText.slice(0, 12).trim();
+            } else if (streamText) {
+              const firstLine = streamText.split('\n')[0].replace(/^[#*>\s]+/, '').trim();
+              if (firstLine) tabTitle = firstLine.slice(0, 12);
+            }
+          }
+          return {
+            ...t,
+            title: tabTitle || action.name || '新对话',
+            streamText,
+            selectedText,
+            isLoading,
+            model: selectedModel,
+            turnSnapshots,
+          };
+        }
+        return t;
+      })
+    );
+  }, [activeTabId, streamText, selectedText, isLoading, selectedModel, turnSnapshots, action.name]);
+
+  // 新建 Tab
+  const handleNewTab = React.useCallback(() => {
+    const newId = `tab_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newTab: TabItem = {
+      id: newId,
+      title: '新对话',
+      actionId: action.id,
+      providerId: action.providerId,
+      model: selectedModel || 'default',
+      selectedText: '',
+      streamText: '',
+      isLoading: false,
+      turnSnapshots: {},
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newId);
+    setTurnSnapshots({});
+    setTotalDuration(undefined);
+    setFollowUpInput('');
+    onNewChat?.();
+  }, [action.id, action.providerId, selectedModel, onNewChat]);
+
+  // 切换 Tab
+  const handleSelectTab = React.useCallback(
+    (tabId: string) => {
+      if (tabId === activeTabId) return;
+      const target = tabs.find((t) => t.id === tabId);
+      if (!target) return;
+
+      setActiveTabId(tabId);
+      setFollowUpInput('');
+      setTurnSnapshots(target.turnSnapshots || {});
+      setTotalDuration(undefined);
+      onRestoreSession?.(target.streamText, target.model, target.providerId);
+    },
+    [activeTabId, tabs, onRestoreSession]
+  );
+
+  // 关闭 Tab
+  const handleCloseTab = React.useCallback(
+    (tabId: string) => {
+      setTabs((prev) => {
+        if (prev.length <= 1) {
+          const newId = `tab_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          setActiveTabId(newId);
+          setTurnSnapshots({});
+          setTotalDuration(undefined);
+          setFollowUpInput('');
+          onNewChat?.();
+          return [
+            {
+              id: newId,
+              title: '新对话',
+              actionId: action.id,
+              providerId: action.providerId,
+              model: selectedModel || 'default',
+              selectedText: '',
+              streamText: '',
+              isLoading: false,
+              turnSnapshots: {},
+            },
+          ];
+        }
+
+        const remaining = prev.filter((t) => t.id !== tabId);
+        if (tabId === activeTabId) {
+          const nextActive = remaining[0];
+          setActiveTabId(nextActive.id);
+          setTurnSnapshots(nextActive.turnSnapshots || {});
+          setTotalDuration(undefined);
+          setFollowUpInput('');
+          onRestoreSession?.(nextActive.streamText, nextActive.model, nextActive.providerId);
+        }
+        return remaining;
+      });
+    },
+    [activeTabId, action.id, action.providerId, selectedModel, onNewChat, onRestoreSession]
+  );
 
   // 多会话管理 Hook
   const chatSessions = useChatSessions({
@@ -157,6 +300,19 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       setTurnSnapshots({
         'turn-0': { model: saved.model },
       });
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === activeTabId
+            ? {
+                ...t,
+                title: saved.title || '历史会话',
+                streamText: saved.streamText,
+                model: saved.model,
+                providerId: saved.providerId,
+              }
+            : t
+        )
+      );
       onRestoreSession?.(saved.streamText, saved.model, saved.providerId);
     },
     onResetToNewChat: () => {
@@ -169,6 +325,50 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
+
+  // 监听划选文本以展示浮动引用胶囊 (带边缘安全夹紧防变形)
+  const handleSelectionCheck = React.useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) {
+      setQuoteMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      return;
+    }
+    const text = sel.toString().trim();
+    if (text.length >= 2 && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      if (bodyRef.current && bodyRef.current.contains(range.commonAncestorContainer)) {
+        const rect = range.getBoundingClientRect();
+        const bodyRect = bodyRef.current.getBoundingClientRect();
+        // 水平与垂直安全边界计算，防止靠右或靠顶溢出变形
+        const rawX = rect.left + rect.width / 2;
+        const clampedX = Math.max(bodyRect.left + 45, Math.min(rawX, bodyRect.right - 45));
+        const clampedY = Math.max(bodyRect.top + 28, rect.top);
+        setQuoteMenu({
+          x: clampedX,
+          y: clampedY,
+          visible: true,
+          text,
+        });
+        return;
+      }
+    }
+    setQuoteMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+  }, []);
+
+  // 点击悬浮引用将选中文本以 Markdown 格式插入输入框
+  const handleQuoteText = React.useCallback(() => {
+    if (!quoteMenu.text) return;
+    const quoteBlock = `> ${quoteMenu.text}\n\n`;
+    setFollowUpInput((prev) => {
+      if (!prev) return quoteBlock;
+      return `${quoteBlock}${prev}`;
+    });
+    setQuoteMenu((prev) => ({ ...prev, visible: false }));
+    window.getSelection()?.removeAllRanges();
+    setTimeout(() => {
+      promptInputRef.current?.focus();
+    }, 50);
+  }, [quoteMenu.text]);
 
   // 耗时计时
   const [totalDuration, setTotalDuration] = useState<number | undefined>(undefined);
@@ -334,9 +534,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     <div
       onContextMenu={(e) => e.preventDefault()}
       className={cn(
-        'relative flex flex-col w-full h-full',
+        'relative flex flex-col w-full h-full transition-all duration-200 ease-out',
         'bg-[#fcfcfd]/95 dark:bg-[#18181b]/95 text-zinc-900 dark:text-zinc-100 backdrop-blur-2xl',
-        'rounded-[20px] overflow-hidden shadow-2xl border border-zinc-200/80 dark:border-zinc-800/80',
+        isMaximized
+          ? 'rounded-none shadow-none border-none'
+          : 'rounded-[20px] shadow-2xl border border-zinc-200/80 dark:border-zinc-800/80',
+        'overflow-hidden',
         isClosing
           ? 'animate-capsule-out'
           : 'animate-in fade-in zoom-in-95 duration-150'
@@ -347,7 +550,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         icon={action.icon}
         title={action.name}
         sessionCount={chatSessions.sessions.length}
-        onNewChat={chatSessions.handleNewSession}
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onSelectTab={handleSelectTab}
+        onCloseTab={handleCloseTab}
+        onNewTab={handleNewTab}
+        onNewChat={handleNewTab}
         onToggleSessions={chatSessions.togglePanel}
         tools={
           mainText ? (
@@ -380,6 +588,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         ref={bodyRef}
         onContextMenu={handleContextMenu}
         onScroll={handleScroll}
+        onMouseUp={handleSelectionCheck}
+        onKeyUp={handleSelectionCheck}
         style={{ fontSize: `${apiCard?.fontSize || 13}px` }}
         className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-3 pb-2 text-ink select-text custom-scrollbar"
       >
@@ -511,6 +721,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                       {turnMain && (
                         <div className="markdown-body">
                           <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkMath]}
+                            rehypePlugins={[rehypeKatex]}
                             components={{
                               code: (props: any) => (
                                 <CodeBlock
@@ -575,9 +787,18 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         onProviderChange={onProviderChange}
         onModelChange={onModelChange}
         onThinkingModeChange={onThinkingModeChange}
+        inputRef={promptInputRef}
       />
 
-      {/* 4. 右下角原生缩放手柄 */}
+      {/* 4. 选中文本悬浮引用胶囊 */}
+      <FloatingQuoteMenu
+        x={quoteMenu.x}
+        y={quoteMenu.y}
+        visible={quoteMenu.visible}
+        onQuote={handleQuoteText}
+      />
+
+      {/* 5. 右下角原生缩放手柄 */}
       <ResizeHandle onReset={onResetSize} />
 
       {/* 5. 极简 macOS 风格自定义右键菜单 */}
