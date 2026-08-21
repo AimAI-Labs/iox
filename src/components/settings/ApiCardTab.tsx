@@ -12,8 +12,12 @@ import {
   MessageSquareQuote,
   SendHorizontal,
   RefreshCcw,
+  Sun,
+  Moon,
+  Monitor,
+  Palette,
 } from "lucide-react";
-import { ApiCardConfig, ActionConfig } from "@/types/config";
+import { ApiCardConfig, ActionConfig, GeneralConfig } from "@/types/config";
 import {
   Card,
   CardContent,
@@ -29,13 +33,17 @@ import {
 interface ApiCardTabProps {
   apiCard: ApiCardConfig;
   actions: ActionConfig[];
+  general?: GeneralConfig;
   onUpdateApiCard: (updated: Partial<ApiCardConfig>) => void;
+  onUpdateGeneral?: (updated: Partial<GeneralConfig>) => void;
   onNavigateToActions?: () => void;
 }
 
 export const ApiCardTab: React.FC<ApiCardTabProps> = ({
   apiCard,
+  general,
   onUpdateApiCard,
+  onUpdateGeneral,
 }) => {
   const [currentW, currentH] = apiCard.cardSize || [600, 900];
 
@@ -90,13 +98,49 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
         </p>
       </div>
 
-      {/* 1. 窗口视窗与交互卡片 */}
+      {/* 1. 窗口外观主题与视窗卡片 */}
       <Card className="border-border/60 bg-card/60">
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center gap-2 pb-1 border-b border-border/40">
             <Maximize2 size={14} className="text-primary dark:text-blue-400" />
-            <span className="text-xs font-semibold text-foreground">窗口视窗与交互</span>
+            <span className="text-xs font-semibold text-foreground">窗口视窗与外观主题</span>
           </div>
+
+          {/* 外观主题切换 */}
+          {general && onUpdateGeneral && (
+            <>
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <Palette size={12} className="text-muted-foreground" />
+                    <Label className="text-xs text-foreground font-medium">
+                      卡片外观色彩主题
+                    </Label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    调整流式卡片与悬浮界面的色彩模式（深色 / 浅色 / 跟随系统）
+                  </p>
+                </div>
+                <div className="w-52">
+                  <Select
+                    value={general.theme}
+                    onChange={(val) =>
+                      onUpdateGeneral({
+                        theme: val as GeneralConfig["theme"],
+                      })
+                    }
+                    options={[
+                      { value: "system", label: "跟随系统 (System)", icon: Monitor },
+                      { value: "dark", label: "深色模式 (Dark)", icon: Moon },
+                      { value: "light", label: "浅色模式 (Light)", icon: Sun },
+                    ]}
+                  />
+                </div>
+              </div>
+
+              <Separator />
+            </>
+          )}
 
           {/* 尺寸调节与重置 */}
           <div className="flex items-center justify-between gap-4">

@@ -78,6 +78,7 @@ export function useOverlayState(config: AppConfig | null) {
       dispatch({ type: 'SET_PROVIDER', providerId, defaultModel }),
     onSetThinkingMode: (mode) =>
       dispatch({ type: 'SET_THINKING_MODE', mode }),
+    onNewChat: () => dispatch({ type: 'NEW_CHAT' }),
     updateWindowSize,
     executeGracefulHide,
   });

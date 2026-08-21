@@ -15,7 +15,7 @@ import { SessionPanel } from '@/components/overlay/SessionPanel';
 import { DynamicIcon } from '@/components/Icons';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { useChatSessions } from '@/hooks/useChatSessions';
-import { AlertCircle, RotateCcw, Copy, Check } from 'lucide-react';
+import { AlertCircle, RotateCcw, Copy, Check, Brain, FileText, Wand2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────────────────────────────────
@@ -33,7 +33,9 @@ export interface ResultCardProps {
   isClosing?: boolean;
   error: string | null;
   apiCard?: ApiCardConfig;
+  theme?: 'system' | 'dark' | 'light';
   thinkingMode?: 'quick' | 'deep';
+  onThemeChange?: (theme: 'system' | 'dark' | 'light') => void;
   onProviderChange?: (providerId: string) => void;
   onModelChange: (model: string) => void;
   onThinkingModeChange?: (mode: 'quick' | 'deep') => void;
@@ -48,6 +50,29 @@ export interface ResultCardProps {
   onClose: () => void;
   onResetSize?: () => void;
 }
+
+const SUGGESTED_CHIPS = [
+  {
+    label: '深度思考',
+    prompt: '请开启深度思考模式，详细列出严谨的逐步推理与思考过程：',
+    icon: <Brain size={13} className="text-purple-500 shrink-0" />,
+  },
+  {
+    label: '总结要点',
+    prompt: '请帮我精简总结以上内容的核心要点与主要结论：',
+    icon: <FileText size={13} className="text-blue-500 shrink-0" />,
+  },
+  {
+    label: '润色优化',
+    prompt: '请帮我润色优化这段内容，使其更加地道通顺：',
+    icon: <Wand2 size={13} className="text-amber-500 shrink-0" />,
+  },
+  {
+    label: '深入解释',
+    prompt: '请结合原理与背景，更详细地展开解释：',
+    icon: <Sparkles size={13} className="text-emerald-500 shrink-0" />,
+  },
+];
 
 // 辅助函数：解析思维链 (<think>...</think>) 与正文内容
 function parseThinkingAndMain(text: string) {
@@ -89,7 +114,9 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   isClosing = false,
   error,
   apiCard,
+  theme = 'system',
   thinkingMode = 'quick',
+  onThemeChange,
   onProviderChange,
   onModelChange,
   onThinkingModeChange,
@@ -114,6 +141,11 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     visible: false,
   });
 
+  // 记录每个会话轮次对应的模型名称与独立耗时快照 (解耦全局 selectedModel)
+  const [turnSnapshots, setTurnSnapshots] = useState<
+    Record<string, { model: string; duration?: number }>
+  >({});
+
   // 多会话管理 Hook
   const chatSessions = useChatSessions({
     activeAction: action,
@@ -122,9 +154,15 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     streamText,
     isLoading,
     onRestoreSession: (saved) => {
+      setTurnSnapshots({
+        'turn-0': { model: saved.model },
+      });
       onRestoreSession?.(saved.streamText, saved.model, saved.providerId);
     },
     onResetToNewChat: () => {
+      setTurnSnapshots({});
+      setTotalDuration(undefined);
+      setFollowUpInput('');
       onNewChat?.();
     },
   });
@@ -181,40 +219,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [handleRegenerate]);
 
-  // 监听请求起止以计算总耗时
-  useEffect(() => {
-    if (isLoading) {
-      if (requestStartTimeRef.current === null) {
-        requestStartTimeRef.current = Date.now();
-      }
-      setTotalDuration(undefined);
-    } else if (requestStartTimeRef.current !== null) {
-      const sec = ((Date.now() - requestStartTimeRef.current) / 1000).toFixed(1);
-      setTotalDuration(parseFloat(sec));
-      requestStartTimeRef.current = null;
-    }
-  }, [isLoading]);
-
-  // 解析当前最新的思维链与正文状态
-  const { thinkingText, mainText, isThinking } = useMemo(() => {
-    return parseThinkingAndMain(streamText);
-  }, [streamText]);
-
-  // 当处于思考中时根据配置展开，思考结束后根据配置自动收起
-  const prevThinkingRef = useRef(isThinking);
-  useEffect(() => {
-    if (isThinking) {
-      if (apiCard?.thinkingDefaultOpen ?? true) {
-        setIsThinkingOpen(true);
-      }
-    } else if (prevThinkingRef.current && !isThinking) {
-      if (apiCard?.autoCollapseThinkingOnDone ?? true) {
-        setIsThinkingOpen(false);
-      }
-    }
-    prevThinkingRef.current = isThinking;
-  }, [isThinking, apiCard?.thinkingDefaultOpen, apiCard?.autoCollapseThinkingOnDone]);
-
   // 结构化多轮对话气泡流 (Conversation Turns)
   const conversationTurns = useMemo(() => {
     const parts = streamText.split(/\n\n---\n\*\*追问：\*\*\s*/);
@@ -251,6 +255,55 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       };
     });
   }, [streamText]);
+
+  // 监听请求起止以计算总耗时并快照记录本轮的模型与耗时
+  useEffect(() => {
+    const currentTurnId = `turn-${Math.max(0, conversationTurns.length - 1)}`;
+    if (isLoading) {
+      if (requestStartTimeRef.current === null) {
+        requestStartTimeRef.current = Date.now();
+      }
+      setTotalDuration(undefined);
+      setTurnSnapshots((prev) => ({
+        ...prev,
+        [currentTurnId]: {
+          model: prev[currentTurnId]?.model || selectedModel,
+          duration: prev[currentTurnId]?.duration,
+        },
+      }));
+    } else if (requestStartTimeRef.current !== null) {
+      const sec = parseFloat(((Date.now() - requestStartTimeRef.current) / 1000).toFixed(1));
+      setTotalDuration(sec);
+      requestStartTimeRef.current = null;
+      setTurnSnapshots((prev) => ({
+        ...prev,
+        [currentTurnId]: {
+          model: prev[currentTurnId]?.model || selectedModel,
+          duration: sec,
+        },
+      }));
+    }
+  }, [isLoading, selectedModel, conversationTurns.length]);
+
+  // 解析当前最新的思维链与正文状态
+  const { thinkingText, mainText, isThinking } = useMemo(() => {
+    return parseThinkingAndMain(streamText);
+  }, [streamText]);
+
+  // 当处于思考中时根据配置展开，思考结束后根据配置自动收起
+  const prevThinkingRef = useRef(isThinking);
+  useEffect(() => {
+    if (isThinking) {
+      if (apiCard?.thinkingDefaultOpen ?? true) {
+        setIsThinkingOpen(true);
+      }
+    } else if (prevThinkingRef.current && !isThinking) {
+      if (apiCard?.autoCollapseThinkingOnDone ?? true) {
+        setIsThinkingOpen(false);
+      }
+    }
+    prevThinkingRef.current = isThinking;
+  }, [isThinking, apiCard?.thinkingDefaultOpen, apiCard?.autoCollapseThinkingOnDone]);
 
   // 智能自动滚屏
   useEffect(() => {
@@ -335,7 +388,41 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           <UserBubble content={selectedText} isInitialContext={true} />
         )}
 
-        {error ? (
+        {!streamText && !selectedText && !isLoading ? (
+          /* 聚焦型新对话欢迎看板 (Empty State) */
+          <div className="flex flex-col items-center justify-center h-full min-h-[220px] px-4 py-8 text-center select-none animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex size-12 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/60 shadow-xs mb-3">
+              <DynamicIcon
+                name={action.icon}
+                size={24}
+                className="text-primary dark:text-blue-400"
+              />
+            </div>
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1">
+              开启与 {action.name} 的新会话
+            </h3>
+            <p className="text-[12px] text-zinc-500 dark:text-zinc-400 max-w-xs mb-4 leading-relaxed">
+              在下方输入框输入问题，或点击以下常用提示词快捷发起
+            </p>
+
+            {/* 快捷推荐提示词芯片 */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-sm">
+              {SUGGESTED_CHIPS.map((chip) => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={() => {
+                    setFollowUpInput(chip.prompt);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11.5px] font-medium bg-zinc-100/90 dark:bg-zinc-800/90 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/80 text-zinc-700 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700/60 transition-all cursor-pointer hover:scale-102 active:scale-98"
+                >
+                  {chip.icon}
+                  <span>{chip.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : error ? (
           /* BUI 错误提示卡 */
           <div className="flex flex-col gap-2 rounded-[10px] border border-red-500/20 bg-red-500/5 p-3 text-red-600 dark:text-red-400 animate-fade-up">
             <div className="flex items-center gap-2 text-[13px] font-medium">
@@ -375,6 +462,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 isThinking: turnIsThinking,
               } = parseThinkingAndMain(turn.rawAssistantText);
 
+              const turnInfo = turnSnapshots[turn.id];
+              const displayTurnModel = turnInfo?.model || selectedModel;
+              const displayTurnDuration = turnInfo?.duration ?? (isLast && !isLoading ? totalDuration : undefined);
+
               return (
                 <div key={turn.id} className="flex flex-col gap-1.5">
                   {/* 用户追问气泡 */}
@@ -385,7 +476,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                   {/* BUI Section 轮次块 */}
                   {(turnThinking || turnMain || turnIsThinking || isLast) && (
                     <div className="flex flex-col">
-                      {/* Section 头部 — 动作名 + 模型 + 耗时 */}
+                      {/* Section 头部 — 动作名 + 该轮对应的真实模型快照 + 耗时 */}
                       <div className="mb-1 flex items-center gap-1.5 text-[12px] leading-[1.3] select-none">
                         <DynamicIcon
                           name={action.icon}
@@ -393,14 +484,14 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                           className="shrink-0 text-ink-3"
                         />
                         <span className="font-medium text-ink">{action.name}</span>
-                        {selectedModel && (
+                        {displayTurnModel && (
                           <span className="max-w-44 truncate text-ink-3">
-                            {selectedModel}
+                            {displayTurnModel}
                           </span>
                         )}
-                        {isLast && !isLoading && totalDuration !== undefined && (apiCard?.showDuration ?? true) && (
+                        {displayTurnDuration !== undefined && (apiCard?.showDuration ?? true) && (
                           <span className="font-mono text-ink-3 tabular-nums">
-                            for {totalDuration.toFixed(1)}s
+                            for {displayTurnDuration.toFixed(1)}s
                           </span>
                         )}
                       </div>
@@ -443,7 +534,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                       {isLast && !isLoading && turnMain && (
                         <ResponseToolbar
                           text={turnMain}
-                          durationSeconds={apiCard?.showDuration !== false ? totalDuration : undefined}
+                          durationSeconds={apiCard?.showDuration !== false ? displayTurnDuration : undefined}
                           hasThinking={Boolean(turnThinking)}
                           isThinkingOpen={isThinkingOpen}
                           onToggleThinking={handleToggleThinking}
@@ -459,7 +550,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             })}
           </div>
         ) : (
-          /* 首字等待 — BUI Pixel-Grid LoadingState */
+          /* 首字等待 — 仅在 isLoading === true 且 streamText 为空时展示 */
           <div className="pt-1.5">
             <LoadingState label="AI 正在深入思考分析中..." />
           </div>
@@ -498,6 +589,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         hasAnswerText={Boolean(mainText || streamText)}
         isPinned={isPinned}
         isMaximized={isMaximized}
+        currentTheme={theme}
+        onThemeChange={onThemeChange}
         onClose={() => setContextMenu((prev) => ({ ...prev, visible: false }))}
         onCopySelection={() => {
           const sel = window.getSelection()?.toString() || selectedText;

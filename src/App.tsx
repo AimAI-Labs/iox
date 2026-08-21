@@ -2,7 +2,7 @@ import { useEffect, useState, Suspense, lazy } from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
 import { useConfig } from '@/hooks/useConfig';
-import { useTheme } from '@/hooks/useTheme';
+import { useTheme, broadcastThemeChange } from '@/hooks/useTheme';
 import { useOverlayState } from '@/hooks/useOverlayState';
 import { BubbleBar, ResultCard, FloatingBall } from '@/components/overlay';
 import { Toaster } from 'sonner';
@@ -158,7 +158,18 @@ export function App() {
             isClosing={overlayState.isClosing}
             error={overlayState.error}
             apiCard={config.apiCard}
+            theme={config.general.theme}
             thinkingMode={overlayState.thinkingMode}
+            onThemeChange={(newTheme) => {
+              updateConfig({
+                ...config,
+                general: {
+                  ...config.general,
+                  theme: newTheme,
+                },
+              });
+              broadcastThemeChange(newTheme, config.general.overlayOpacity);
+            }}
             onProviderChange={overlayState.handleProviderChange}
             onModelChange={overlayState.handleModelChange}
             onThinkingModeChange={overlayState.handleThinkingModeChange}

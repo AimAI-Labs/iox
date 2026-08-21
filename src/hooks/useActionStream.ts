@@ -37,6 +37,7 @@ interface UseActionStreamProps {
   onSetModel: (model: string) => void;
   onSetProvider: (providerId: string, defaultModel: string) => void;
   onSetThinkingMode: (mode: 'quick' | 'deep') => void;
+  onNewChat?: () => void;
   updateWindowSize: (
     mode: OverlayMode,
     allowFocus?: boolean,
@@ -63,6 +64,7 @@ export function useActionStream({
   onSetModel,
   onSetProvider,
   onSetThinkingMode,
+  onNewChat: onNewChatDispatch,
   updateWindowSize,
   executeGracefulHide,
 }: UseActionStreamProps) {
@@ -340,12 +342,23 @@ export function useActionStream({
     onSetError,
   ]);
 
-  // 开启新会话 (清空追问历史，保留选中文本)
-  const handleNewChat = useCallback(() => {
-    onSetStreamText('');
-    onSetLoading(false);
-    onSetError(null);
-  }, [onSetStreamText, onSetLoading, onSetError]);
+  // 开启新会话 (彻底清空追问历史与选中文本，终止在途请求)
+  const handleNewChat = useCallback(async () => {
+    if (activeAction) {
+      try {
+        await invoke('cancel_action', { actionId: activeAction.id });
+      } catch {
+        // ignore
+      }
+    }
+    if (onNewChatDispatch) {
+      onNewChatDispatch();
+    } else {
+      onSetStreamText('');
+      onSetLoading(false);
+      onSetError(null);
+    }
+  }, [activeAction, onNewChatDispatch, onSetStreamText, onSetLoading, onSetError]);
 
   // 导出完整对话为 Markdown
   const handleExportMarkdown = useCallback(async () => {

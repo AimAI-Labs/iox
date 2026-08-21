@@ -10,6 +10,9 @@ import {
   RotateCcw as ResetIcon,
   Settings,
   Scissors,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +24,8 @@ export interface ContextMenuProps {
   hasAnswerText?: boolean;
   isPinned?: boolean;
   isMaximized?: boolean;
+  currentTheme?: 'system' | 'dark' | 'light';
+  onThemeChange?: (theme: 'system' | 'dark' | 'light') => void;
   onClose: () => void;
   onCopySelection?: () => void;
   onCopyCurrentAnswer?: () => void;
@@ -41,6 +46,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   hasAnswerText = false,
   isPinned = false,
   isMaximized = false,
+  currentTheme = 'system',
+  onThemeChange,
   onClose,
   onCopySelection,
   onCopyCurrentAnswer,
@@ -224,7 +231,71 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
       <div className="my-1 h-px bg-zinc-200/70 dark:bg-white/10" />
 
-      {/* 4. 设置组 */}
+      {/* 4. 外观主题快速切换 */}
+      {onThemeChange && (
+        <div className="flex items-center justify-between px-2.5 py-1.5 text-[12px] font-medium text-zinc-600 dark:text-zinc-400">
+          <span>外观主题</span>
+          <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/5 p-0.5 rounded-lg border border-zinc-200/60 dark:border-white/5">
+            <button
+              type="button"
+              onClick={() => {
+                onThemeChange('system');
+                onClose();
+              }}
+              className={cn(
+                'flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors cursor-pointer',
+                currentTheme === 'system'
+                  ? 'bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
+                  : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+              )}
+              title="跟随系统主题"
+            >
+              <Monitor size={11} />
+              <span>系统</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onThemeChange('light');
+                onClose();
+              }}
+              className={cn(
+                'flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors cursor-pointer',
+                currentTheme === 'light'
+                  ? 'bg-white dark:bg-zinc-800 text-amber-600 dark:text-amber-400 shadow-xs font-semibold'
+                  : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+              )}
+              title="浅色模式"
+            >
+              <Sun size={11} />
+              <span>浅色</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onThemeChange('dark');
+                onClose();
+              }}
+              className={cn(
+                'flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors cursor-pointer',
+                currentTheme === 'dark'
+                  ? 'bg-white dark:bg-zinc-800 text-purple-600 dark:text-purple-400 shadow-xs font-semibold'
+                  : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+              )}
+              title="深色模式"
+            >
+              <Moon size={11} />
+              <span>深色</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="my-1 h-px bg-zinc-200/70 dark:bg-white/10" />
+
+      {/* 5. 设置组 */}
       <button
         type="button"
         onClick={() => handleItemClick(onOpenSettings)}

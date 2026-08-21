@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig, ApiCardConfig } from "@/types/config";
-import { useTheme } from "@/hooks/useTheme";
+import { useTheme, broadcastThemeChange } from "@/hooks/useTheme";
 import { MacTitleBar } from "@/components/MacTitleBar";
 import { SettingsSidebar, SettingsTab } from "@/components/settings/SettingsSidebar";
 import { ProvidersTab } from "@/components/settings/ProvidersTab";
@@ -170,13 +170,20 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
 
   // 更新 General 配置
   const updateGeneral = (updated: Partial<GeneralConfig>) => {
-    setFormData((prev) => ({
-      ...prev,
-      general: {
-        ...prev.general,
-        ...updated,
-      },
-    }));
+    setFormData((prev) => {
+      const next = {
+        ...prev,
+        general: {
+          ...prev.general,
+          ...updated,
+        },
+      };
+      // 当修改了 theme 或 overlayOpacity 时，即时全局广播同步所有窗口
+      if (updated.theme || updated.overlayOpacity !== undefined) {
+        broadcastThemeChange(next.general.theme, next.general.overlayOpacity);
+      }
+      return next;
+    });
   };
 
   // 更新 ApiCard 配置
@@ -259,7 +266,9 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
                 <ApiCardTab
                   apiCard={formData.apiCard}
                   actions={formData.actions}
+                  general={formData.general}
                   onUpdateApiCard={updateApiCard}
+                  onUpdateGeneral={updateGeneral}
                   onNavigateToActions={() => setActiveTab("actions")}
                 />
               </div>

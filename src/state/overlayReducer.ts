@@ -62,6 +62,7 @@ export type OverlayAction =
   | { type: 'SET_CLOSING'; isClosing: boolean }
   | { type: 'HIDE_COMPLETE' }
   | { type: 'INCREMENT_ANIM_KEY' }
+  | { type: 'NEW_CHAT' }
   | { type: 'RESET_STATE' };
 
 export function overlayReducer(state: OverlayState, action: OverlayAction): OverlayState {
@@ -190,6 +191,16 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
       return {
         ...state,
         animKey: state.animKey + 1,
+      };
+
+    case 'NEW_CHAT':
+      return {
+        ...state,
+        streamText: '',
+        selectedText: '',
+        error: null,
+        isLoading: false,
+        currentSessionId: null,
       };
 
     case 'RESET_STATE':
