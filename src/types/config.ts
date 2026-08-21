@@ -42,6 +42,7 @@ export interface ActionConfig {
   inputSelector?: string;
   submitSelector?: string;
   autoSubmit?: boolean;
+  useUrlTemplate?: boolean;
 }
 
 export interface ApiCardConfig {

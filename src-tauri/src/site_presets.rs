@@ -33,37 +33,37 @@ pub static SITE_PRESETS: &[SitePreset] = &[
     SitePreset {
         id: "tongyi",
         name: "通义千问",
-        url_template: "https://tongyi.aliyun.com/qianwen/?q={text}",
+        url_template: "https://tongyi.aliyun.com/qianwen/",
         category: "ai",
     },
     SitePreset {
         id: "doubao",
         name: "豆包",
-        url_template: "https://www.doubao.com/chat/?q={text}",
+        url_template: "https://www.doubao.com/chat/",
         category: "ai",
     },
     SitePreset {
         id: "kimi",
         name: "Kimi",
-        url_template: "https://kimi.moonshot.cn/chat/?q={text}",
+        url_template: "https://kimi.moonshot.cn/chat/",
         category: "ai",
     },
     SitePreset {
         id: "deepseek",
         name: "DeepSeek",
-        url_template: "https://chat.deepseek.com/?q={text}",
+        url_template: "https://chat.deepseek.com/",
         category: "ai",
     },
     SitePreset {
         id: "yuanqi",
         name: "腾讯元宝",
-        url_template: "https://yuanbao.tencent.com/chat?q={text}",
+        url_template: "https://yuanbao.tencent.com/chat",
         category: "ai",
     },
     SitePreset {
         id: "baichuan",
         name: "百小应",
-        url_template: "https://www.baichuan-ai.com/chat?q={text}",
+        url_template: "https://www.baichuan-ai.com/chat",
         category: "ai",
     },
     // ---------- 搜索 ----------

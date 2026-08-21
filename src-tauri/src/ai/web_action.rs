@@ -82,6 +82,7 @@ pub fn execute_web_action(
     }
 
     let is_url_template = template.contains("{text}") || template.contains("{query}") || template.contains("{raw_text}");
+    let use_url_mode = action.use_url_template.unwrap_or(false);
     let auto_sub = auto_submit_override.unwrap_or_else(|| action.auto_submit.unwrap_or(true));
 
     let (target_url_str, injection_script) = if is_empty_text {
@@ -92,12 +93,11 @@ pub fn execute_web_action(
             template.to_string()
         };
         (base_url, None)
-    } else if is_url_template && auto_sub {
-        // 2. URL 模板模式 且 允许自动提交：直接通过 URL 查询参数直达官网
+    } else if is_url_template && use_url_mode && auto_sub {
+        // 2. 仅在用户显式开启 use_url_template 且允许自动提交时：直接通过 URL 查询参数直达官网
         (render_url_template(template, text), None)
     } else {
-        // 3. 需要填充输入框但【不自动提交】(如双击引用模式)，或者非 URL 模板模式：
-        // 剥离 URL 模板中的查询参数 (?q={text})，获取纯净首页 URL，通过 DOM 注入填入内容并聚焦，防止官网自动根据 URL 参数发送
+        // 3. 默认统一走纯净基础 URL + 受控组件 DOM 注入模式 (支持精准聚焦、多行块引用与双击防自动发送)
         let base_url = if is_url_template {
             render_url_template(template, "")
         } else {

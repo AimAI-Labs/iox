@@ -106,6 +106,8 @@ pub struct ActionConfig {
     pub submit_selector: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_submit: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub use_url_template: Option<bool>,
 }
 
 fn default_font_size() -> u32 {
@@ -226,6 +228,7 @@ impl Default for AppConfig {
                     input_selector: None,
                     submit_selector: None,
                     auto_submit: None,
+                    use_url_template: None,
                     enabled: true,
                 },
                 ActionConfig {
@@ -242,6 +245,7 @@ impl Default for AppConfig {
                     input_selector: None,
                     submit_selector: None,
                     auto_submit: None,
+                    use_url_template: None,
                     enabled: true,
                 },
                 ActionConfig {
@@ -256,6 +260,7 @@ impl Default for AppConfig {
                     input_selector: Some("textarea#chat-input, textarea".to_string()),
                     submit_selector: Some("div[role='button']:not([aria-disabled='true']), button[type='submit']".to_string()),
                     auto_submit: Some(true),
+                    use_url_template: None,
                     enabled: true,
                 },
                 ActionConfig {
@@ -270,6 +275,7 @@ impl Default for AppConfig {
                     input_selector: Some("div[contenteditable='true'], textarea".to_string()),
                     submit_selector: Some("button[data-testid*='send'], button.send-button".to_string()),
                     auto_submit: Some(true),
+                    use_url_template: None,
                     enabled: false,
                 },
                 ActionConfig {
@@ -284,6 +290,7 @@ impl Default for AppConfig {
                     input_selector: None,
                     submit_selector: None,
                     auto_submit: None,
+                    use_url_template: Some(true),
                     enabled: true,
                 },
                 ActionConfig {
@@ -298,6 +305,7 @@ impl Default for AppConfig {
                     input_selector: None,
                     submit_selector: None,
                     auto_submit: None,
+                    use_url_template: Some(true),
                     enabled: true,
                 },
                 ActionConfig {
@@ -307,11 +315,12 @@ impl Default for AppConfig {
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,
-                    url_template: Some("https://chatgpt.com/?q={text}".to_string()),
+                    url_template: Some("https://chatgpt.com/".to_string()),
                     copy_to_clipboard: Some(false),
                     input_selector: None,
                     submit_selector: None,
                     auto_submit: None,
+                    use_url_template: None,
                     enabled: true,
                 },
                 ActionConfig {
@@ -321,11 +330,12 @@ impl Default for AppConfig {
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,
-                    url_template: Some("https://tongyi.aliyun.com/qianwen/?q={text}".to_string()),
+                    url_template: Some("https://tongyi.aliyun.com/qianwen/".to_string()),
                     copy_to_clipboard: Some(false),
                     input_selector: None,
                     submit_selector: None,
                     auto_submit: None,
+                    use_url_template: None,
                     enabled: true,
                 },
                 ActionConfig {
@@ -340,6 +350,7 @@ impl Default for AppConfig {
                     input_selector: None,
                     submit_selector: None,
                     auto_submit: None,
+                    use_url_template: Some(true),
                     enabled: false,
                 },
                 ActionConfig {
@@ -354,6 +365,7 @@ impl Default for AppConfig {
                     input_selector: None,
                     submit_selector: None,
                     auto_submit: None,
+                    use_url_template: Some(true),
                     enabled: false,
                 },
                 ActionConfig {
@@ -368,6 +380,7 @@ impl Default for AppConfig {
                     input_selector: None,
                     submit_selector: None,
                     auto_submit: None,
+                    use_url_template: Some(true),
                     enabled: false,
                 },
                 ActionConfig {
@@ -382,6 +395,7 @@ impl Default for AppConfig {
                     input_selector: None,
                     submit_selector: None,
                     auto_submit: None,
+                    use_url_template: None,
                     enabled: true,
                 },
             ],
