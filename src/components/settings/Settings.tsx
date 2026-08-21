@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig, ApiCardConfig } from "@/types/config";
-import { useTheme, broadcastThemeChange } from "@/hooks/useTheme";
+import { broadcastThemeChange } from "@/hooks/useTheme";
 import { MacTitleBar } from "@/components/MacTitleBar";
 import { SettingsSidebar, SettingsTab } from "@/components/settings/SettingsSidebar";
 import { ProvidersTab } from "@/components/settings/ProvidersTab";
@@ -46,8 +46,6 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     };
   }, []);
 
-  // 主题与透明度即时预览
-  useTheme(formData.general.theme, formData.general.overlayOpacity);
 
   const handleSave = async () => {
     if (saving) return;

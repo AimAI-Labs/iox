@@ -181,23 +181,22 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   ]);
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0]?.id || 'tab_init');
 
+  // 记录上一次激活的 Tab ID，用于在切换/新建 Tab 时精准阻断跨会话陈旧数据污染
+  const lastActiveTabIdRef = useRef<string>(activeTabId);
+
   // 当当前活动 Tab 的 streamText / selectedText / isLoading / turnSnapshots 变化时，实时同步到 tabs 数组中
   useEffect(() => {
+    // 若当前 render 是由于用户切换/新建 Tab 触发的，不使用上一个 Tab 的旧 props 覆写当前 Tab
+    if (activeTabId !== lastActiveTabIdRef.current) {
+      lastActiveTabIdRef.current = activeTabId;
+      return;
+    }
+
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id === activeTabId) {
-          let tabTitle = t.title;
-          if (!tabTitle || tabTitle === '新对话' || tabTitle === action.name) {
-            if (selectedText) {
-              tabTitle = selectedText.slice(0, 12).trim();
-            } else if (streamText) {
-              const firstLine = streamText.split('\n')[0].replace(/^[#*>\s]+/, '').trim();
-              if (firstLine) tabTitle = firstLine.slice(0, 12);
-            }
-          }
           return {
             ...t,
-            title: tabTitle || action.name || '新对话',
             streamText,
             selectedText,
             isLoading,
@@ -208,7 +207,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         return t;
       })
     );
-  }, [activeTabId, streamText, selectedText, isLoading, selectedModel, turnSnapshots, action.name]);
+  }, [activeTabId, streamText, selectedText, isLoading, selectedModel, turnSnapshots]);
 
   // 新建 Tab
   const handleNewTab = React.useCallback(() => {
@@ -224,6 +223,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       isLoading: false,
       turnSnapshots: {},
     };
+    lastActiveTabIdRef.current = newId;
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newId);
     setTurnSnapshots({});
@@ -239,6 +239,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       const target = tabs.find((t) => t.id === tabId);
       if (!target) return;
 
+      lastActiveTabIdRef.current = tabId;
       setActiveTabId(tabId);
       setFollowUpInput('');
       setTurnSnapshots(target.turnSnapshots || {});
@@ -248,12 +249,13 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     [activeTabId, tabs, onRestoreSession]
   );
 
-  // 关闭 Tab
+  // 关闭单 Tab
   const handleCloseTab = React.useCallback(
     (tabId: string) => {
       setTabs((prev) => {
         if (prev.length <= 1) {
           const newId = `tab_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          lastActiveTabIdRef.current = newId;
           setActiveTabId(newId);
           setTurnSnapshots({});
           setTotalDuration(undefined);
@@ -277,6 +279,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         const remaining = prev.filter((t) => t.id !== tabId);
         if (tabId === activeTabId) {
           const nextActive = remaining[0];
+          lastActiveTabIdRef.current = nextActive.id;
           setActiveTabId(nextActive.id);
           setTurnSnapshots(nextActive.turnSnapshots || {});
           setTotalDuration(undefined);
@@ -287,6 +290,73 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       });
     },
     [activeTabId, action.id, action.providerId, selectedModel, onNewChat, onRestoreSession]
+  );
+
+  // 关闭其他 Tab
+  const handleCloseOtherTabs = React.useCallback(
+    (targetId: string) => {
+      const target = tabs.find((t) => t.id === targetId);
+      if (!target) return;
+
+      setTabs([target]);
+      if (activeTabId !== targetId) {
+        lastActiveTabIdRef.current = targetId;
+        setActiveTabId(targetId);
+        setTurnSnapshots(target.turnSnapshots || {});
+        setTotalDuration(undefined);
+        setFollowUpInput('');
+        onRestoreSession?.(target.streamText, target.model, target.providerId);
+      }
+    },
+    [tabs, activeTabId, onRestoreSession]
+  );
+
+  // 关闭左侧 Tab
+  const handleCloseLeftTabs = React.useCallback(
+    (targetId: string) => {
+      const targetIdx = tabs.findIndex((t) => t.id === targetId);
+      if (targetIdx <= 0) return;
+
+      const remaining = tabs.slice(targetIdx);
+      setTabs(remaining);
+
+      // 如果当前活跃 Tab 位于被关闭的左侧区域，切换至目标 Tab
+      const activeIdx = tabs.findIndex((t) => t.id === activeTabId);
+      if (activeIdx < targetIdx) {
+        const target = tabs[targetIdx];
+        lastActiveTabIdRef.current = target.id;
+        setActiveTabId(target.id);
+        setTurnSnapshots(target.turnSnapshots || {});
+        setTotalDuration(undefined);
+        setFollowUpInput('');
+        onRestoreSession?.(target.streamText, target.model, target.providerId);
+      }
+    },
+    [tabs, activeTabId, onRestoreSession]
+  );
+
+  // 关闭右侧 Tab
+  const handleCloseRightTabs = React.useCallback(
+    (targetId: string) => {
+      const targetIdx = tabs.findIndex((t) => t.id === targetId);
+      if (targetIdx >= tabs.length - 1 || targetIdx === -1) return;
+
+      const remaining = tabs.slice(0, targetIdx + 1);
+      setTabs(remaining);
+
+      // 如果当前活跃 Tab 位于被关闭的右侧区域，切换至目标 Tab
+      const activeIdx = tabs.findIndex((t) => t.id === activeTabId);
+      if (activeIdx > targetIdx) {
+        const target = tabs[targetIdx];
+        lastActiveTabIdRef.current = target.id;
+        setActiveTabId(target.id);
+        setTurnSnapshots(target.turnSnapshots || {});
+        setTotalDuration(undefined);
+        setFollowUpInput('');
+        onRestoreSession?.(target.streamText, target.model, target.providerId);
+      }
+    },
+    [tabs, activeTabId, onRestoreSession]
   );
 
   // 多会话管理 Hook
@@ -521,7 +591,16 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   const handleFollowUpSubmit = (prompt: string) => {
     if (!prompt.trim() || isLoading) return;
-    onSendFollowUp(prompt);
+    const trimmed = prompt.trim();
+    // 提交问题时，若当前标签页仍为默认「新对话」或动作名，即时将标题设定为问题内容
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === activeTabId && (!t.title || t.title === '新对话' || t.title === action.name)
+          ? { ...t, title: trimmed.slice(0, 12) }
+          : t
+      )
+    );
+    onSendFollowUp(trimmed);
     setFollowUpInput('');
     isAutoScrollRef.current = true;
   };
@@ -554,6 +633,9 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         activeTabId={activeTabId}
         onSelectTab={handleSelectTab}
         onCloseTab={handleCloseTab}
+        onCloseOtherTabs={handleCloseOtherTabs}
+        onCloseLeftTabs={handleCloseLeftTabs}
+        onCloseRightTabs={handleCloseRightTabs}
         onNewTab={handleNewTab}
         onNewChat={handleNewTab}
         onToggleSessions={chatSessions.togglePanel}

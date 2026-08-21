@@ -14,7 +14,7 @@ import {
   Moon,
   Monitor,
 } from 'lucide-react';
-import { toggleThemeWithTransition } from '@/hooks/useTheme';
+import { switchThemeWithTransition } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 
 export interface ContextMenuProps {
@@ -243,7 +243,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                 const rect = e.currentTarget.getBoundingClientRect();
                 const x = rect.left + rect.width / 2;
                 const y = rect.top + rect.height / 2;
-                toggleThemeWithTransition(() => onThemeChange('system'), x, y);
+                switchThemeWithTransition('system', x, y, () => onThemeChange('system'));
                 onClose();
               }}
               className={cn(
@@ -263,7 +263,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                 const rect = e.currentTarget.getBoundingClientRect();
                 const x = rect.left + rect.width / 2;
                 const y = rect.top + rect.height / 2;
-                toggleThemeWithTransition(() => onThemeChange('light'), x, y);
+                switchThemeWithTransition('light', x, y, () => onThemeChange('light'));
                 onClose();
               }}
               className={cn(
@@ -283,7 +283,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                 const rect = e.currentTarget.getBoundingClientRect();
                 const x = rect.left + rect.width / 2;
                 const y = rect.top + rect.height / 2;
-                toggleThemeWithTransition(() => onThemeChange('dark'), x, y);
+                switchThemeWithTransition('dark', x, y, () => onThemeChange('dark'));
                 onClose();
               }}
               className={cn(

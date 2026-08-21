@@ -25,6 +25,9 @@ export interface CardHeaderProps {
   activeTabId?: string;
   onSelectTab?: (tabId: string) => void;
   onCloseTab?: (tabId: string) => void;
+  onCloseOtherTabs?: (tabId: string) => void;
+  onCloseLeftTabs?: (tabId: string) => void;
+  onCloseRightTabs?: (tabId: string) => void;
   onNewTab?: () => void;
   onNewChat?: () => void;
   onToggleSessions?: () => void;
@@ -47,6 +50,9 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onCloseOtherTabs,
+  onCloseLeftTabs,
+  onCloseRightTabs,
   onNewTab,
   onNewChat,
   onToggleSessions,
@@ -84,6 +90,9 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
             activeTabId={activeTabId || ''}
             onSelectTab={onSelectTab}
             onCloseTab={onCloseTab}
+            onCloseOtherTabs={onCloseOtherTabs}
+            onCloseLeftTabs={onCloseLeftTabs}
+            onCloseRightTabs={onCloseRightTabs}
             onNewTab={onNewTab}
           />
         </div>

@@ -111,7 +111,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = inputRef || internalTextareaRef;
-  const containerRef = useRef<HTMLDivElement>(null);
+  const plusContainerRef = useRef<HTMLDivElement>(null);
+  const cascaderContainerRef = useRef<HTMLDivElement>(null);
 
   const currentProvider = providers.find((p) => p.id === selectedProviderId);
   const providerName = currentProvider?.name || '选择服务商';
@@ -167,17 +168,40 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     }
   }, [value, customHeight]);
 
-  // 点击外部收起弹出层
+  // 精准失焦与点击外部收起弹出层
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setShowPlusMenu(false);
+      const target = e.target as Node;
+      if (
+        showCascaderMenu &&
+        cascaderContainerRef.current &&
+        !cascaderContainerRef.current.contains(target)
+      ) {
         setShowCascaderMenu(false);
       }
+      if (
+        showPlusMenu &&
+        plusContainerRef.current &&
+        !plusContainerRef.current.contains(target)
+      ) {
+        setShowPlusMenu(false);
+      }
     };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowCascaderMenu(false);
+        setShowPlusMenu(false);
+      }
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showCascaderMenu, showPlusMenu]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (sendKeyShortcut === 'Ctrl+Enter') {
@@ -228,127 +252,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   };
 
   return (
-    <div
-      ref={containerRef}
-      className={cn('relative shrink-0 p-3 pt-1 select-none', className)}
-    >
-      {/* 1. 快捷 Prompt 弹出卡片 (+ 菜单) */}
-      {showPlusMenu && (
-        <div className="absolute bottom-full left-3 mb-2 z-50 w-56 rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 p-1.5 shadow-2xl backdrop-blur-2xl dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-120">
-          <div className="px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-            快捷预设提示词
-          </div>
-          <div className="flex flex-col gap-0.5">
-            {DEFAULT_ACTION_CHIPS.map((chip) => (
-              <button
-                key={chip.label}
-                type="button"
-                onClick={() => handleChipClick(chip)}
-                disabled={isLoading || disabled}
-                className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-left text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer disabled:opacity-50"
-              >
-                {chip.icon}
-                <span className="font-medium">{chip.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 2. 供应商与模型双列级联选择器 (Cascader Popover) */}
-      {showCascaderMenu && providers.length > 0 && (
-        <div className="absolute bottom-full left-8 mb-2 z-50 flex rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-[#18181b]/95 shadow-2xl backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-120 overflow-hidden divide-x divide-black/5 dark:divide-white/5">
-          {/* 左侧列：服务商列表 (宽 150px) */}
-          <div className="w-[155px] p-1.5 flex flex-col gap-0.5">
-            <div className="px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-              服务商
-            </div>
-            <div className="max-h-56 overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
-              {providers.map((p) => {
-                const isActive = p.id === cascaderProvider?.id;
-                const isSelected = p.id === selectedProviderId;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onMouseEnter={() => setActiveCascaderProviderId(p.id)}
-                    onClick={() => setActiveCascaderProviderId(p.id)}
-                    className={cn(
-                      'flex items-center justify-between rounded-xl px-2 py-1.5 text-left text-[12px] font-medium transition-colors cursor-pointer',
-                      isActive
-                        ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
-                        : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-200'
-                    )}
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0 mr-1">
-                      <DynamicIcon name={p.id || p.name} size={14} className="shrink-0" />
-                      <span className="truncate">{p.name}</span>
-                    </div>
-                    <span className={cn(
-                      "text-[10px] font-mono px-1 py-0.2 rounded shrink-0",
-                      isSelected ? "text-blue-600 dark:text-blue-400 bg-blue-500/10 font-semibold" : "text-zinc-400"
-                    )}>
-                      {p.models.length}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 右侧列：当前高亮服务商下的模型列表 (宽 185px) */}
-          <div className="w-[190px] p-1.5 flex flex-col gap-0.5">
-            <div className="flex items-center justify-between px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-              <span className="truncate max-w-28">{cascaderProvider?.name || '模型'}</span>
-              <span className="text-[10px]">点击切换</span>
-            </div>
-            <div className="max-h-56 overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
-              {cascaderModels.length > 0 ? (
-                cascaderModels.map((model) => {
-                  const isCurrentModel =
-                    cascaderProvider?.id === selectedProviderId && model === selectedModel;
-                  const isDefault = model === cascaderProvider?.defaultModel;
-
-                  return (
-                    <button
-                      key={model}
-                      type="button"
-                      onClick={() => handleSelectModel(cascaderProvider.id, model)}
-                      className={cn(
-                        'flex items-center justify-between rounded-xl px-2 py-1.5 text-left text-[12px] font-medium transition-colors cursor-pointer',
-                        isCurrentModel
-                          ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 font-semibold'
-                          : 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
-                      )}
-                    >
-                      <div className="flex items-center gap-1.5 min-w-0 mr-1">
-                        <Layers size={12} className={cn("shrink-0", isCurrentModel ? "text-blue-500" : "text-zinc-400")} />
-                        <span className="truncate">{model}</span>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {isDefault && (
-                          <span className="text-[9.5px] px-1 py-0.2 rounded bg-zinc-200/60 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-normal">
-                            默认
-                          </span>
-                        )}
-                        {isCurrentModel && (
-                          <Check size={13} className="text-blue-500 stroke-[2.5]" />
-                        )}
-                      </div>
-                    </button>
-                  );
-                })
-              ) : (
-                <div className="px-3 py-4 text-center text-[11px] text-zinc-400">
-                  暂无可用的模型
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 3. 独立胶囊提问卡片容器 */}
+    <div className={cn('relative shrink-0 p-3 pt-1 select-none', className)}>
+      {/* 独立胶囊提问卡片容器 */}
       <div
         className={cn(
           'flex flex-col rounded-[18px] bg-white dark:bg-[#18181b] px-3 pb-3 pt-2 shadow-sm border border-zinc-200/90 dark:border-zinc-700/80',
@@ -393,49 +298,179 @@ export const PromptBar: React.FC<PromptBarProps> = ({
         <div className="mt-2 flex items-center justify-between">
           {/* 左侧操作组：+ 快捷菜单、[服务商图标 / 模型选择] 双列级联芯片、⚡极速/🧠深度思考切换 */}
           <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
-            {/* + 按钮 */}
-            <button
-              type="button"
-              onClick={() => {
-                setShowPlusMenu((prev) => !prev);
-                setShowCascaderMenu(false);
-              }}
-              className="flex size-6 items-center justify-center rounded-md text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 cursor-pointer"
-              title="快捷提示词"
-            >
-              <Plus size={15} strokeWidth={2} />
-            </button>
-
-            {/* 供应商与模型双列级联选择芯片 */}
-            {providers.length > 0 && (
+            {/* 1. + 快捷提示词菜单容器 */}
+            <div className="relative" ref={plusContainerRef}>
               <button
                 type="button"
                 onClick={() => {
-                  setShowCascaderMenu((prev) => !prev);
-                  setShowPlusMenu(false);
-                  if (selectedProviderId) setActiveCascaderProviderId(selectedProviderId);
+                  setShowPlusMenu((prev) => !prev);
+                  setShowCascaderMenu(false);
                 }}
-                className={cn(
-                  'flex h-6.5 items-center gap-1.5 rounded-md px-2 py-0.5 text-[12px] font-medium transition-all duration-150 cursor-pointer border max-w-44',
-                  showCascaderMenu
-                    ? 'bg-zinc-200/90 dark:bg-zinc-700/90 border-zinc-300 dark:border-zinc-600 text-zinc-900 dark:text-zinc-100'
-                    : 'bg-zinc-100/90 dark:bg-zinc-800/90 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60'
-                )}
-                title={`当前服务商: ${providerName}，模型: ${modelLabel} (点击级联切换)`}
+                className="flex size-6 items-center justify-center rounded-md text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 cursor-pointer"
+                title="快捷提示词"
               >
-                <DynamicIcon name={providerIconName} size={14} className="shrink-0" />
-                <span className="truncate">{modelLabel}</span>
-                <ChevronDown
-                  size={10}
-                  className={cn(
-                    'shrink-0 text-zinc-400 transition-transform duration-150',
-                    showCascaderMenu && 'rotate-180'
-                  )}
-                />
+                <Plus size={15} strokeWidth={2} />
               </button>
+
+              {/* 快捷 Prompt 弹出卡片 (+ 菜单) 严格锚定在 + 按钮上方 */}
+              {showPlusMenu && (
+                <div className="absolute bottom-full left-0 mb-1.5 z-50 w-56 rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 p-1.5 shadow-2xl backdrop-blur-2xl dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-120">
+                  <div className="px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                    快捷预设提示词
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {DEFAULT_ACTION_CHIPS.map((chip) => (
+                      <button
+                        key={chip.label}
+                        type="button"
+                        onClick={() => handleChipClick(chip)}
+                        disabled={isLoading || disabled}
+                        className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-left text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer disabled:opacity-50"
+                      >
+                        {chip.icon}
+                        <span className="font-medium">{chip.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2. 供应商与模型双列级联选择芯片容器 (严格在按钮上方展示浮层) */}
+            {providers.length > 0 && (
+              <div className="relative" ref={cascaderContainerRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCascaderMenu((prev) => !prev);
+                    setShowPlusMenu(false);
+                    if (selectedProviderId) setActiveCascaderProviderId(selectedProviderId);
+                  }}
+                  className={cn(
+                    'flex h-6.5 items-center gap-1.5 rounded-md px-2 py-0.5 text-[12px] font-medium transition-all duration-150 cursor-pointer border max-w-44',
+                    showCascaderMenu
+                      ? 'bg-zinc-200/90 dark:bg-zinc-700/90 border-zinc-300 dark:border-zinc-600 text-zinc-900 dark:text-zinc-100'
+                      : 'bg-zinc-100/90 dark:bg-zinc-800/90 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60'
+                  )}
+                  title={`当前服务商: ${providerName}，模型: ${modelLabel} (点击级联切换)`}
+                >
+                  <DynamicIcon name={providerIconName} size={14} className="shrink-0" />
+                  <span className="truncate">{modelLabel}</span>
+                  <ChevronDown
+                    size={10}
+                    className={cn(
+                      'shrink-0 text-zinc-400 transition-transform duration-150',
+                      showCascaderMenu && 'rotate-180'
+                    )}
+                  />
+                </button>
+
+                {/* 供应商与模型双列级联选择器 (Cascader Popover) 严格锚定在按钮正上方 */}
+                {showCascaderMenu && (
+                  <div className="absolute bottom-full left-0 mb-1.5 z-50 flex rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 dark:bg-[#18181b]/95 shadow-2xl backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-120 overflow-hidden divide-x divide-black/5 dark:divide-white/5">
+                    {/* 左侧列：服务商列表 (宽 150px) */}
+                    <div className="w-[155px] p-1.5 flex flex-col gap-0.5">
+                      <div className="px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                        服务商
+                      </div>
+                      <div className="max-h-56 overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
+                        {providers.map((p) => {
+                          const isActive = p.id === cascaderProvider?.id;
+                          const isSelected = p.id === selectedProviderId;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onMouseEnter={() => setActiveCascaderProviderId(p.id)}
+                              onClick={() => setActiveCascaderProviderId(p.id)}
+                              className={cn(
+                                'flex items-center justify-between rounded-xl px-2 py-1.5 text-left text-[12px] font-medium transition-colors cursor-pointer',
+                                isActive
+                                  ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
+                                  : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-200'
+                              )}
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0 mr-1">
+                                <DynamicIcon name={p.id || p.name} size={14} className="shrink-0" />
+                                <span className="truncate">{p.name}</span>
+                              </div>
+                              <span
+                                className={cn(
+                                  'text-[10px] font-mono px-1 py-0.2 rounded shrink-0',
+                                  isSelected
+                                    ? 'text-blue-600 dark:text-blue-400 bg-blue-500/10 font-semibold'
+                                    : 'text-zinc-400'
+                                )}
+                              >
+                                {p.models.length}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 右侧列：当前高亮服务商下的模型列表 (宽 190px) */}
+                    <div className="w-[190px] p-1.5 flex flex-col gap-0.5">
+                      <div className="flex items-center justify-between px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                        <span className="truncate max-w-28">{cascaderProvider?.name || '模型'}</span>
+                        <span className="text-[10px]">点击切换</span>
+                      </div>
+                      <div className="max-h-56 overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
+                        {cascaderModels.length > 0 ? (
+                          cascaderModels.map((model) => {
+                            const isCurrentModel =
+                              cascaderProvider?.id === selectedProviderId && model === selectedModel;
+                            const isDefault = model === cascaderProvider?.defaultModel;
+
+                            return (
+                              <button
+                                key={model}
+                                type="button"
+                                onClick={() => handleSelectModel(cascaderProvider.id, model)}
+                                className={cn(
+                                  'flex items-center justify-between rounded-xl px-2 py-1.5 text-left text-[12px] font-medium transition-colors cursor-pointer',
+                                  isCurrentModel
+                                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 font-semibold'
+                                    : 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'
+                                )}
+                              >
+                                <div className="flex items-center gap-1.5 min-w-0 mr-1">
+                                  <Layers
+                                    size={12}
+                                    className={cn(
+                                      'shrink-0',
+                                      isCurrentModel ? 'text-blue-500' : 'text-zinc-400'
+                                    )}
+                                  />
+                                  <span className="truncate">{model}</span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {isDefault && (
+                                    <span className="text-[9.5px] px-1 py-0.2 rounded bg-zinc-200/60 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-normal">
+                                      默认
+                                    </span>
+                                  )}
+                                  {isCurrentModel && (
+                                    <Check size={13} className="text-blue-500 stroke-[2.5]" />
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="px-3 py-4 text-center text-[11px] text-zinc-400">
+                            暂无可用的模型
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
-            {/* ⚡ 极速 / 🧠 深度思考 切换按钮 */}
+            {/* 3. ⚡ 极速 / 🧠 深度思考 切换按钮 */}
             <button
               type="button"
               onClick={toggleThinkingMode}
@@ -502,4 +537,3 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     </div>
   );
 };
-

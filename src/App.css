@@ -590,19 +590,21 @@
   mix-blend-mode: normal;
 }
 
+/* 浅色模式（由深色切为浅色）：旧视图（深色）置顶并向点击原点收缩，露出底层浅色新视图 */
 ::view-transition-old(root) {
-  z-index: 1;
+  z-index: 9999;
 }
 
 ::view-transition-new(root) {
-  z-index: 9999;
+  z-index: 1;
 }
 
+/* 深色模式（由浅色切为深色）：新视图（深色）置顶并从点击原点向外扩散，覆盖底层浅色旧视图 */
 .dark::view-transition-old(root) {
-  z-index: 9999;
+  z-index: 1;
 }
 
 .dark::view-transition-new(root) {
-  z-index: 1;
+  z-index: 9999;
 }
 

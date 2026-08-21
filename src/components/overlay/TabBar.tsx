@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react';
-import { Plus, X, Loader2 } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Plus, X, Loader2, PanelLeftClose, PanelRightClose, Sparkles, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface TabItem {
@@ -20,6 +20,9 @@ export interface TabBarProps {
   activeTabId: string;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
+  onCloseOtherTabs?: (tabId: string) => void;
+  onCloseLeftTabs?: (tabId: string) => void;
+  onCloseRightTabs?: (tabId: string) => void;
   onNewTab: () => void;
   className?: string;
 }
@@ -29,10 +32,29 @@ export const TabBar: React.FC<TabBarProps> = ({
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onCloseOtherTabs,
+  onCloseLeftTabs,
+  onCloseRightTabs,
   onNewTab,
   className,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // 右键上下文菜单状态
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    tabId: string;
+    tabIndex: number;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    tabId: '',
+    tabIndex: -1,
+  });
 
   // 支持鼠标滚轮在标签栏区域横向平滑滚动
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -52,6 +74,52 @@ export const TabBar: React.FC<TabBarProps> = ({
     }
   }, [activeTabId, tabs.length]);
 
+  // 点击外部与按 Escape 关闭右键菜单
+  useEffect(() => {
+    if (!contextMenu.visible) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setContextMenu((prev) => ({ ...prev, visible: false }));
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu((prev) => ({ ...prev, visible: false }));
+      }
+    };
+
+    window.addEventListener('mousedown', handleMouseDown, true);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', handleMouseDown, true);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu.visible]);
+
+  const handleTabContextMenu = (e: React.MouseEvent, tabId: string, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      tabId,
+      tabIndex: index,
+    });
+  };
+
+  const closeMenu = () => {
+    setContextMenu((prev) => ({ ...prev, visible: false }));
+  };
+
+  // 边界安全计算
+  const menuWidth = 145;
+  const menuHeight = 140;
+  const posX = Math.min(contextMenu.x, Math.max(10, window.innerWidth - menuWidth - 10));
+  const posY = Math.min(contextMenu.y + 4, Math.max(10, window.innerHeight - menuHeight - 10));
+
   return (
     <div
       className={cn(
@@ -66,22 +134,23 @@ export const TabBar: React.FC<TabBarProps> = ({
         onWheel={handleWheel}
         className="flex items-center gap-1 min-w-0 flex-1 overflow-x-auto no-scrollbar scroll-smooth py-0.5"
       >
-        {tabs.map((tab) => {
+        {tabs.map((tab, index) => {
           const isActive = tab.id === activeTabId;
-          const displayTitle = tab.title || (tab.selectedText ? tab.selectedText.slice(0, 12) : '新对话');
+          const displayTitle = tab.title || '新对话';
 
           return (
             <div
               key={tab.id}
               data-tab-id={tab.id}
               onClick={() => onSelectTab(tab.id)}
+              onContextMenu={(e) => handleTabContextMenu(e, tab.id, index)}
               className={cn(
                 'group relative flex h-6.5 items-center gap-1.5 rounded-lg px-2 text-[12px] transition-all duration-120 cursor-pointer max-w-36 shrink-0',
                 isActive
                   ? 'bg-white dark:bg-[#27272a] text-zinc-900 dark:text-zinc-100 shadow-xs border border-zinc-200/80 dark:border-zinc-700/80 font-medium'
                   : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/60 border border-transparent'
               )}
-              title={tab.title || '会话标签'}
+              title={tab.title || '会话标签 (右键查看更多操作)'}
             >
               {/* 生成状态指示 */}
               {tab.isLoading ? (
@@ -130,6 +199,93 @@ export const TabBar: React.FC<TabBarProps> = ({
       >
         <Plus size={13} strokeWidth={2.4} />
       </button>
+
+      {/* 标签右键上下文菜单 */}
+      {contextMenu.visible && (
+        <div
+          ref={menuRef}
+          style={{ left: `${posX}px`, top: `${posY}px` }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className={cn(
+            'fixed z-100 flex flex-col w-36 rounded-xl p-1 select-none',
+            'bg-white/95 dark:bg-[#1f2024]/95 text-zinc-800 dark:text-zinc-200',
+            'border border-black/10 dark:border-white/10 shadow-xl backdrop-blur-2xl',
+            'animate-in fade-in zoom-in-95 duration-100'
+          )}
+        >
+          {/* 1. 关闭当前 */}
+          <button
+            type="button"
+            onClick={() => {
+              closeMenu();
+              onCloseTab(contextMenu.tabId);
+            }}
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11.5px] font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors cursor-pointer text-left"
+          >
+            <Trash2 size={12} className="text-zinc-400 shrink-0" />
+            <span>关闭当前标签</span>
+          </button>
+
+          {/* 2. 关闭其他 */}
+          <button
+            type="button"
+            disabled={tabs.length <= 1}
+            onClick={() => {
+              closeMenu();
+              onCloseOtherTabs?.(contextMenu.tabId);
+            }}
+            className={cn(
+              'flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11.5px] font-medium transition-colors text-left',
+              tabs.length <= 1
+                ? 'opacity-40 cursor-not-allowed text-zinc-400'
+                : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer'
+            )}
+          >
+            <Sparkles size={12} className="text-zinc-400 shrink-0" />
+            <span>关闭其他标签</span>
+          </button>
+
+          <div className="my-0.5 h-px bg-zinc-200/60 dark:bg-white/5" />
+
+          {/* 3. 关闭左侧 */}
+          <button
+            type="button"
+            disabled={contextMenu.tabIndex <= 0}
+            onClick={() => {
+              closeMenu();
+              onCloseLeftTabs?.(contextMenu.tabId);
+            }}
+            className={cn(
+              'flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11.5px] font-medium transition-colors text-left',
+              contextMenu.tabIndex <= 0
+                ? 'opacity-40 cursor-not-allowed text-zinc-400'
+                : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer'
+            )}
+          >
+            <PanelLeftClose size={12} className="text-zinc-400 shrink-0" />
+            <span>关闭左侧标签</span>
+          </button>
+
+          {/* 4. 关闭右侧 */}
+          <button
+            type="button"
+            disabled={contextMenu.tabIndex >= tabs.length - 1}
+            onClick={() => {
+              closeMenu();
+              onCloseRightTabs?.(contextMenu.tabId);
+            }}
+            className={cn(
+              'flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11.5px] font-medium transition-colors text-left',
+              contextMenu.tabIndex >= tabs.length - 1
+                ? 'opacity-40 cursor-not-allowed text-zinc-400'
+                : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer'
+            )}
+          >
+            <PanelRightClose size={12} className="text-zinc-400 shrink-0" />
+            <span>关闭右侧标签</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

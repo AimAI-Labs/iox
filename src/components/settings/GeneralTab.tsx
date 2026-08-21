@@ -1,6 +1,8 @@
 import React from "react";
 import { Monitor, Moon, Sun, Sparkles } from "lucide-react";
 import { GeneralConfig } from "@/types/config";
+import { switchThemeWithTransition } from "@/hooks/useTheme";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -151,20 +153,66 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                 选择 IOX 界面色彩风格模式
               </p>
             </div>
-            <div className="w-52">
-              <Select
-                value={general.theme}
-                onChange={(val) =>
-                  onUpdateGeneral({
-                    theme: val as GeneralConfig["theme"],
-                  })
-                }
-                options={[
-                  { value: "system", label: "跟随系统 (System)", icon: Monitor },
-                  { value: "dark", label: "深色模式 (Dark)", icon: Moon },
-                  { value: "light", label: "浅色模式 (Light)", icon: Sun },
-                ]}
-              />
+            <div className="flex items-center gap-1 bg-black/5 dark:bg-white/5 p-1 rounded-xl border border-black/5 dark:border-white/5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = rect.left + rect.width / 2;
+                  const y = rect.top + rect.height / 2;
+                  switchThemeWithTransition('system', x, y, () => onUpdateGeneral({ theme: 'system' }));
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer select-none",
+                  general.theme === "system"
+                    ? "bg-background text-foreground shadow-xs border border-black/5 dark:border-white/10 font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+                )}
+                title="跟随系统"
+              >
+                <Monitor size={13} className={general.theme === 'system' ? 'text-primary dark:text-blue-400' : ''} />
+                <span>系统</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = rect.left + rect.width / 2;
+                  const y = rect.top + rect.height / 2;
+                  switchThemeWithTransition('light', x, y, () => onUpdateGeneral({ theme: 'light' }));
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer select-none",
+                  general.theme === "light"
+                    ? "bg-background text-foreground shadow-xs border border-black/5 dark:border-white/10 font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+                )}
+                title="浅色模式"
+              >
+                <Sun size={13} className={general.theme === 'light' ? 'text-amber-500' : ''} />
+                <span>浅色</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = rect.left + rect.width / 2;
+                  const y = rect.top + rect.height / 2;
+                  switchThemeWithTransition('dark', x, y, () => onUpdateGeneral({ theme: 'dark' }));
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer select-none",
+                  general.theme === "dark"
+                    ? "bg-background text-foreground shadow-xs border border-black/5 dark:border-white/10 font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
+                )}
+                title="深色模式"
+              >
+                <Moon size={13} className={general.theme === 'dark' ? 'text-purple-500 dark:text-purple-400' : ''} />
+                <span>深色</span>
+              </button>
             </div>
           </div>
 
