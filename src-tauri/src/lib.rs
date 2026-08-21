@@ -53,6 +53,7 @@ async fn trigger_web_action(
     action_id: String,
     text: String,
     copy_to_clipboard: Option<bool>,
+    auto_submit_override: Option<bool>,
 ) -> Result<(), String> {
     let config = state.config.lock().unwrap().clone();
     let action = config
@@ -62,7 +63,14 @@ async fn trigger_web_action(
         .cloned()
         .ok_or_else(|| format!("Action '{}' not found", action_id))?;
 
-    ai::execute_web_action(&app, &config, &action, &text, copy_to_clipboard)
+    ai::execute_web_action(
+        &app,
+        &config,
+        &action,
+        &text,
+        copy_to_clipboard,
+        auto_submit_override,
+    )
 }
 
 #[tauri::command]

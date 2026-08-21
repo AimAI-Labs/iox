@@ -55,6 +55,7 @@ pub fn execute_web_action(
     action: &ActionConfig,
     text: &str,
     copy_override: Option<bool>,
+    auto_submit_override: Option<bool>,
 ) -> Result<(), String> {
     let is_empty_text = text.trim().is_empty();
 
@@ -81,15 +82,33 @@ pub fn execute_web_action(
     }
 
     let is_url_template = template.contains("{text}") || template.contains("{query}") || template.contains("{raw_text}");
-    let (target_url_str, injection_script) = if is_url_template {
+    let auto_sub = auto_submit_override.unwrap_or_else(|| action.auto_submit.unwrap_or(true));
+
+    let (target_url_str, injection_script) = if is_empty_text {
+        // 1. 空文本直达模式：不注入任何 DOM 脚本与自动提交，直接直达原生官网首页
+        let base_url = if is_url_template {
+            render_url_template(template, "")
+        } else {
+            template.to_string()
+        };
+        (base_url, None)
+    } else if is_url_template && auto_sub {
+        // 2. URL 模板模式 且 允许自动提交：直接通过 URL 查询参数直达官网
         (render_url_template(template, text), None)
-    } else if is_empty_text {
-        // 空文本直达模式：不注入任何 DOM 脚本与自动提交，直接直达原生官网首页
-        (template.to_string(), None)
     } else {
+        // 3. 需要填充输入框但【不自动提交】(如双击引用模式)，或者非 URL 模板模式：
+        // 剥离 URL 模板中的查询参数 (?q={text})，获取纯净首页 URL，通过 DOM 注入填入内容并聚焦，防止官网自动根据 URL 参数发送
+        let base_url = if is_url_template {
+            render_url_template(template, "")
+        } else {
+            template.to_string()
+        };
+
         let input_sel = action.input_selector.as_deref().unwrap_or_else(|| {
             if template.contains("deepseek.com") || action.id == "act_web_deepseek" {
                 "textarea#chat-input, textarea"
+            } else if template.contains("tongyi.aliyun.com") || action.id == "act_web_tongyi" || action.id == "tongyi" {
+                "textarea, div[contenteditable='true']"
             } else if template.contains("kimi.moonshot.cn") {
                 "div[contenteditable='true'], textarea"
             } else if template.contains("claude.ai") {
@@ -115,9 +134,8 @@ pub fn execute_web_action(
             }
         });
 
-        let auto_sub = action.auto_submit.unwrap_or(true);
         let script = build_dom_injection_script(text, input_sel, submit_sel, auto_sub);
-        (template.to_string(), Some(script))
+        (base_url, Some(script))
     };
 
     let target_url: tauri::Url = target_url_str

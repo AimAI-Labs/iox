@@ -151,6 +151,7 @@ export function App() {
             isClosing={overlayState.isClosing}
             iconOnly={config.general.iconOnlyBubble}
             onActionClick={overlayState.handleTriggerAction}
+            onActionDoubleClick={overlayState.handleTriggerQuoteAction}
             onActionContextMenu={overlayState.handleTriggerActionWithoutText}
             onOpenSettings={() => handleOpenSettings()}
           />
@@ -161,6 +162,7 @@ export function App() {
             selectedModel={overlayState.selectedModel}
             streamText={overlayState.streamText}
             selectedText={overlayState.selectedText}
+            initialInput={overlayState.initialInput}
             isLoading={overlayState.isLoading}
             isPinned={overlayState.isPinned}
             isClosing={overlayState.isClosing}

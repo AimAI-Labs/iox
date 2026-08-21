@@ -34,6 +34,7 @@ export interface ResultCardProps {
   selectedModel: string;
   streamText: string;
   selectedText?: string;
+  initialInput?: string;
   isLoading: boolean;
   isPinned: boolean;
   isClosing?: boolean;
@@ -88,6 +89,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   selectedModel,
   streamText,
   selectedText = '',
+  initialInput = '',
   isLoading,
   isPinned,
   isClosing = false,
@@ -111,7 +113,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   onResetSize,
 }) => {
   const { copied, copy } = useCopyFeedback(2000);
-  const [followUpInput, setFollowUpInput] = useState('');
+  const [followUpInput, setFollowUpInput] = useState(initialInput || '');
   const [isThinkingOpen, setIsThinkingOpen] = useState(apiCard?.thinkingDefaultOpen ?? true);
   const [isMaximized, setIsMaximized] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; visible: boolean }>({
@@ -122,6 +124,21 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   // 选中文本悬浮引用胶囊菜单状态
   const promptInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // 当从外部传入初始预填引用文本时，自动设置到 followUpInput 并聚焦输入框末尾
+  useEffect(() => {
+    if (initialInput) {
+      setFollowUpInput(initialInput);
+      const timer = setTimeout(() => {
+        if (promptInputRef.current) {
+          promptInputRef.current.focus();
+          const len = promptInputRef.current.value.length;
+          promptInputRef.current.setSelectionRange(len, len);
+        }
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [initialInput]);
   const [quoteMenu, setQuoteMenu] = useState<{
     x: number;
     y: number;

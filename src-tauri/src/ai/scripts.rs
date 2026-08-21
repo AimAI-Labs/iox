@@ -182,6 +182,15 @@ pub fn build_dom_injection_script(
             window.__iox_last_text = targetText;
             window.__iox_injected_done = true;
 
+            // 自动聚焦输入框并将光标移至末尾，方便用户直接打字
+            try {{
+                el.focus();
+                if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {{
+                    const len = el.value.length;
+                    el.setSelectionRange(len, len);
+                }}
+            }} catch (_) {{}}
+
             if (autoSubmit) {{
                 setTimeout(() => {{
                     triggerSubmit(el);

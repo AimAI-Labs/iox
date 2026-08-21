@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ActionConfig } from '@/types/config';
 import { DynamicIcon } from '@/components/Icons';
 import { IOXLogo } from '@/components/common';
@@ -12,6 +12,7 @@ export interface BubbleBarProps {
   selectedText?: string;
   isClosing?: boolean;
   onActionClick: (action: ActionConfig) => void;
+  onActionDoubleClick?: (action: ActionConfig) => void;
   onActionContextMenu?: (action: ActionConfig) => void;
   onOpenSettings?: () => void;
   onReorderActions?: (newActions: ActionConfig[]) => void;
@@ -24,6 +25,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   selectedText = '',
   isClosing = false,
   onActionClick,
+  onActionDoubleClick,
   onActionContextMenu,
   onOpenSettings,
   onReorderActions,
@@ -35,12 +37,24 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastClickedIdRef = useRef<string | null>(null);
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) {
+        clearTimeout(clickTimerRef.current);
+      }
+    };
+  }, []);
+
   const enabledActions = actions.filter((a) => a.enabled);
   const isDraggable = Boolean(onReorderActions);
 
   // 快捷复制当前选中文本
-  const handleQuickCopy = async (action: ActionConfig, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleQuickCopy = async (action: ActionConfig, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (copied) return;
     const textToCopy = selectedText || (isPreview ? '选中文本示例' : '');
     if (!textToCopy && !isPreview) return;
@@ -52,6 +66,38 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         onActionClick(action);
       }, 450);
     }
+  };
+
+  // 动作按钮点击处理器：
+  // 1. 快捷复制：直接触发，零延迟
+  // 2. API 动作与 Web 官网动作：通过 200ms 防抖解耦单击（即时生成/发送）与双击（填入引用且不自动发送）
+  const handleActionButtonClick = (action: ActionConfig, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isPreview) return;
+
+    if (action.actionType === 'copy') {
+      handleQuickCopy(action, e);
+      return;
+    }
+
+    // 检查是否在 200ms 内收到针对同一动作的第二次点击
+    if (clickTimerRef.current && lastClickedIdRef.current === action.id) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      lastClickedIdRef.current = null;
+      onActionDoubleClick?.(action);
+      return;
+    }
+
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+    }
+    lastClickedIdRef.current = action.id;
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null;
+      lastClickedIdRef.current = null;
+      onActionClick(action);
+    }, 200);
   };
 
   // 拖拽完成排序处理
@@ -118,6 +164,11 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                   draggable: true,
                   onDragStart: (e: React.DragEvent) => {
                     e.stopPropagation();
+                    if (clickTimerRef.current) {
+                      clearTimeout(clickTimerRef.current);
+                      clickTimerRef.current = null;
+                      lastClickedIdRef.current = null;
+                    }
                     e.dataTransfer.effectAllowed = 'move';
                     e.dataTransfer.setData('text/plain', action.id);
                     setDraggedId(action.id);
@@ -146,11 +197,16 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
               return (
                 <button
                   key={action.id}
-                  onClick={(e) => handleQuickCopy(action, e)}
+                  onClick={(e) => handleActionButtonClick(action, e)}
                   onMouseDown={(e) => e.stopPropagation()}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (clickTimerRef.current) {
+                      clearTimeout(clickTimerRef.current);
+                      clickTimerRef.current = null;
+                      lastClickedIdRef.current = null;
+                    }
                   }}
                   {...dragHandlers}
                   className={cn(
@@ -183,11 +239,16 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
             return (
               <button
                 key={action.id}
-                onClick={() => onActionClick(action)}
+                onClick={(e) => handleActionButtonClick(action, e)}
                 onMouseDown={(e) => e.stopPropagation()}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (clickTimerRef.current) {
+                    clearTimeout(clickTimerRef.current);
+                    clickTimerRef.current = null;
+                    lastClickedIdRef.current = null;
+                  }
                   if (!isPreview && onActionContextMenu) {
                     onActionContextMenu(action);
                   }

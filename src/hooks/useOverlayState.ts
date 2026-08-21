@@ -49,6 +49,7 @@ export function useOverlayState(config: AppConfig | null) {
   const {
     handleTriggerAction,
     handleTriggerActionWithoutText,
+    handleTriggerQuoteAction,
     handleSendFollowUp,
     handleProviderChange,
     handleModelChange,
@@ -70,6 +71,8 @@ export function useOverlayState(config: AppConfig | null) {
       dispatch({ type: 'START_ACTION', action, model }),
     onStartEmptyAction: (action, model) =>
       dispatch({ type: 'START_EMPTY_CARD_ACTION', action, model }),
+    onStartQuoteAction: (action, initialInput, model) =>
+      dispatch({ type: 'START_QUOTE_ACTION', action, initialInput, model }),
     onAppendToken: (token) => dispatch({ type: 'APPEND_STREAM_TOKEN', token }),
     onStreamDone: () => dispatch({ type: 'STREAM_DONE' }),
     onStreamError: (error) => dispatch({ type: 'STREAM_ERROR', error }),
@@ -99,8 +102,10 @@ export function useOverlayState(config: AppConfig | null) {
     isPinned: state.isPinned,
     error: state.error,
     thinkingMode: state.thinkingMode,
+    initialInput: state.initialInput,
     handleTriggerAction,
     handleTriggerActionWithoutText,
+    handleTriggerQuoteAction,
     handleSendFollowUp,
     handleProviderChange,
     handleModelChange,

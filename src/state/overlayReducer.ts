@@ -16,6 +16,7 @@ export interface OverlayState {
   animKey: number;
   thinkingMode: 'quick' | 'deep';
   currentSessionId: string | null;
+  initialInput?: string;
 }
 
 // 跨会话记忆钉住偏好：重启/隐藏后恢复，配合后端
@@ -42,6 +43,7 @@ export const initialOverlayState: OverlayState = {
   animKey: 0,
   thinkingMode: 'quick',
   currentSessionId: null,
+  initialInput: '',
 };
 
 export type OverlayAction =
@@ -49,6 +51,7 @@ export type OverlayAction =
   | { type: 'SET_MODE'; mode: OverlayMode }
   | { type: 'START_ACTION'; action: ActionConfig; model?: string }
   | { type: 'START_EMPTY_CARD_ACTION'; action: ActionConfig; model?: string }
+  | { type: 'START_QUOTE_ACTION'; action: ActionConfig; initialInput: string; model?: string }
   | { type: 'APPEND_STREAM_TOKEN'; token: string }
   | { type: 'STREAM_DONE' }
   | { type: 'STREAM_ERROR'; error: string }
@@ -79,6 +82,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         isLoading: false,
         isPinned: state.isPinned, // 记忆并保留钉住偏好（气泡态允许新划词刷新）
         isClosing: false,
+        initialInput: '',
         animKey: state.animKey + 1,
       };
 
@@ -97,6 +101,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         streamText: '',
         error: null,
         isLoading: true,
+        initialInput: '',
         selectedModel: action.model || state.selectedModel,
       };
 
@@ -110,6 +115,21 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         streamText: '',
         error: null,
         isLoading: false,
+        initialInput: '',
+        currentSessionId: null,
+        selectedModel: action.model || state.selectedModel,
+      };
+
+    case 'START_QUOTE_ACTION':
+      return {
+        ...state,
+        visible: true,
+        activeAction: action.action,
+        mode: 'card',
+        streamText: '',
+        error: null,
+        isLoading: false,
+        initialInput: action.initialInput,
         currentSessionId: null,
         selectedModel: action.model || state.selectedModel,
       };
@@ -199,6 +219,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         visible: false,
         isClosing: false,
         activeAction: null,
+        initialInput: '',
         isPinned: state.isPinned, // 隐藏仅结束窗口会话，钉住偏好保留记忆
       };
 
@@ -215,6 +236,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         selectedText: '',
         error: null,
         isLoading: false,
+        initialInput: '',
         currentSessionId: null,
       };
 

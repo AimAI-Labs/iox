@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ActionConfig, AppConfig } from '@/types/config';
 import { OverlayMode } from '@/state/overlayReducer';
+import { formatQuoteText } from '@/lib/formatQuote';
 
 interface StreamTokenPayload {
   actionId: string;
@@ -29,6 +30,7 @@ interface UseActionStreamProps {
   thinkingMode: 'quick' | 'deep';
   onStartAction: (action: ActionConfig, model?: string) => void;
   onStartEmptyAction?: (action: ActionConfig, model?: string) => void;
+  onStartQuoteAction?: (action: ActionConfig, initialInput: string, model?: string) => void;
   onAppendToken: (token: string) => void;
   onStreamDone: () => void;
   onStreamError: (error: string) => void;
@@ -57,6 +59,7 @@ export function useActionStream({
   thinkingMode,
   onStartAction,
   onStartEmptyAction,
+  onStartQuoteAction,
   onAppendToken,
   onStreamDone,
   onStreamError,
@@ -242,6 +245,68 @@ export function useActionStream({
       onSetStreamText,
       onSetLoading,
       onSetError,
+    ]
+  );
+
+  // 触发动作（双击引用模式）：
+  // 1. Web 官网：调起官网并将划选文字作为引用发送至官网输入框，焦点在输入框，不自动提交 (autoSubmitOverride: false)
+  // 2. API 动作：展开本地流式卡片并预填引用，光标聚焦末尾，不自动请求
+  const handleTriggerQuoteAction = useCallback(
+    async (action: ActionConfig) => {
+      // 1. Web 官网模式
+      if (action.actionType === 'web') {
+        const formattedQuote = formatQuoteText(selectedText);
+        if (action.copyToClipboard && formattedQuote) {
+          try {
+            await navigator.clipboard.writeText(formattedQuote);
+          } catch {
+            // ignore
+          }
+        }
+
+        try {
+          await invoke('trigger_web_action', {
+            actionId: action.id,
+            text: formattedQuote,
+            copyToClipboard: action.copyToClipboard || false,
+            autoSubmitOverride: false,
+          });
+          if (!isPinned) {
+            executeGracefulHide();
+          }
+        } catch (err) {
+          onSetError(String(err));
+        }
+        return;
+      }
+
+      // 2. API 流式卡片模式
+      if (action.actionType === 'api') {
+        const provider = config?.providers.find((p) => p.id === action.providerId);
+        const defaultModel = provider?.defaultModel || provider?.models[0] || 'default';
+        const formattedQuote = formatQuoteText(selectedText);
+
+        if (onStartQuoteAction) {
+          onStartQuoteAction(action, formattedQuote, defaultModel);
+        } else {
+          onStartAction(action, defaultModel);
+          onSetStreamText('');
+          onSetLoading(false);
+        }
+        await updateWindowSize('card', true);
+      }
+    },
+    [
+      config?.providers,
+      selectedText,
+      isPinned,
+      executeGracefulHide,
+      onSetError,
+      onStartQuoteAction,
+      onStartAction,
+      onSetStreamText,
+      onSetLoading,
+      updateWindowSize,
     ]
   );
 
@@ -453,6 +518,7 @@ export function useActionStream({
   return {
     handleTriggerAction,
     handleTriggerActionWithoutText,
+    handleTriggerQuoteAction,
     handleSendFollowUp,
     handleProviderChange,
     handleModelChange,
