@@ -83,6 +83,6 @@ export interface PickedProcessInfo {
   windowTitle: string;
 }
 
-export type SettingsTab = 'providers' | 'actions' | 'api_card' | 'web' | 'general' | 'blacklist';
+export type SettingsTab = 'providers' | 'actions' | 'api_card' | 'sessions' | 'web' | 'general' | 'blacklist';
 
 

@@ -81,8 +81,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   if (!visible) return null;
 
   // 视口边界防溢出计算
-  const menuWidth = 210;
-  const menuHeight = 310;
+  const menuWidth = 220;
+  const menuHeight = 320;
   const screenW = window.innerWidth || 600;
   const screenH = window.innerHeight || 900;
 
@@ -100,10 +100,11 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       style={{ left: `${posX}px`, top: `${posY}px` }}
       onMouseDown={(e) => e.stopPropagation()}
       className={cn(
-        'fixed z-100 flex flex-col w-52 rounded-xl p-1.5 select-none',
-        'bg-white/95 dark:bg-[#1e1f23]/95 text-zinc-800 dark:text-zinc-200',
-        'border border-zinc-200/90 dark:border-zinc-700/80 shadow-2xl backdrop-blur-2xl',
-        'animate-in fade-in zoom-in-95 duration-100'
+        'fixed z-100 flex flex-col w-56 rounded-2xl p-1.5 select-none',
+        'bg-white/85 dark:bg-[#18181b]/90 text-zinc-800 dark:text-zinc-200',
+        'border border-black/10 dark:border-white/10 shadow-2xl backdrop-blur-3xl',
+        'ring-1 ring-black/5 dark:ring-white/5',
+        'animate-in fade-in zoom-in-95 duration-120'
       )}
     >
       {/* 1. 复制文本组 */}
@@ -111,13 +112,15 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         <button
           type="button"
           onClick={() => handleItemClick(onCopySelection)}
-          className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium hover:bg-zinc-100/80 dark:hover:bg-white/10 transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <Scissors size={13} className="text-zinc-500" />
+            <Scissors size={13.5} className="text-zinc-500 dark:text-zinc-400" />
             <span>复制选中文本</span>
           </div>
-          <span className="text-[10.5px] text-zinc-400">Ctrl+C</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-white/10 text-zinc-500 dark:text-zinc-400 border border-zinc-200/60 dark:border-white/5">
+            Ctrl+C
+          </span>
         </button>
       )}
 
@@ -126,10 +129,10 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           <button
             type="button"
             onClick={() => handleItemClick(onCopyCurrentAnswer)}
-            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium hover:bg-zinc-100/80 dark:hover:bg-white/10 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2">
-              <Copy size={13} className="text-zinc-500" />
+              <Copy size={13.5} className="text-zinc-500 dark:text-zinc-400" />
               <span>复制当前回答</span>
             </div>
           </button>
@@ -137,55 +140,59 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           <button
             type="button"
             onClick={() => handleItemClick(onCopyAllMarkdown)}
-            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium hover:bg-zinc-100/80 dark:hover:bg-white/10 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2">
-              <FileText size={13} className="text-zinc-500" />
-              <span>复制全部对话 (Markdown)</span>
+              <FileText size={13.5} className="text-zinc-500 dark:text-zinc-400" />
+              <span>导出对话 (Markdown)</span>
             </div>
           </button>
         </>
       )}
 
-      <div className="my-1 h-px bg-zinc-200/80 dark:bg-zinc-700/70" />
+      {(hasSelectionText || hasAnswerText) && (
+        <div className="my-1 h-px bg-zinc-200/70 dark:bg-white/10" />
+      )}
 
       {/* 2. 生成与会话控制组 */}
       <button
         type="button"
         onClick={() => handleItemClick(onRegenerateCurrent)}
-        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+        className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium hover:bg-zinc-100/80 dark:hover:bg-white/10 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
-          <RotateCcw size={13} className="text-zinc-500" />
+          <RotateCcw size={13.5} className="text-zinc-500 dark:text-zinc-400" />
           <span>重新生成当前回答</span>
         </div>
-        <span className="text-[10.5px] text-zinc-400">Ctrl+R</span>
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-white/10 text-zinc-500 dark:text-zinc-400 border border-zinc-200/60 dark:border-white/5">
+          Ctrl+R
+        </span>
       </button>
 
       <button
         type="button"
         onClick={() => handleItemClick(onNewChat)}
-        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+        className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium hover:bg-zinc-100/80 dark:hover:bg-white/10 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
-          <Sparkles size={13} className="text-indigo-500" />
-          <span>开启新会话 / 清空追问</span>
+          <Sparkles size={13.5} className="text-blue-500" />
+          <span>开启新对话</span>
         </div>
       </button>
 
-      <div className="my-1 h-px bg-zinc-200/80 dark:bg-zinc-700/70" />
+      <div className="my-1 h-px bg-zinc-200/70 dark:bg-white/10" />
 
       {/* 3. 窗口视窗与固定组 */}
       <button
         type="button"
         onClick={() => handleItemClick(onToggleMaximize)}
-        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+        className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium hover:bg-zinc-100/80 dark:hover:bg-white/10 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
           {isMaximized ? (
-            <Minimize2 size={13} className="text-emerald-500" />
+            <Minimize2 size={13.5} className="text-emerald-500" />
           ) : (
-            <Maximize2 size={13} className="text-emerald-500" />
+            <Maximize2 size={13.5} className="text-emerald-500" />
           )}
           <span>{isMaximized ? '还原窗口' : '全屏最大化'}</span>
         </div>
@@ -194,10 +201,10 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       <button
         type="button"
         onClick={() => handleItemClick(onTogglePin)}
-        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+        className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium hover:bg-zinc-100/80 dark:hover:bg-white/10 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
-          <Pin size={13} className={cn('text-blue-500', isPinned && 'fill-current')} />
+          <Pin size={13.5} className={cn('text-blue-500', isPinned && 'fill-current')} />
           <span>{isPinned ? '取消固定悬浮窗' : '固定悬浮窗 (Pin)'}</span>
         </div>
       </button>
@@ -206,25 +213,25 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         <button
           type="button"
           onClick={() => handleItemClick(onResetSize)}
-          className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium hover:bg-zinc-100/80 dark:hover:bg-white/10 transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <ResetIcon size={13} className="text-zinc-500" />
+            <ResetIcon size={13.5} className="text-zinc-500 dark:text-zinc-400" />
             <span>恢复默认尺寸 (600×900)</span>
           </div>
         </button>
       )}
 
-      <div className="my-1 h-px bg-zinc-200/80 dark:bg-zinc-700/70" />
+      <div className="my-1 h-px bg-zinc-200/70 dark:bg-white/10" />
 
       {/* 4. 设置组 */}
       <button
         type="button"
         onClick={() => handleItemClick(onOpenSettings)}
-        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12.5px] hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+        className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium hover:bg-zinc-100/80 dark:hover:bg-white/10 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2">
-          <Settings size={13} className="text-zinc-500" />
+          <Settings size={13.5} className="text-zinc-500 dark:text-zinc-400" />
           <span>API 卡片设置...</span>
         </div>
       </button>

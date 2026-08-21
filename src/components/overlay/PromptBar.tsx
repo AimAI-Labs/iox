@@ -11,10 +11,10 @@ import {
   Languages,
   Wand2,
   Sparkles,
-  Server,
   Layers,
 } from 'lucide-react';
 import { ProviderConfig } from '@/types/config';
+import { DynamicIcon } from '@/components/Icons';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────────────────────────────────
@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
  * 包含：
  * 1. 独立白底圆角卡片容器 (rounded-2xl)
  * 2. 顶部透明无框输入框
- * 3. 底部工具条：+ 快捷预设、[供应商 / 模型] 级联芯片、⚡极速/🧠深度思考切换、圆形发送按钮
+ * 3. 底部工具条：+ 快捷预设、[服务商图标 / 模型名] 级联芯片、⚡极速/🧠深度思考切换、圆形发送按钮
  * ───────────────────────────────────────────────────────── */
 
 export interface ActionChip {
@@ -107,7 +107,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const currentProvider = providers.find((p) => p.id === selectedProviderId);
-  const providerLabel = currentProvider?.name || '选择服务商';
+  const providerName = currentProvider?.name || '选择服务商';
+  const providerIconName = currentProvider?.id || currentProvider?.name || 'Cpu';
   const modelLabel = selectedModel || '选择模型';
 
   // 自动聚焦与高度自适应
@@ -169,7 +170,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     >
       {/* 1. 快捷 Prompt 弹出卡片 (+ 菜单) */}
       {showPlusMenu && (
-        <div className="absolute bottom-full left-3 mb-2 z-50 w-56 rounded-xl border border-zinc-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-xl dark:border-zinc-700/80 dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute bottom-full left-3 mb-2 z-50 w-56 rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 p-1.5 shadow-2xl backdrop-blur-2xl dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-120">
           <div className="px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
             快捷预设提示词
           </div>
@@ -180,7 +181,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                 type="button"
                 onClick={() => handleChipClick(chip)}
                 disabled={isLoading || disabled}
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-left text-[12.5px] text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer disabled:opacity-50"
               >
                 {chip.icon}
                 <span className="font-medium">{chip.label}</span>
@@ -192,7 +193,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 
       {/* 2. 供应商选择下拉菜单 */}
       {showProviderMenu && providers.length > 0 && (
-        <div className="absolute bottom-full left-10 mb-2 z-50 min-w-48 max-h-56 overflow-y-auto rounded-xl border border-zinc-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-xl dark:border-zinc-700/80 dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-150 custom-scrollbar">
+        <div className="absolute bottom-full left-10 mb-2 z-50 min-w-48 max-h-56 overflow-y-auto rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 p-1.5 shadow-2xl backdrop-blur-2xl dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-120 custom-scrollbar">
           <div className="px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
             选择模型服务商
           </div>
@@ -206,18 +207,18 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                   setShowProviderMenu(false);
                 }}
                 className={cn(
-                  'flex items-center justify-between rounded-lg px-2 py-1.5 text-left text-[12.5px] font-medium transition-colors cursor-pointer',
+                  'flex items-center justify-between rounded-xl px-2.5 py-1.5 text-left text-[12.5px] font-medium transition-colors cursor-pointer',
                   p.id === selectedProviderId
                     ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
                     : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200'
                 )}
               >
-                <div className="flex items-center gap-1.5 truncate mr-2">
-                  <Server size={12} className="shrink-0 text-zinc-400" />
+                <div className="flex items-center gap-2 truncate mr-2">
+                  <DynamicIcon name={p.id || p.name} size={15} className="shrink-0" />
                   <span className="truncate">{p.name}</span>
                 </div>
                 {p.id === selectedProviderId && (
-                  <Check size={13} className="shrink-0 text-zinc-900 dark:text-zinc-100" />
+                  <Check size={13} className="shrink-0 text-blue-500" />
                 )}
               </button>
             ))}
@@ -227,7 +228,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 
       {/* 3. 模型选择下拉菜单 */}
       {showModelMenu && availableModels.length > 0 && (
-        <div className="absolute bottom-full left-28 mb-2 z-50 min-w-44 max-h-56 overflow-y-auto rounded-xl border border-zinc-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-xl dark:border-zinc-700/80 dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-150 custom-scrollbar">
+        <div className="absolute bottom-full left-20 mb-2 z-50 min-w-44 max-h-56 overflow-y-auto rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 p-1.5 shadow-2xl backdrop-blur-2xl dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-120 custom-scrollbar">
           <div className="px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
             选择运行模型
           </div>
@@ -241,18 +242,18 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                   setShowModelMenu(false);
                 }}
                 className={cn(
-                  'flex items-center justify-between rounded-lg px-2 py-1.5 text-left text-[12.5px] font-medium transition-colors cursor-pointer',
+                  'flex items-center justify-between rounded-xl px-2.5 py-1.5 text-left text-[12.5px] font-medium transition-colors cursor-pointer',
                   model === selectedModel
                     ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
                     : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200'
                 )}
               >
                 <div className="flex items-center gap-1.5 truncate mr-2">
-                  <Layers size={12} className="shrink-0 text-zinc-400" />
+                  <Layers size={13} className="shrink-0 text-zinc-400" />
                   <span className="truncate">{model}</span>
                 </div>
                 {model === selectedModel && (
-                  <Check size={13} className="shrink-0 text-zinc-900 dark:text-zinc-100" />
+                  <Check size={13} className="shrink-0 text-blue-500" />
                 )}
               </button>
             ))}
@@ -285,7 +286,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 
         {/* 底部工具行 */}
         <div className="mt-2 flex items-center justify-between">
-          {/* 左侧操作组：+ 快捷菜单、[供应商 / 模型] 级联选择器、⚡极速/🧠深度思考切换 */}
+          {/* 左侧操作组：+ 快捷菜单、[服务商图标 / 模型选择] 级联选择器、⚡极速/🧠深度思考切换 */}
           <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
             {/* + 按钮 */}
             <button
@@ -301,9 +302,9 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               <Plus size={15} strokeWidth={2} />
             </button>
 
-            {/* 供应商 > 模型 级联选择芯片组 */}
+            {/* 供应商图标 + 模型切换芯片 */}
             <div className="flex items-center rounded-md bg-zinc-100/90 dark:bg-zinc-800/90 p-0.5 border border-zinc-200/60 dark:border-zinc-700/60 text-[12px]">
-              {/* 供应商切换按钮 */}
+              {/* 供应商切换按钮（精简为品牌图标） */}
               {providers.length > 0 && (
                 <button
                   type="button"
@@ -312,15 +313,15 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                     setShowModelMenu(false);
                     setShowPlusMenu(false);
                   }}
-                  className="flex h-5.5 items-center gap-1 rounded px-1.5 font-medium text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60 transition-colors cursor-pointer max-w-28"
-                  title={`当前服务商: ${providerLabel} (点击切换)`}
+                  className="flex h-5.5 items-center gap-1 rounded px-1.5 font-medium text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60 transition-colors cursor-pointer"
+                  title={`当前服务商: ${providerName} (点击切换)`}
                 >
-                  <span className="truncate">{providerLabel}</span>
+                  <DynamicIcon name={providerIconName} size={14} className="shrink-0" />
                   <ChevronDown size={10} className="shrink-0 text-zinc-400" />
                 </button>
               )}
 
-              {providers.length > 0 && availableModels.length > 0 && (
+              {availableModels.length > 0 && (
                 <span className="text-zinc-300 dark:text-zinc-600 px-0.5 select-none">/</span>
               )}
 
@@ -333,7 +334,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                     setShowProviderMenu(false);
                     setShowPlusMenu(false);
                   }}
-                  className="flex h-5.5 items-center gap-1 rounded px-1.5 font-medium text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60 transition-colors cursor-pointer max-w-32"
+                  className="flex h-5.5 items-center gap-1 rounded px-1.5 font-medium text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60 transition-colors cursor-pointer max-w-36"
                   title={`当前模型: ${modelLabel} (点击切换)`}
                 >
                   <span className="truncate">{modelLabel}</span>

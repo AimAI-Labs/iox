@@ -237,82 +237,27 @@ export function useActionStream({
     ]
   );
 
-  // 切换供应商
+  // 切换供应商（仅切换选中状态与默认模型，不自动触发网络请求）
   const handleProviderChange = useCallback(
-    async (newProviderId: string) => {
-      if (!activeAction || !config?.providers) return;
+    (newProviderId: string) => {
+      if (!config?.providers) return;
       const provider = config.providers.find((p) => p.id === newProviderId);
       if (!provider) return;
       const newModel = provider.defaultModel || provider.models[0] || 'default';
 
       onSetProvider(newProviderId, newModel);
-      onSetStreamText('');
-      onSetLoading(true);
       onSetError(null);
-
-      const updatedAction = { ...activeAction, providerId: newProviderId };
-      const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported(newProviderId);
-
-      try {
-        await invoke('trigger_api_action', {
-          actionId: updatedAction.id,
-          text: selectedText,
-          modelOverride: newModel,
-          promptOverride: updatedAction.promptTemplate,
-          thinkingEnabled: useThinkingApi,
-        });
-      } catch (err) {
-        onSetError(String(err));
-        onSetLoading(false);
-      }
     },
-    [
-      activeAction,
-      config?.providers,
-      thinkingMode,
-      selectedText,
-      isThinkingApiSupported,
-      onSetProvider,
-      onSetStreamText,
-      onSetLoading,
-      onSetError,
-    ]
+    [config?.providers, onSetProvider, onSetError]
   );
 
-  // 切换模型
+  // 切换模型（仅切换选中状态，不自动触发网络请求）
   const handleModelChange = useCallback(
-    async (newModel: string) => {
-      if (!activeAction) return;
+    (newModel: string) => {
       onSetModel(newModel);
-      onSetStreamText('');
-      onSetLoading(true);
       onSetError(null);
-
-      const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported();
-
-      try {
-        await invoke('trigger_api_action', {
-          actionId: activeAction.id,
-          text: selectedText,
-          modelOverride: newModel,
-          promptOverride: activeAction.promptTemplate,
-          thinkingEnabled: useThinkingApi,
-        });
-      } catch (err) {
-        onSetError(String(err));
-        onSetLoading(false);
-      }
     },
-    [
-      activeAction,
-      selectedText,
-      thinkingMode,
-      isThinkingApiSupported,
-      onSetModel,
-      onSetStreamText,
-      onSetLoading,
-      onSetError,
-    ]
+    [onSetModel, onSetError]
   );
 
   // 切换思考模式

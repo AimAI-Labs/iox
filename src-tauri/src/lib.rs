@@ -567,10 +567,12 @@ pub fn run() {
             get_current_selection,
             set_floating_ball_expanded,
             chat_store::list_chat_sessions,
+            chat_store::get_all_full_chat_sessions,
             chat_store::get_chat_session,
             chat_store::save_chat_session,
             chat_store::delete_chat_session,
-            chat_store::clear_all_chat_sessions
+            chat_store::clear_all_chat_sessions,
+            chat_store::open_sessions_directory
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -88,6 +88,9 @@ pub async fn execute_stream_request(
         content: user_prompt,
     });
 
+    let is_deepseek = provider.id.to_lowercase().contains("deepseek")
+        || provider.base_url.to_lowercase().contains("deepseek");
+
     let request_body = ChatCompletionRequest {
         model,
         messages,
@@ -95,6 +98,10 @@ pub async fn execute_stream_request(
         thinking: if thinking_enabled {
             Some(ThinkingConfig {
                 thinking_type: "enabled".to_string(),
+            })
+        } else if is_deepseek {
+            Some(ThinkingConfig {
+                thinking_type: "disabled".to_string(),
             })
         } else {
             None
