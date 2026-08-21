@@ -169,11 +169,25 @@ pub async fn execute_stream_request(
     }
 
     let mut stream = response.bytes_stream().eventsource();
+    // 首字超时：若 30s 内未收到任何 SSE 事件，视为服务端无响应，主动报错解锁前端 loading
+    let first_byte_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    let mut received_any = false;
     // 追踪是否已发送过 <think> 开标签（用于 reasoning_content → <think> 包裹）
     let mut reasoning_started = false;
 
     loop {
         tokio::select! {
+            _ = tokio::time::sleep_until(first_byte_deadline), if !received_any => {
+                // 首字超时：服务端接受连接后长时间未返回任何 SSE 事件
+                let _ = app.emit(
+                    "action-stream-error",
+                    serde_json::json!({
+                        "actionId": action_id,
+                        "error": "首字等待超时（30s），服务端未返回任何数据。请检查网络或 API 端点是否支持流式输出。"
+                    }),
+                );
+                break;
+            }
             _ = cancel_token.cancelled() => {
                 // 如果在推理过程中被取消，先闭合 <think> 标签
                 if reasoning_started {
@@ -188,6 +202,7 @@ pub async fn execute_stream_request(
             item = stream.next() => {
                 match item {
                     Some(Ok(event)) => {
+                        received_any = true;
                         if event.data == "[DONE]" {
                             // 流结束时如果仍在推理中，闭合标签
                             if reasoning_started {

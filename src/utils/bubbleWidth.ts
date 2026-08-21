@@ -2,6 +2,12 @@ import { ActionConfig } from '@/types/config';
 
 /**
  * 根据启用的 Action 列表自适应计算胶囊悬浮气泡条（BubbleBar）所需的物理窗口宽度 (px)
+ *
+ * ⚠️ 单一数据源约束 / Single Source of Truth ⚠️
+ * 本函数必须与 Rust 端 `src-tauri/src/window_manager.rs` 中的
+ * `calculate_bubble_bar_width` 保持**算法等价**（相同输入产出相同宽度）。
+ * 修改任一端时，必须同步修改另一端，否则会出现气泡宽度与内容不匹配的视觉 bug。
+ * 详见 `AGENTS.md` §3.1「核心设计原则」。
  */
 export function calculateBubbleWidth(actions?: ActionConfig[], iconOnly = false): number {
   if (!actions || actions.length === 0) {

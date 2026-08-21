@@ -4,6 +4,7 @@ pub mod config;
 pub mod overlay_state;
 pub mod picker;
 pub mod selection;
+pub mod site_presets;
 pub mod tray;
 pub mod window_manager;
 
@@ -336,6 +337,12 @@ fn get_web_hub_state(state: State<AppState>) -> ai::WebHubState {
     state.web_hub_state.lock().unwrap().clone()
 }
 
+/// 返回全部站点预设（单一数据源，前端通过此命令获取站点列表，禁止前端硬编码）
+#[tauri::command]
+fn get_site_presets() -> Vec<site_presets::SitePreset> {
+    site_presets::all()
+}
+
 #[tauri::command]
 fn switch_web_hub_tab(app: AppHandle, state: State<AppState>, action_id: String) -> Result<(), String> {
     ai::switch_web_hub_tab(&app, &state, &action_id)
@@ -557,6 +564,7 @@ pub fn run() {
             switch_web_hub_tab,
             close_web_hub_tab,
             reload_web_hub_active_tab,
+            get_site_presets,
             start_window_picker,
             cancel_window_picker,
             fetch_provider_models,

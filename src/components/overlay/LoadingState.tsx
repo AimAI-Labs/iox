@@ -14,6 +14,9 @@ const chevron = Array.from({ length: 9 }, (_, i) => {
   return (c + Math.abs(r - 1)) * 90;
 });
 
+/** 超过此秒数后显示"取消"按钮，避免用户被永久卡住 */
+const CANCEL_BUTTON_THRESHOLD_S = 8;
+
 function useElapsed() {
   const [ds, setDs] = useState(0);
   useEffect(() => {
@@ -21,20 +24,27 @@ function useElapsed() {
     return () => clearInterval(t);
   }, []);
   const total = ds / 10;
-  if (total < 60) return `${total.toFixed(1)}s`;
-  return `${Math.floor(total / 60)}m ${(total % 60).toFixed(1)}s`;
+  const format =
+    total < 60
+      ? `${total.toFixed(1)}s`
+      : `${Math.floor(total / 60)}m ${(total % 60).toFixed(1)}s`;
+  return { format, seconds: total };
 }
 
 export interface LoadingStateProps {
   label?: string;
   className?: string;
+  /** 取消回调；传入后超过 8s 会显示可点击的"取消"按钮 */
+  onCancel?: () => void;
 }
 
 export const LoadingState: React.FC<LoadingStateProps> = ({
   label = 'AI 正在深入思考分析中...',
   className,
+  onCancel,
 }) => {
-  const elapsed = useElapsed();
+  const { format: elapsed, seconds: elapsedS } = useElapsed();
+  const showCancel = Boolean(onCancel) && elapsedS >= CANCEL_BUTTON_THRESHOLD_S;
 
   return (
     <div
@@ -75,6 +85,17 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
       <span className="font-mono text-[12px] text-ink-3 tabular-nums">
         {elapsed}
       </span>
+
+      {/* 超时取消按钮 */}
+      {showCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="ml-1 inline-flex h-5 items-center rounded-[4px] bg-field px-1.5 text-[11px] text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink active:scale-[0.96] cursor-pointer"
+        >
+          取消
+        </button>
+      )}
     </div>
   );
 };

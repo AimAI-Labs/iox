@@ -577,6 +577,11 @@ pub fn run_overlay_drag_loop(app: &AppHandle) {
 }
 
 /// 根据启用的 Action 列表与内容文本自适应计算胶囊悬浮气泡条（BubbleBar）的物理像素宽度
+///
+/// ⚠️ 单一数据源约束 / Single Source of Truth ⚠️
+/// 本函数必须与前端 `src/utils/bubbleWidth.ts` 中的 `calculateBubbleWidth`
+/// 保持**算法等价**（相同输入产出相同宽度）。修改任一端时，必须同步修改另一端，
+/// 否则会出现气泡宽度与内容不匹配的视觉 bug。详见 `AGENTS.md` §3.1「核心设计原则」。
 pub fn calculate_bubble_bar_width(actions: &[crate::config::ActionConfig], icon_only: bool) -> i32 {
     let enabled_actions: Vec<&crate::config::ActionConfig> =
         actions.iter().filter(|a| a.enabled).collect();

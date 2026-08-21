@@ -22,6 +22,7 @@ import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { useChatSessions } from '@/hooks/useChatSessions';
 import { AlertCircle, RotateCcw, Copy, Check, Brain, FileText, Wand2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { parseThinkingAndMain } from '@/lib/thinkingParser';
 
 /* ─────────────────────────────────────────────────────────
  * 流式结果卡片 (参考千问桌面端布局)
@@ -79,34 +80,7 @@ const SUGGESTED_CHIPS = [
   },
 ];
 
-// 辅助函数：解析思维链 (<think>...</think>) 与正文内容
-function parseThinkingAndMain(text: string) {
-  if (!text) {
-    return { thinkingText: '', mainText: '', isThinking: false };
-  }
-
-  const openTag = '<think>';
-  const closeTag = '</think>';
-  const openIndex = text.indexOf(openTag);
-
-  if (openIndex === -1) {
-    return { thinkingText: '', mainText: text, isThinking: false };
-  }
-
-  const closeIndex = text.indexOf(closeTag, openIndex);
-
-  if (closeIndex === -1) {
-    // 思考中，标签尚未闭合
-    const thinking = text.slice(openIndex + openTag.length);
-    const prefix = text.slice(0, openIndex);
-    return { thinkingText: thinking, mainText: prefix, isThinking: true };
-  }
-
-  // 思考已闭合
-  const thinking = text.slice(openIndex + openTag.length, closeIndex);
-  const main = text.slice(0, openIndex) + text.slice(closeIndex + closeTag.length);
-  return { thinkingText: thinking, mainText: main.trimStart(), isThinking: false };
-}
+// 辅助函数 parseThinkingAndMain 已抽取至 @/lib/thinkingParser，便于复用与测试
 
 export const ResultCard: React.FC<ResultCardProps> = ({
   action,
@@ -846,7 +820,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         ) : (
           /* 首字等待 — 仅在 isLoading === true 且 streamText 为空时展示 */
           <div className="pt-1.5">
-            <LoadingState label="AI 正在深入思考分析中..." />
+            <LoadingState label="AI 正在深入思考分析中..." onCancel={onCancel} />
           </div>
         )}
       </div>
