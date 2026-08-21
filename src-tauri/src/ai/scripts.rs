@@ -323,9 +323,63 @@ pub fn build_initial_placeholder_script(theme: &str) -> String {
     )
 }
 
-/// 构建合并后的 Webview 初始化脚本（包含通用缩放持久化、即时占位骨架与可选的 DOM 自动填充脚本）
+/// 外部超链接拦截与默认浏览器调起脚本：在 AI 官网对话中点击任何外部链接时，自动使用系统默认浏览器打开，防止破坏当前 AI 对话会话
+pub const EXTERNAL_LINK_INTERCEPTOR_SCRIPT: &str = r#"(function() {
+    function openExternal(url) {
+        try {
+            if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+                window.__TAURI__.core.invoke('open_in_browser', { url: url });
+                return true;
+            }
+        } catch(_) {}
+        return false;
+    }
+
+    // 1. 全局捕获 a 标签点击
+    document.addEventListener('click', function(e) {
+        const a = e.target.closest ? e.target.closest('a') : null;
+        if (!a || !a.href) return;
+
+        const href = a.href;
+        if (!href.startsWith('http://') && !href.startsWith('https://')) return;
+
+        try {
+            const targetUrl = new URL(href, window.location.href);
+            const currentOrigin = window.location.origin;
+
+            // 属于外部链接 (跨域域名，或 target="_blank")
+            if (targetUrl.origin !== currentOrigin || a.target === '_blank') {
+                e.preventDefault();
+                e.stopPropagation();
+                openExternal(href);
+            }
+        } catch(_) {}
+    }, true);
+
+    // 2. 拦截 window.open 弹窗
+    try {
+        const origOpen = window.open;
+        window.open = function(url, target, features) {
+            if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                try {
+                    const targetUrl = new URL(url, window.location.href);
+                    if (targetUrl.origin !== window.location.origin || target === '_blank') {
+                        if (openExternal(targetUrl.href)) {
+                            return null;
+                        }
+                    }
+                } catch(_) {}
+            }
+            return origOpen ? origOpen.apply(this, arguments) : null;
+        };
+    } catch(_) {}
+})();"#;
+
+/// 构建合并后的 Webview 初始化脚本（包含通用缩放持久化、即时占位骨架、外部链接拦截与可选的 DOM 自动填充脚本）
 pub fn build_initialization_script(theme: &str, dom_injection: Option<&str>) -> String {
     let mut script = ZOOM_PERSISTENCE_SCRIPT.to_string();
+    script.push('\n');
+    script.push_str(EXTERNAL_LINK_INTERCEPTOR_SCRIPT);
     script.push('\n');
     script.push_str(&build_initial_placeholder_script(theme));
     if let Some(injection) = dom_injection {

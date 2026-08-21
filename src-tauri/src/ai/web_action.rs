@@ -227,9 +227,19 @@ fn execute_multi_window_action(
         .map_err(|e| format!("Failed to create titlebar webview: {}", e))?;
 
     let init_script = build_initialization_script(&config.general.theme, injection_script.as_deref());
+    let initial_origin = target_url.origin().ascii_serialization();
     let content_builder = WebviewBuilder::new(&content_label, WebviewUrl::External(target_url))
         .transparent(true)
         .zoom_hotkeys_enabled(true)
+        .on_navigation(move |nav_url| {
+            let nav_origin = nav_url.origin().ascii_serialization();
+            if nav_origin != initial_origin && (nav_url.scheme() == "http" || nav_url.scheme() == "https") {
+                let _ = open::that_detached(nav_url.as_str());
+                false
+            } else {
+                true
+            }
+        })
         .initialization_script(&init_script);
 
     let content_wv = window
@@ -373,9 +383,19 @@ fn execute_tabbed_hub_action(
             }
         } else {
             // 动态挂载新的 Tab Child Webview
-            let content_builder = WebviewBuilder::new(&tab_content_label, WebviewUrl::External(target_url))
+            let initial_origin = target_url.origin().ascii_serialization();
+            let content_builder = WebviewBuilder::new(&tab_content_label, WebviewUrl::External(target_url.clone()))
                 .transparent(true)
                 .zoom_hotkeys_enabled(true)
+                .on_navigation(move |nav_url| {
+                    let nav_origin = nav_url.origin().ascii_serialization();
+                    if nav_origin != initial_origin && (nav_url.scheme() == "http" || nav_url.scheme() == "https") {
+                        let _ = open::that_detached(nav_url.as_str());
+                        false
+                    } else {
+                        true
+                    }
+                })
                 .initialization_script(&init_script);
 
             let new_wv = window
@@ -449,9 +469,19 @@ fn execute_tabbed_hub_action(
         .map_err(|e| format!("Failed to create hub titlebar webview: {}", e))?;
 
     // 构建首个 AI Tab Webview
+    let initial_origin = target_url.origin().ascii_serialization();
     let content_builder = WebviewBuilder::new(&tab_content_label, WebviewUrl::External(target_url))
         .transparent(true)
         .zoom_hotkeys_enabled(true)
+        .on_navigation(move |nav_url| {
+            let nav_origin = nav_url.origin().ascii_serialization();
+            if nav_origin != initial_origin && (nav_url.scheme() == "http" || nav_url.scheme() == "https") {
+                let _ = open::that_detached(nav_url.as_str());
+                false
+            } else {
+                true
+            }
+        })
         .initialization_script(&init_script);
 
     let content_wv = window
