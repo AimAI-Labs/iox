@@ -193,24 +193,24 @@ impl Default for AppConfig {
                     name: "DeepSeek 官方".to_string(),
                     base_url: "https://api.deepseek.com/v1".to_string(),
                     api_key: "".to_string(),
-                    models: vec!["deepseek-chat".to_string(), "deepseek-reasoner".to_string()],
-                    default_model: "deepseek-chat".to_string(),
+                    models: vec![],
+                    default_model: "".to_string(),
                 },
                 ProviderConfig {
                     id: "qwen".to_string(),
                     name: "通义千问 (DashScope)".to_string(),
                     base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
                     api_key: "".to_string(),
-                    models: vec!["qwen-plus".to_string(), "qwen-max".to_string(), "qwen-turbo".to_string()],
-                    default_model: "qwen-plus".to_string(),
+                    models: vec![],
+                    default_model: "".to_string(),
                 },
                 ProviderConfig {
                     id: "ollama".to_string(),
                     name: "Ollama (本地)".to_string(),
                     base_url: "http://127.0.0.1:11434/v1".to_string(),
-                    api_key: "ollama".to_string(),
-                    models: vec!["deepseek-r1:latest".to_string(), "llama3:latest".to_string()],
-                    default_model: "deepseek-r1:latest".to_string(),
+                    api_key: "".to_string(),
+                    models: vec![],
+                    default_model: "".to_string(),
                 },
             ],
             actions: vec![
@@ -405,11 +405,33 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
-    pub fn config_path() -> PathBuf {
-        let app_data = std::env::var("APPDATA")
+    /// 获取用户主目录基础路径
+    pub fn home_dir() -> PathBuf {
+        std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("."));
-        app_data.join("iox").join("config.json")
+            .unwrap_or_else(|_| PathBuf::from("."))
+    }
+
+    /// 获取当前环境对应的配置文件夹名称
+    /// 调试模式（Debug）或显式设置 IOX_ENV=dev 时使用 ".iox-dev"
+    /// 生产模式（Release）使用 ".iox"
+    pub fn config_dir_name() -> &'static str {
+        if std::env::var("IOX_ENV").map(|v| v == "dev").unwrap_or(false) || cfg!(debug_assertions) {
+            ".iox-dev"
+        } else {
+            ".iox"
+        }
+    }
+
+    /// 获取配置文件夹完整路径
+    pub fn config_dir() -> PathBuf {
+        Self::home_dir().join(Self::config_dir_name())
+    }
+
+    /// 获取 config.json 完整路径
+    pub fn config_path() -> PathBuf {
+        Self::config_dir().join("config.json")
     }
 
     pub fn load() -> Self {
@@ -691,5 +713,53 @@ mod tests {
         assert!(config.general.floating_ball_auto_hide);
         assert_eq!(config.general.floating_ball_pos, (0, 0));
     }
+
+    #[test]
+    fn test_default_provider_api_keys_are_empty() {
+        let config = AppConfig::default();
+        for provider in &config.providers {
+            assert!(
+                provider.api_key.is_empty(),
+                "Provider [{}] default api_key should be empty, found: '{}'",
+                provider.id,
+                provider.api_key
+            );
+        }
+    }
+
+    #[test]
+    fn test_default_provider_models_are_empty() {
+        let config = AppConfig::default();
+        for provider in &config.providers {
+            assert!(
+                provider.models.is_empty(),
+                "Provider [{}] default models should be empty, found: {:?}",
+                provider.id,
+                provider.models
+            );
+            assert!(
+                provider.default_model.is_empty(),
+                "Provider [{}] default_model should be empty, found: '{}'",
+                provider.id,
+                provider.default_model
+            );
+        }
+    }
+
+    #[test]
+    fn test_config_dir_and_path_resolution() {
+        let home = AppConfig::home_dir();
+        assert!(!home.as_os_str().is_empty());
+
+        let dir_name = AppConfig::config_dir_name();
+        assert_eq!(dir_name, ".iox-dev");
+
+        let config_dir = AppConfig::config_dir();
+        assert_eq!(config_dir, home.join(".iox-dev"));
+
+        let config_path = AppConfig::config_path();
+        assert_eq!(config_path, home.join(".iox-dev").join("config.json"));
+    }
 }
+
 

@@ -245,7 +245,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                         value: m,
                         label: m,
                       }))}
-                      placeholder="点击下拉勾选可用模型..."
+                      placeholder="点击右上角「获取模型」或手动输入回车添加..."
                       onChange={(newModels) => handleModelsChange(p, newModels)}
                       allowCustomInput={true}
                     />

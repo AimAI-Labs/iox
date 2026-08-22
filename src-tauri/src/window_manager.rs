@@ -689,6 +689,7 @@ mod tests {
             input_selector: None,
             submit_selector: None,
             auto_submit: None,
+            use_url_template: None,
         };
         assert_eq!(calculate_bubble_bar_width(&[disabled_action.clone()], false), 220);
         assert_eq!(calculate_bubble_bar_width(&[disabled_action], true), 220);
@@ -708,6 +709,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
+            use_url_template: None,
             },
             ActionConfig {
                 id: "2".into(),
@@ -722,6 +724,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
+            use_url_template: None,
             },
             ActionConfig {
                 id: "3".into(),
@@ -736,6 +739,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
+            use_url_template: None,
             },
             ActionConfig {
                 id: "4".into(),
@@ -750,6 +754,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
+            use_url_template: None,
             },
             ActionConfig {
                 id: "5".into(),
@@ -764,6 +769,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
+            use_url_template: None,
             },
             ActionConfig {
                 id: "6".into(),
@@ -778,6 +784,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
+            use_url_template: None,
             },
             ActionConfig {
                 id: "7".into(),
@@ -792,6 +799,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
+            use_url_template: None,
             },
         ];
 

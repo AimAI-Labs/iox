@@ -12,7 +12,10 @@ import {
   Wand2,
   Sparkles,
   Layers,
+  Box,
+  Settings,
 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import { ProviderConfig } from '@/types/config';
 import { DynamicIcon } from '@/components/Icons';
 import { cn } from '@/lib/utils';
@@ -117,7 +120,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const currentProvider = providers.find((p) => p.id === selectedProviderId);
   const providerName = currentProvider?.name || '选择服务商';
   const providerIconName = currentProvider?.id || currentProvider?.name || 'Cpu';
-  const modelLabel = selectedModel || '选择模型';
+  const modelLabel = selectedModel || `${providerName} · 未选模型`;
 
   // 计算允许的最大输入高度：最高不超过整体视图高度的 2/3 (预留底部按钮空间)
   const getMaxHeight = () => Math.max(80, Math.floor(window.innerHeight * 0.66) - 55);
@@ -347,15 +350,17 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                     if (selectedProviderId) setActiveCascaderProviderId(selectedProviderId);
                   }}
                   className={cn(
-                    'flex h-6.5 items-center gap-1.5 rounded-md px-2 py-0.5 text-[12px] font-medium transition-all duration-150 cursor-pointer border max-w-44',
+                    'flex h-6.5 items-center gap-1.5 rounded-md px-2 py-0.5 text-[12px] font-medium transition-all duration-150 cursor-pointer border max-w-48',
                     showCascaderMenu
                       ? 'bg-zinc-200/90 dark:bg-zinc-700/90 border-zinc-300 dark:border-zinc-600 text-zinc-900 dark:text-zinc-100'
                       : 'bg-zinc-100/90 dark:bg-zinc-800/90 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60'
                   )}
-                  title={`当前服务商: ${providerName}，模型: ${modelLabel} (点击级联切换)`}
+                  title={`当前服务商: ${providerName}，模型: ${selectedModel || '未选模型'} (点击级联切换)`}
                 >
                   <DynamicIcon name={providerIconName} size={14} className="shrink-0" />
-                  <span className="truncate">{modelLabel}</span>
+                  <span className={cn('truncate', !selectedModel && 'text-zinc-400 dark:text-zinc-500 font-normal')}>
+                    {modelLabel}
+                  </span>
                   <ChevronDown
                     size={10}
                     className={cn(
@@ -459,8 +464,28 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                             );
                           })
                         ) : (
-                          <div className="px-3 py-4 text-center text-[11px] text-zinc-400">
-                            暂无可用的模型
+                          <div className="flex flex-col items-center justify-center py-5 px-2 text-center">
+                            <Box size={22} className="text-zinc-400 dark:text-zinc-500 mb-1.5" />
+                            <p className="text-[12px] font-medium text-zinc-700 dark:text-zinc-200">暂无可用模型</p>
+                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 mb-2.5 leading-tight">
+                              请前往设置配置并获取模型
+                            </p>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setShowCascaderMenu(false);
+                                try {
+                                  await invoke('show_main_window');
+                                  await invoke('hide_overlay');
+                                } catch (e) {
+                                  console.error('Failed to open settings:', e);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors cursor-pointer"
+                            >
+                              <Settings size={11} />
+                              <span>前往设置</span>
+                            </button>
                           </div>
                         )}
                       </div>

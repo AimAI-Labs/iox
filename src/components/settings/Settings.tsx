@@ -97,8 +97,8 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
       name: "自定义服务商",
       baseUrl: "https://api.openai.com/v1",
       apiKey: "",
-      models: ["gpt-4o-mini", "gpt-4o"],
-      defaultModel: "gpt-4o-mini",
+      models: [],
+      defaultModel: "",
     };
     setFormData((prev) => ({
       ...prev,

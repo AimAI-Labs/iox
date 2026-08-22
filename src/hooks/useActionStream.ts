@@ -163,10 +163,16 @@ export function useActionStream({
 
       // 3. API 流式卡片模式
       const provider = config?.providers.find((p) => p.id === action.providerId);
-      const defaultModel = provider?.defaultModel || 'default';
+      const defaultModel = provider?.defaultModel || provider?.models[0] || '';
 
       onStartAction(action, defaultModel);
       await updateWindowSize('card', true);
+
+      if (!defaultModel || defaultModel.trim() === '') {
+        onSetError('⚠️ 当前服务商尚未配置可用模型，请前往「设置 -> 模型服务商」获取或添加可用模型。');
+        onSetLoading(false);
+        return;
+      }
 
       const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported(action.providerId);
 
@@ -224,7 +230,7 @@ export function useActionStream({
 
       // 3. API 流式卡片模式 (进入空白新对话)
       const provider = config?.providers.find((p) => p.id === action.providerId);
-      const defaultModel = provider?.defaultModel || 'default';
+      const defaultModel = provider?.defaultModel || provider?.models[0] || '';
 
       if (onStartEmptyAction) {
         onStartEmptyAction(action, defaultModel);
@@ -283,7 +289,7 @@ export function useActionStream({
       // 2. API 流式卡片模式
       if (action.actionType === 'api') {
         const provider = config?.providers.find((p) => p.id === action.providerId);
-        const defaultModel = provider?.defaultModel || provider?.models[0] || 'default';
+        const defaultModel = provider?.defaultModel || provider?.models[0] || '';
         const formattedQuote = formatQuoteText(selectedText);
 
         if (onStartQuoteAction) {
@@ -314,6 +320,12 @@ export function useActionStream({
   const handleSendFollowUp = useCallback(
     async (followUpPrompt: string) => {
       if (!activeAction || !followUpPrompt.trim()) return;
+
+      if (!selectedModel || selectedModel.trim() === '') {
+        onSetError('⚠️ 当前未配置可用模型，请在下方切换服务商或前往设置添加模型。');
+        onSetLoading(false);
+        return;
+      }
 
       onSetStreamText(streamText + `\n\n---\n**追问：** ${followUpPrompt}\n\n`);
       onSetLoading(true);
@@ -363,7 +375,7 @@ export function useActionStream({
       if (!config?.providers) return;
       const provider = config.providers.find((p) => p.id === newProviderId);
       if (!provider) return;
-      const newModel = provider.defaultModel || provider.models[0] || 'default';
+      const newModel = provider.defaultModel || provider.models[0] || '';
 
       onSetProvider(newProviderId, newModel);
       onSetError(null);
@@ -391,6 +403,12 @@ export function useActionStream({
   // 针对当前轮次重新生成 (保留前序多轮历史)
   const handleRegenerateCurrentTurn = useCallback(async () => {
     if (!activeAction) return;
+
+    if (!selectedModel || selectedModel.trim() === '') {
+      onSetError('⚠️ 当前未配置可用模型，请在下方切换服务商或前往设置添加模型。');
+      onSetLoading(false);
+      return;
+    }
 
     onSetLoading(true);
     onSetError(null);
