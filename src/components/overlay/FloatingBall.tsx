@@ -4,12 +4,14 @@ import { IOXLogo } from '@/components/common';
 import { FloatingMenu } from './FloatingMenu';
 import { cn } from '@/lib/utils';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export interface FloatingBallProps {
   config: AppConfig | null;
 }
 
 export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
+  const { t } = useTranslation();
   const [edge, setEdge] = useState<'left' | 'right'>('right');
   const [isIdle, setIsIdle] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -243,7 +245,7 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
             edge === 'left' ? 'is-docked-left' : 'is-docked-right',
             isIdle && 'is-idle'
           )}
-          title="IOX 悬浮助手 (单击展开，双击打开设置，拖拽吸边)"
+          title={t('bubble.floatingBallTip')}
         >
           <div className="floating-ball-icon pointer-events-none flex items-center justify-center">
             <IOXLogo size={24} />

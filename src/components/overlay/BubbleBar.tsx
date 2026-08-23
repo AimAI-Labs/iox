@@ -6,6 +6,7 @@ import { GripVertical, Check, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWindowDrag } from '@/hooks/useWindowDrag';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export interface BubbleBarProps {
   actions: ActionConfig[];
@@ -32,6 +33,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   isPreview = false,
   iconOnly = false,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
   const { copied, copy } = useCopyFeedback(1500);
   const { handleMouseDown } = useWindowDrag();
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
   const handleQuickCopy = async (action: ActionConfig, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (copied) return;
-    const textToCopy = selectedText || (isPreview ? '选中文本示例' : '');
+    const textToCopy = selectedText || (isPreview ? (resolvedLanguage === 'zh' ? '选中文本示例' : 'Selected Text Sample') : '');
     if (!textToCopy && !isPreview) return;
 
     const success = await copy(textToCopy);
@@ -147,7 +149,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
             isPreview && "cursor-default opacity-80",
             "transition-all duration-150"
           )}
-          title={isPreview ? "气泡拖拽手柄（划词时可按此拖拽）" : "按住拖拽移动"}
+          title={isPreview ? t('settings.actions.dragSortTip') : t('bubble.floatingBallTip')}
         >
           <GripVertical size={11} strokeWidth={2.2} />
         </div>
@@ -222,7 +224,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                       ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-500/30"
                       : "text-zinc-700 dark:text-zinc-200 hover:text-primary hover:bg-zinc-100/90 dark:hover:bg-zinc-800/90"
                   )}
-                  title={isDraggable ? `按住拖拽调整「${action.name}」排列顺序` : (copied ? "已复制到剪贴板" : action.name)}
+                  title={isDraggable ? `${t('settings.actions.dragSortTip')} (${action.name})` : (copied ? t('toast.copySuccess') : action.name)}
                 >
                   <span className="w-3.5 h-3.5 flex items-center justify-center pointer-events-none shrink-0">
                     {copied ? (
@@ -266,7 +268,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
                   isActionDragging && "opacity-35 scale-95 border border-dashed border-primary/70 bg-primary/10 text-primary/70 shadow-none",
                   isActionDragOver && "bg-primary/20 text-primary ring-1.5 ring-inset ring-primary/70 font-medium"
                 )}
-                title={isDraggable ? `按住拖拽调整「${action.name}」排列顺序` : action.name}
+                title={isDraggable ? `${t('settings.actions.dragSortTip')} (${action.name})` : action.name}
               >
                 <span className="w-3.5 h-3.5 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-primary transition-transform duration-150 group-hover:scale-110 pointer-events-none shrink-0">
                   <DynamicIcon name={action.icon} size={11.5} />
@@ -299,7 +301,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
               "group transition-all duration-200 hover:scale-105 active:scale-95",
               !isPreview ? "cursor-pointer" : "cursor-default opacity-80"
             )}
-            title={!isPreview ? "更多与设置" : "IOX AI 划词助手"}
+            title={!isPreview ? t('settings.title') : t('card.title')}
           >
             <IOXLogo
               size={22}

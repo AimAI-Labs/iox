@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────────────────────────────────
@@ -39,10 +40,12 @@ export interface LoadingStateProps {
 }
 
 export const LoadingState: React.FC<LoadingStateProps> = ({
-  label = 'AI 正在深入思考分析中...',
+  label,
   className,
   onCancel,
 }) => {
+  const { t } = useTranslation();
+  const displayLabel = label || t('card.thinkingInProgress');
   const { format: elapsed, seconds: elapsedS } = useElapsed();
   const showCancel = Boolean(onCancel) && elapsedS >= CANCEL_BUTTON_THRESHOLD_S;
 
@@ -78,7 +81,7 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
           animation: 'shimmer-text 1.4s linear infinite',
         }}
       >
-        {label}
+        {displayLabel}
       </span>
 
       {/* mono 等宽实时耗时 */}
@@ -93,7 +96,7 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
           onClick={onCancel}
           className="ml-1 inline-flex h-5 items-center rounded-[4px] bg-field px-1.5 text-[11px] text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink active:scale-[0.96] cursor-pointer"
         >
-          取消
+          {t('common.cancel')}
         </button>
       )}
     </div>

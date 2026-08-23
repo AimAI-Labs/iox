@@ -14,6 +14,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { Card, CardContent, Button, Input, Badge } from "@/components/ui";
 import { PickedProcessInfo } from "@/types/config";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface BlacklistTabProps {
   blacklist: string[];
@@ -26,6 +27,9 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
   onAddBlacklist,
   onRemoveBlacklist,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
+
   const [newInput, setNewInput] = useState("");
   const [isPicking, setIsPicking] = useState(false);
   const [pickedInfo, setPickedInfo] = useState<PickedProcessInfo | null>(null);
@@ -80,10 +84,12 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
       {/* Header */}
       <div className="pb-1 border-b border-border/30">
         <h2 className="text-sm font-semibold tracking-tight text-foreground">
-          应用排除黑名单
+          {isZh ? "应用排除黑名单" : "Process Blacklist"}
         </h2>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          在以下前台程序或游戏进程中划词时，IOX 悬浮气泡将自动静默，不干扰正常操作
+          {isZh
+            ? "在以下前台程序或游戏进程中划词时，IOX 悬浮气泡将自动静默，不干扰正常操作"
+            : "IOX selection bubble stays silent in listed applications and games to avoid interference"}
         </p>
       </div>
 
@@ -96,13 +102,27 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
               <Crosshair size={16} className="text-primary shrink-0 relative" />
             </div>
             <div>
-              <p className="font-medium text-primary">🎯 正在瞄准拾取窗口...</p>
+              <p className="font-medium text-primary">
+                {isZh ? "🎯 正在瞄准拾取窗口..." : "🎯 Targeting window..."}
+              </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                请在屏幕上点击目标软件窗口。按{" "}
-                <kbd className="px-1 py-0.5 rounded bg-muted/60 border border-border/50 text-[10px] font-mono">
-                  Esc
-                </kbd>{" "}
-                或鼠标右键可随时取消。
+                {isZh ? (
+                  <>
+                    请在屏幕上点击目标软件窗口。按{" "}
+                    <kbd className="px-1 py-0.5 rounded bg-muted/60 border border-border/50 text-[10px] font-mono">
+                      Esc
+                    </kbd>{" "}
+                    或鼠标右键可随时取消。
+                  </>
+                ) : (
+                  <>
+                    Click target window on screen. Press{" "}
+                    <kbd className="px-1 py-0.5 rounded bg-muted/60 border border-border/50 text-[10px] font-mono">
+                      Esc
+                    </kbd>{" "}
+                    or right click to cancel.
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -112,7 +132,7 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
             onClick={handleCancelPick}
             className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
           >
-            取消
+            {t('common.cancel')}
           </Button>
         </div>
       )}
@@ -123,7 +143,7 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
           <div className="flex items-center gap-2">
             <Input
               type="text"
-              placeholder="输入进程文件名，例如: League of Legends.exe 或 Code.exe"
+              placeholder={isZh ? "输入进程文件名，例如: League of Legends.exe 或 Code.exe" : "Enter process executable name, e.g. Code.exe"}
               value={newInput}
               onChange={(e) => setNewInput(e.target.value)}
               onKeyDown={(e) => {
@@ -141,7 +161,7 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
               className="gap-1 px-3"
             >
               <Plus size={13} />
-              <span>添加</span>
+              <span>{t('common.add')}</span>
             </Button>
             {isPicking ? (
               <Button
@@ -151,7 +171,7 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
                 className="gap-1.5 px-3 animate-pulse"
               >
                 <Loader2 size={13} className="animate-spin" />
-                <span>取消拾取</span>
+                <span>{isZh ? "取消拾取" : "Cancel Pick"}</span>
               </Button>
             ) : (
               <Button
@@ -159,10 +179,10 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
                 size="sm"
                 variant="outline"
                 className="gap-1.5 px-3 border-border/70 hover:border-primary/50 hover:bg-primary/5 hover:text-primary transition-all"
-                title="通过鼠标点击屏幕上的任意目标窗口自动识别并添加"
+                title={isZh ? "通过鼠标点击屏幕上的任意目标窗口自动识别并添加" : "Click any window on screen to detect and add"}
               >
                 <Crosshair size={13} className="text-primary" />
-                <span>拾取窗口</span>
+                <span>{isZh ? "拾取窗口" : "Pick Window"}</span>
               </Button>
             )}
           </div>
@@ -172,16 +192,16 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
             {blacklist.length === 0 ? (
               <div className="py-6 flex flex-col items-center justify-center text-center text-muted-foreground/60 space-y-1.5 border border-dashed border-border/40 rounded-lg bg-muted/10">
                 <ShieldCheck size={24} className="opacity-40" />
-                <p className="text-xs">暂无排除黑名单进程</p>
+                <p className="text-xs">{isZh ? "暂无排除黑名单进程" : "No blacklisted processes"}</p>
                 <p className="text-[10px] text-muted-foreground/50">
-                  IOX 会在所有常规桌面软件中响应划词
+                  {isZh ? "IOX 会在所有常规桌面软件中响应划词" : "IOX will respond in all standard applications"}
                 </p>
               </div>
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground px-0.5">
-                  <span>已屏蔽进程 ({blacklist.length})</span>
-                  <span className="text-[10px]">点击 × 即可取消屏蔽</span>
+                  <span>{isZh ? `已屏蔽进程 (${blacklist.length})` : `Excluded Processes (${blacklist.length})`}</span>
+                  <span className="text-[10px]">{isZh ? "点击 × 即可取消屏蔽" : "Click × to remove"}</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 p-2.5 rounded-lg bg-muted/20 border border-border/30 max-h-56 overflow-y-auto">
                   {blacklist.map((item) => (
@@ -195,8 +215,8 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
                       <button
                         type="button"
                         onClick={() => onRemoveBlacklist(item)}
-                        className="rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive text-muted-foreground/60 transition-colors outline-none"
-                        title={`移除 ${item}`}
+                        className="rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive text-muted-foreground/60 transition-colors outline-none cursor-pointer"
+                        title={t('common.delete')}
                       >
                         <X size={11} />
                       </button>
@@ -221,10 +241,10 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-foreground">
-                    识别到目标窗口
+                    {isZh ? "识别到目标窗口" : "Target Window Identified"}
                   </h3>
                   <p className="text-[11px] text-muted-foreground">
-                    是否将该软件进程加入排除黑名单？
+                    {isZh ? "是否将该软件进程加入排除黑名单？" : "Add this process to exclusion blacklist?"}
                   </p>
                 </div>
               </div>
@@ -242,17 +262,17 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
               <div className="space-y-1">
                 <span className="text-[10px] uppercase font-medium text-muted-foreground flex items-center gap-1">
                   <AppWindow size={11} />
-                  窗口标题
+                  {isZh ? "窗口标题" : "Window Title"}
                 </span>
                 <p className="text-xs font-medium text-foreground line-clamp-2 select-text">
-                  {pickedInfo.windowTitle || "未知窗口标题"}
+                  {pickedInfo.windowTitle || (isZh ? "未知窗口标题" : "Unknown Window Title")}
                 </p>
               </div>
 
               <div className="space-y-1 pt-1 border-t border-border/30">
                 <span className="text-[10px] uppercase font-medium text-muted-foreground flex items-center gap-1">
                   <Cpu size={11} />
-                  进程可执行文件
+                  {isZh ? "进程可执行文件" : "Process Executable"}
                 </span>
                 <div className="flex items-center gap-1.5">
                   <Badge
@@ -269,11 +289,13 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
             {isPickedAlreadyBlacklisted ? (
               <div className="flex items-center gap-2 p-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs">
                 <AlertTriangle size={14} className="shrink-0" />
-                <span>该进程已在黑名单列表中，无需重复添加</span>
+                <span>{isZh ? "该进程已在黑名单列表中，无需重复添加" : "Process already in blacklist"}</span>
               </div>
             ) : (
               <p className="text-[11px] text-muted-foreground px-0.5">
-                添加后，在以此进程运行的所有窗口中划词时，IOX 将自动静默并不弹出气泡。
+                {isZh
+                  ? "添加后，在以此进程运行的所有窗口中划词时，IOX 将自动静默并不弹出气泡。"
+                  : "After adding, IOX will stay silent in windows belonging to this process."}
               </p>
             )}
 
@@ -285,7 +307,7 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
                 onClick={() => setPickedInfo(null)}
                 className="h-8 px-3 text-xs"
               >
-                取消
+                {t('common.cancel')}
               </Button>
               <Button
                 variant="default"
@@ -295,7 +317,7 @@ export const BlacklistTab: React.FC<BlacklistTabProps> = ({
                 className="h-8 px-3 text-xs gap-1.5 shadow-sm"
               >
                 <Check size={13} />
-                <span>确认添加至黑名单</span>
+                <span>{isZh ? "确认添加至黑名单" : "Confirm Add"}</span>
               </Button>
             </div>
           </div>

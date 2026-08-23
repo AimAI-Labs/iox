@@ -12,6 +12,7 @@ import { SessionsTab } from "@/components/settings/SessionsTab";
 import { WebviewTab } from "@/components/settings/WebviewTab";
 import { GeneralTab } from "@/components/settings/GeneralTab";
 import { BlacklistTab } from "@/components/settings/BlacklistTab";
+import { useTranslation } from "@/hooks/useTranslation";
 
 export interface SettingsProps {
   config: AppConfig;
@@ -19,6 +20,8 @@ export interface SettingsProps {
 }
 
 export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
   const [activeTab, setActiveTab] = useState<SettingsTab>("providers");
   const [formData, setFormData] = useState<AppConfig>(config);
   const [saving, setSaving] = useState(false);
@@ -46,23 +49,22 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     };
   }, []);
 
-
   const handleSave = async () => {
     if (saving) return;
     setSaving(true);
     try {
       const ok = await onSave(formDataRef.current);
       if (ok) {
-        toast.success("配置已保存", {
-          description: "所有修改已即时生效",
+        toast.success(t('toast.saved'), {
+          description: isZh ? "所有修改已即时生效" : "All modifications are now active",
         });
       } else {
-        toast.error("配置保存失败", {
-          description: "请检查填写内容或系统日志",
+        toast.error(t('toast.saveFailed'), {
+          description: isZh ? "请检查填写内容或系统日志" : "Please check your inputs or system logs",
         });
       }
     } catch (err) {
-      toast.error("配置保存异常", {
+      toast.error(t('toast.saveError'), {
         description: String(err),
       });
     } finally {
@@ -220,7 +222,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     <div className="w-screen h-screen bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
       <div className="w-full h-full flex flex-col bg-[var(--bg-overlay-card)] text-foreground rounded-xl border border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl">
         {/* macOS 沉浸式标题栏 */}
-        <MacTitleBar title="IOX 设置" />
+        <MacTitleBar title={t('settings.title')} />
 
         {/* 设置主体区 */}
         <div className="flex flex-1 h-[calc(100%-38px)] overflow-hidden">

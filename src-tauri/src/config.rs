@@ -26,6 +26,43 @@ fn default_floating_ball_pos() -> (i32, i32) {
     (0, 0)
 }
 
+fn default_language() -> String {
+    "auto".to_string()
+}
+
+/// 获取系统当前 UI 语言代码，若是中文（包含繁体、简体）返回 "zh"，其余一切语言一律返回 "en"
+pub fn get_system_language() -> &'static str {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Globalization::GetUserDefaultUILanguage;
+        let lang_id = unsafe { GetUserDefaultUILanguage() };
+        let primary_lang = lang_id & 0x03FF;
+        if primary_lang == 0x04 {
+            "zh"
+        } else {
+            "en"
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let lang = std::env::var("LANG").unwrap_or_default().to_lowercase();
+        if lang.starts_with("zh") {
+            "zh"
+        } else {
+            "en"
+        }
+    }
+}
+
+/// 解析生效语言（如果是 "auto" 则解析系统语言，否则返回用户指定的 "zh" 或 "en"）
+pub fn resolve_language(configured: &str) -> &'static str {
+    match configured {
+        "zh" => "zh",
+        "en" => "en",
+        _ => get_system_language(),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GeneralConfig {
@@ -53,6 +90,8 @@ pub struct GeneralConfig {
     pub floating_ball_auto_hide: bool,
     #[serde(default = "default_floating_ball_pos")]
     pub floating_ball_pos: (i32, i32),
+    #[serde(default = "default_language")]
+    pub language: String,         // "auto" | "zh" | "en"
 }
 
 impl Default for GeneralConfig {
@@ -73,6 +112,7 @@ impl Default for GeneralConfig {
             enable_floating_ball: true,
             floating_ball_auto_hide: true,
             floating_ball_pos: (0, 0),
+            language: "auto".to_string(),
         }
     }
 }
@@ -178,16 +218,12 @@ pub struct AppConfig {
     pub api_card: ApiCardConfig,
 }
 
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            blacklist: vec![
-                "League of Legends.exe".to_string(),
-                "Valorant.exe".to_string(),
-                "GenshinImpact.exe".to_string(),
-            ],
-            providers: vec![
+impl AppConfig {
+    /// 根据语言环境生成默认配置（中文 "zh" 或 英文 "en"）
+    pub fn default_for_language(lang: &str) -> Self {
+        let is_zh = lang == "zh";
+        let providers = if is_zh {
+            vec![
                 ProviderConfig {
                     id: "deepseek".to_string(),
                     name: "DeepSeek 官方".to_string(),
@@ -212,8 +248,38 @@ impl Default for AppConfig {
                     models: vec![],
                     default_model: "".to_string(),
                 },
-            ],
-            actions: vec![
+            ]
+        } else {
+            vec![
+                ProviderConfig {
+                    id: "deepseek".to_string(),
+                    name: "DeepSeek".to_string(),
+                    base_url: "https://api.deepseek.com/v1".to_string(),
+                    api_key: "".to_string(),
+                    models: vec![],
+                    default_model: "".to_string(),
+                },
+                ProviderConfig {
+                    id: "qwen".to_string(),
+                    name: "Qwen (DashScope)".to_string(),
+                    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
+                    api_key: "".to_string(),
+                    models: vec![],
+                    default_model: "".to_string(),
+                },
+                ProviderConfig {
+                    id: "ollama".to_string(),
+                    name: "Ollama (Local)".to_string(),
+                    base_url: "http://127.0.0.1:11434/v1".to_string(),
+                    api_key: "".to_string(),
+                    models: vec![],
+                    default_model: "".to_string(),
+                },
+            ]
+        };
+
+        let actions = if is_zh {
+            vec![
                 ActionConfig {
                     id: "act_translate".to_string(),
                     name: "翻译".to_string(),
@@ -398,9 +464,138 @@ impl Default for AppConfig {
                     use_url_template: None,
                     enabled: true,
                 },
+            ]
+        } else {
+            vec![
+                ActionConfig {
+                    id: "act_translate".to_string(),
+                    name: "Translate".to_string(),
+                    icon: "Languages".to_string(),
+                    action_type: "api".to_string(),
+                    provider_id: Some("deepseek".to_string()),
+                    prompt_template: Some(
+                        "You are a professional translator. Please translate the following content into fluent, idiomatic English (or translate English into idiomatic simplified Chinese if input is English). Directly output the translated text:\n\n{text}".to_string(),
+                    ),
+                    url_template: None,
+                    copy_to_clipboard: None,
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
+                    use_url_template: None,
+                    enabled: true,
+                },
+                ActionConfig {
+                    id: "act_summarize".to_string(),
+                    name: "Summarize".to_string(),
+                    icon: "FileText".to_string(),
+                    action_type: "api".to_string(),
+                    provider_id: Some("deepseek".to_string()),
+                    prompt_template: Some(
+                        "Please summarize the key takeaways and core ideas of the following content clearly and concisely:\n\n{text}".to_string(),
+                    ),
+                    url_template: None,
+                    copy_to_clipboard: None,
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
+                    use_url_template: None,
+                    enabled: true,
+                },
+                ActionConfig {
+                    id: "act_web_deepseek".to_string(),
+                    name: "DeepSeek".to_string(),
+                    icon: "DeepSeek".to_string(),
+                    action_type: "web".to_string(),
+                    provider_id: None,
+                    prompt_template: None,
+                    url_template: Some("https://chat.deepseek.com/".to_string()),
+                    copy_to_clipboard: Some(false),
+                    input_selector: Some("textarea#chat-input, textarea".to_string()),
+                    submit_selector: Some("div[role='button'][aria-label*='发送'], div[role='button'][aria-label*='Send'], button[type='submit']".to_string()),
+                    auto_submit: Some(true),
+                    use_url_template: None,
+                    enabled: true,
+                },
+                ActionConfig {
+                    id: "act_web_chatgpt".to_string(),
+                    name: "ChatGPT".to_string(),
+                    icon: "OpenAI".to_string(),
+                    action_type: "web".to_string(),
+                    provider_id: None,
+                    prompt_template: None,
+                    url_template: Some("https://chatgpt.com/".to_string()),
+                    copy_to_clipboard: Some(false),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
+                    use_url_template: None,
+                    enabled: true,
+                },
+                ActionConfig {
+                    id: "act_web_search".to_string(),
+                    name: "Perplexity".to_string(),
+                    icon: "Perplexity".to_string(),
+                    action_type: "web".to_string(),
+                    provider_id: None,
+                    prompt_template: None,
+                    url_template: Some("https://www.perplexity.ai/search?q={text}".to_string()),
+                    copy_to_clipboard: Some(false),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
+                    use_url_template: Some(true),
+                    enabled: true,
+                },
+                ActionConfig {
+                    id: "act_web_phind".to_string(),
+                    name: "Phind".to_string(),
+                    icon: "Phind".to_string(),
+                    action_type: "web".to_string(),
+                    provider_id: None,
+                    prompt_template: None,
+                    url_template: Some("https://www.phind.com/search?q={text}".to_string()),
+                    copy_to_clipboard: Some(false),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
+                    use_url_template: Some(true),
+                    enabled: false,
+                },
+                ActionConfig {
+                    id: "act_copy".to_string(),
+                    name: "Copy".to_string(),
+                    icon: "Copy".to_string(),
+                    action_type: "copy".to_string(),
+                    provider_id: None,
+                    prompt_template: None,
+                    url_template: None,
+                    copy_to_clipboard: Some(true),
+                    input_selector: None,
+                    submit_selector: None,
+                    auto_submit: None,
+                    use_url_template: None,
+                    enabled: true,
+                },
+            ]
+        };
+
+        Self {
+            general: GeneralConfig::default(),
+            blacklist: vec![
+                "League of Legends.exe".to_string(),
+                "Valorant.exe".to_string(),
+                "GenshinImpact.exe".to_string(),
             ],
+            providers,
+            actions,
             api_card: ApiCardConfig::default(),
         }
+    }
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self::default_for_language("zh")
     }
 }
 
@@ -522,7 +717,8 @@ impl AppConfig {
                 }
             }
         }
-        let default_config = Self::default();
+        let system_lang = resolve_language("auto");
+        let default_config = Self::default_for_language(system_lang);
         let _ = default_config.save();
         default_config
     }
@@ -759,6 +955,49 @@ mod tests {
 
         let config_path = AppConfig::config_path();
         assert_eq!(config_path, home.join(".iox-dev").join("config.json"));
+    }
+
+    #[test]
+    fn test_language_config_defaults_and_backward_compatibility() {
+        let default_config = AppConfig::default();
+        assert_eq!(default_config.general.language, "auto");
+
+        let legacy_json = r#"{
+            "general": {
+                "autoPopupOnSelection": true,
+                "minSelectionLength": 1,
+                "triggerModifier": "None",
+                "globalHotkey": "Alt+Space",
+                "theme": "system",
+                "autoStart": false
+            },
+            "blacklist": [],
+            "providers": [],
+            "actions": []
+        }"#;
+        let config: AppConfig = serde_json::from_str(legacy_json).expect("Deserialize legacy config without language");
+        assert_eq!(config.general.language, "auto");
+    }
+
+    #[test]
+    fn test_system_language_resolution() {
+        assert_eq!(resolve_language("zh"), "zh");
+        assert_eq!(resolve_language("en"), "en");
+        let auto_res = resolve_language("auto");
+        assert!(auto_res == "zh" || auto_res == "en");
+    }
+
+    #[test]
+    fn test_default_config_for_language() {
+        let zh_config = AppConfig::default_for_language("zh");
+        let en_config = AppConfig::default_for_language("en");
+
+        let zh_translate = zh_config.actions.iter().find(|a| a.id == "act_translate").expect("zh translate action");
+        let en_translate = en_config.actions.iter().find(|a| a.id == "act_translate").expect("en translate action");
+
+        assert_eq!(zh_translate.name, "翻译");
+        assert_eq!(en_translate.name, "Translate");
+        assert!(en_translate.prompt_template.as_ref().unwrap().contains("professional translator"));
     }
 }
 

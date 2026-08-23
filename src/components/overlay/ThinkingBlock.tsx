@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
+import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────────────────────────────────
@@ -26,6 +27,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   onToggleOpen: controlledToggleOpen,
   className,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
   const [internalIsOpen, setInternalIsOpen] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const startTimeRef = useRef<number | null>(null);
@@ -112,7 +114,9 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
                 animation: 'shimmer-text 1.4s linear infinite',
               }}
             >
-              Thinking {elapsedSeconds > 0 ? `· ${elapsedSeconds.toFixed(1)}s` : ''}
+              {resolvedLanguage === 'zh'
+                ? `思考中 ${elapsedSeconds > 0 ? `· ${elapsedSeconds.toFixed(1)}s` : ''}`
+                : `Thinking ${elapsedSeconds > 0 ? `· ${elapsedSeconds.toFixed(1)}s` : ''}`}
             </span>
           ) : (
             /* 思考完成 — 静默耗时 */
@@ -120,7 +124,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
               className="text-[13px] font-medium whitespace-nowrap text-ink-2"
               style={{ animation: 'fade-in 350ms ease-out both' }}
             >
-              Thought for {elapsedSeconds > 0 ? `${elapsedSeconds.toFixed(1)}s` : 'a few seconds'}
+              {t('card.thinkingDuration', { seconds: elapsedSeconds > 0 ? elapsedSeconds.toFixed(1) : '0' })}
             </span>
           )}
         </span>
@@ -166,7 +170,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
             <div ref={traceRef} className="group/trace relative flex flex-col gap-1 py-1">
               {/* 推理正文 */}
               <div className="max-h-60 overflow-y-auto pr-1 text-[12.5px] leading-relaxed text-ink-2 whitespace-pre-wrap break-words select-text custom-scrollbar">
-                {thinkingText || 'AI 正在深入拆解问题与逻辑推理中...'}
+                {thinkingText || (resolvedLanguage === 'zh' ? 'AI 正在深入拆解问题与逻辑推理中...' : 'AI is reasoning and analyzing the problem...')}
                 {isThinking && (
                   <span className="ml-0.5 inline-block h-3 w-[3px] translate-y-0.5 rounded-full bg-ink align-middle" />
                 )}
@@ -181,7 +185,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
                     copy(thinkingText);
                   }}
                   className="absolute right-0 top-0 flex size-5 items-center justify-center rounded-[5px] text-ink-3 opacity-0 transition-opacity duration-150 hover:bg-hover hover:text-ink cursor-pointer group-hover/trace:opacity-100"
-                  title="复制完整思考过程"
+                  title={t('common.copy')}
                 >
                   {copied ? (
                     <Check size={11} className="text-emerald-600" />

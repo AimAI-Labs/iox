@@ -2,6 +2,7 @@ import React from "react";
 import { ActionConfig, ProviderConfig } from "@/types/config";
 import { Input, Textarea, Label, Select } from "@/components/ui";
 import { Box, Code } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface ApiActionFormProps {
   action: ActionConfig;
@@ -14,6 +15,9 @@ export const ApiActionForm: React.FC<ApiActionFormProps> = ({
   providers,
   onUpdate,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
+
   const currentProvider = providers.find((p) => p.id === action.providerId);
   const models = currentProvider?.models || [];
 
@@ -22,7 +26,7 @@ export const ApiActionForm: React.FC<ApiActionFormProps> = ({
       <div className="grid grid-cols-2 gap-3 items-start">
         {/* 服务商绑定 */}
         <div className="space-y-1.5">
-          <Label>指定模型服务商</Label>
+          <Label>{t('settings.actions.provider')}</Label>
           <Select
             value={action.providerId || ""}
             onChange={(val) => onUpdate({ providerId: val })}
@@ -36,11 +40,11 @@ export const ApiActionForm: React.FC<ApiActionFormProps> = ({
 
         {/* 默认调用模型预览 */}
         <div className="space-y-1.5">
-          <Label>当前服务商默认模型</Label>
+          <Label>{isZh ? "当前服务商默认模型" : "Default Model for Provider"}</Label>
           <Input
             type="text"
             readOnly
-            value={currentProvider?.defaultModel || (models.length > 0 ? models[0] : "未选择服务商")}
+            value={currentProvider?.defaultModel || (models.length > 0 ? models[0] : (isZh ? "未选择服务商" : "No provider selected"))}
             className="text-xs bg-muted/30 font-mono cursor-default text-muted-foreground"
           />
         </div>
@@ -49,9 +53,9 @@ export const ApiActionForm: React.FC<ApiActionFormProps> = ({
       {/* 提示词模板 */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label>Prompt 提示词模板</Label>
+          <Label>{t('settings.actions.promptTemplate')}</Label>
           <div className="flex items-center gap-1">
-            <span className="text-[10px] text-muted-foreground">支持占位符:</span>
+            <span className="text-[10px] text-muted-foreground">{isZh ? "支持占位符:" : "Placeholder:"}</span>
             <button
               type="button"
               onClick={() => {
@@ -61,7 +65,7 @@ export const ApiActionForm: React.FC<ApiActionFormProps> = ({
                 }
               }}
               className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-primary/10 hover:bg-primary/20 text-primary transition-colors cursor-pointer border border-primary/20"
-              title="插入划选文本占位符 {text}"
+              title={isZh ? "插入划选文本占位符 {text}" : "Insert selected text placeholder {text}"}
             >
               <Code size={10} />
               <span>{"{text}"}</span>
@@ -71,13 +75,13 @@ export const ApiActionForm: React.FC<ApiActionFormProps> = ({
 
         <Textarea
           value={action.promptTemplate || ""}
-          placeholder="输入 AI 提示词指令，使用 {text} 作为用户选中文本的替换位置..."
+          placeholder={t('settings.actions.promptPlaceholder')}
           rows={3}
           onChange={(e) => onUpdate({ promptTemplate: e.target.value })}
           className="text-xs font-mono resize-y min-h-[64px]"
         />
         <p className="text-[10px] text-muted-foreground">
-          划词触发时，系统会自动将用户在任意窗口划选的高亮文本填入 <code className="text-primary font-mono">{"{text}"}</code> 所在位置并流式调用 API。
+          {t('settings.actions.promptTip')}
         </p>
       </div>
     </div>

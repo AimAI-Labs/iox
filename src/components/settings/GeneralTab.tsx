@@ -1,7 +1,8 @@
 import React from "react";
-import { Monitor, Moon, Sun, Sparkles } from "lucide-react";
-import { GeneralConfig } from "@/types/config";
+import { Monitor, Moon, Sun, Sparkles, Globe } from "lucide-react";
+import { GeneralConfig, LanguageSetting } from "@/types/config";
 import { switchThemeWithTransition } from "@/hooks/useTheme";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -24,28 +25,65 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   general,
   onUpdateGeneral,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
+
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="pb-1 border-b border-border/30">
         <h2 className="text-sm font-semibold tracking-tight text-foreground">
-          划词触发与常规设置
+          {t('settings.general.title')}
         </h2>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          调整系统级取词逻辑、快捷键、界面外观与开机自启动
+          {t('settings.general.subtitle')}
         </p>
       </div>
 
       <Card className="border-border/60 bg-card/60">
         <CardContent className="p-4 space-y-4">
-          {/* Auto popup switch */}
+          {/* 1. Interface Language Switcher */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1.5">
+                <Globe size={13} className="text-primary" />
+                <Label className="text-xs text-foreground font-medium">
+                  {t('settings.general.language')}
+                </Label>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {isZh
+                  ? "选择界面显示语言（默认自动检测系统语言，无中文显示英文）"
+                  : "Choose UI language (auto-detects system locale, defaults to English if non-Chinese)"}
+              </p>
+            </div>
+            <div className="w-52">
+              <Select
+                value={general.language || "auto"}
+                onChange={(val) =>
+                  onUpdateGeneral({
+                    language: val as LanguageSetting,
+                  })
+                }
+                options={[
+                  { value: "auto", label: t('settings.general.languageAuto') },
+                  { value: "zh", label: t('settings.general.languageZh') },
+                  { value: "en", label: t('settings.general.languageEn') },
+                ]}
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* 2. Auto popup switch */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                划选文本自动弹出
+                {t('settings.general.autoPopup')}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                在任意应用中选中文本后，在光标旁即时弹出微型胶囊操作条
+                {t('settings.general.autoPopupDesc')}
               </p>
             </div>
             <Switch
@@ -58,14 +96,14 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 
           <Separator />
 
-          {/* Trigger Modifier */}
+          {/* 3. Trigger Modifier */}
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                触发修饰键
+                {t('settings.general.triggerModifier')}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                配合鼠标划选生效的键盘按键，可有效防止误触
+                {t('settings.general.triggerModifierDesc')}
               </p>
             </div>
             <div className="w-52">
@@ -77,10 +115,10 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                   })
                 }
                 options={[
-                  { value: "None", label: "无 (鼠标划选直接触发)" },
-                  { value: "Ctrl", label: "按住 Ctrl 划选" },
-                  { value: "Alt", label: "按住 Alt 划选" },
-                  { value: "Shift", label: "按住 Shift 划选" },
+                  { value: "None", label: t('settings.general.triggerModifierNone') },
+                  { value: "Ctrl", label: t('settings.general.triggerModifierCtrl') },
+                  { value: "Alt", label: t('settings.general.triggerModifierAlt') },
+                  { value: "Shift", label: t('settings.general.triggerModifierShift') },
                 ]}
               />
             </div>
@@ -88,14 +126,14 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 
           <Separator />
 
-          {/* Min Selection Length */}
+          {/* 4. Min Selection Length */}
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                最小选词字符长度
+                {t('settings.general.minSelectionLength')}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                低于此字符数的选中文本将自动忽略，不弹出气泡
+                {t('settings.general.minSelectionLengthDesc')}
               </p>
             </div>
             <div className="w-52">
@@ -116,14 +154,14 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 
           <Separator />
 
-          {/* Global Hotkey */}
+          {/* 5. Global Hotkey */}
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                全局唤醒快捷键
+                {t('settings.general.globalHotkey')}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                随时通过键盘组合键获取当前选中文本并调起助手
+                {t('settings.general.globalHotkeyDesc')}
               </p>
             </div>
             <div className="w-52">
@@ -139,18 +177,16 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
             </div>
           </div>
 
-
-
           <Separator />
 
-          {/* Theme */}
+          {/* 6. Theme */}
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                外观主题
+                {t('settings.general.theme')}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                选择 IOX 界面色彩风格模式
+                {t('settings.general.themeDesc')}
               </p>
             </div>
             <div className="flex items-center gap-1 bg-black/5 dark:bg-white/5 p-1 rounded-xl border border-black/5 dark:border-white/5">
@@ -168,10 +204,10 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                     ? "bg-background text-foreground shadow-xs border border-black/5 dark:border-white/10 font-semibold"
                     : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
                 )}
-                title="跟随系统"
+                title={t('settings.general.themeSystem')}
               >
                 <Monitor size={13} className={general.theme === 'system' ? 'text-primary dark:text-blue-400' : ''} />
-                <span>系统</span>
+                <span>{isZh ? '系统' : 'System'}</span>
               </button>
 
               <button
@@ -188,10 +224,10 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                     ? "bg-background text-foreground shadow-xs border border-black/5 dark:border-white/10 font-semibold"
                     : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
                 )}
-                title="浅色模式"
+                title={t('settings.general.themeLight')}
               >
                 <Sun size={13} className={general.theme === 'light' ? 'text-amber-500' : ''} />
-                <span>浅色</span>
+                <span>{isZh ? '浅色' : 'Light'}</span>
               </button>
 
               <button
@@ -208,25 +244,25 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                     ? "bg-background text-foreground shadow-xs border border-black/5 dark:border-white/10 font-semibold"
                     : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
                 )}
-                title="深色模式"
+                title={t('settings.general.themeDark')}
               >
                 <Moon size={13} className={general.theme === 'dark' ? 'text-purple-500 dark:text-purple-400' : ''} />
-                <span>深色</span>
+                <span>{isZh ? '深色' : 'Dark'}</span>
               </button>
             </div>
           </div>
 
           <Separator />
 
-          {/* Overlay Opacity */}
+          {/* 7. Overlay Opacity */}
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <Label className="text-xs text-foreground font-medium">
-                  界面背景透明度
+                  {t('settings.general.overlayOpacity')}
                 </Label>
                 <p className="text-[11px] text-muted-foreground">
-                  调节设置页面、划词胶囊条与悬浮卡片的毛玻璃背景透光度
+                  {t('settings.general.overlayOpacityDesc')}
                 </p>
               </div>
               <div className="w-52 flex items-center gap-3">
@@ -249,10 +285,10 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
               <div className="relative z-10 flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10.5px] font-medium text-muted-foreground">
-                    效果实时预览 (当前不透明度 {general.overlayOpacity ?? 90}%)
+                    {isZh ? `效果实时预览 (当前不透明度 ${general.overlayOpacity ?? 90}%)` : `Live Preview (Opacity ${general.overlayOpacity ?? 90}%)`}
                   </span>
                   <span className="text-[10px] text-muted-foreground/80">
-                    毛玻璃高斯模糊已联动
+                    {isZh ? "毛玻璃高斯模糊已联动" : "Linked with blur effects"}
                   </span>
                 </div>
 
@@ -260,21 +296,21 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                   {/* 1. 微缩胶囊气泡 */}
                   <div className="capsule-glass h-7 px-2 rounded-lg border border-zinc-200/80 dark:border-zinc-800/80 inline-flex items-center gap-1.5 shadow-sm">
                     <IOXLogo size={16} />
-                    <span className="text-[11px] font-medium text-foreground">气泡透明度</span>
+                    <span className="text-[11px] font-medium text-foreground">{isZh ? "气泡透明度" : "Bubble Opacity"}</span>
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary font-medium">
                       <Sparkles size={10} />
-                      <span>AI动作</span>
+                      <span>AI</span>
                     </span>
                   </div>
 
                   {/* 2. 微缩卡片透光效果 */}
                   <div className="flex-1 min-w-[180px] bg-[var(--bg-overlay-card)] backdrop-blur-xl border border-black/10 dark:border-white/10 rounded-lg px-2.5 py-1.5 shadow-sm">
                     <div className="flex items-center justify-between text-[10.5px] text-muted-foreground border-b border-border/40 pb-1 mb-1">
-                      <span className="font-medium text-foreground">AI 结果卡片</span>
-                      <span>Markdown 预览</span>
+                      <span className="font-medium text-foreground">AI Result Card</span>
+                      <span>Markdown</span>
                     </div>
                     <p className="text-[10.5px] text-foreground/90 line-clamp-1">
-                      透明度调节实时生效，背景磨砂透光清晰自然。
+                      {isZh ? "透明度调节实时生效，背景磨砂透光清晰自然。" : "Opacity changes take effect immediately with clear frosted glass."}
                     </p>
                   </div>
                 </div>
@@ -284,14 +320,14 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 
           <Separator />
 
-          {/* Floating Ball Controls */}
+          {/* 8. Floating Ball Controls */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                桌面常驻悬浮球
+                {t('settings.general.enableFloatingBall')}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                在屏幕边缘常驻圆形快捷球，支持随时拖拽、单击提问与双击打开设置
+                {t('settings.general.enableFloatingBallDesc')}
               </p>
             </div>
             <Switch
@@ -308,10 +344,10 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label className="text-xs text-foreground font-medium">
-                    悬浮球贴边自动半隐藏
+                    {t('settings.general.floatingBallAutoHide')}
                   </Label>
                   <p className="text-[11px] text-muted-foreground">
-                    悬浮球吸附在屏幕边缘闲置 2.5 秒后自动向边缘缩进 50% 并半透明化
+                    {t('settings.general.floatingBallAutoHideDesc')}
                   </p>
                 </div>
                 <Switch
@@ -326,14 +362,14 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 
           <Separator />
 
-          {/* Auto Start */}
+          {/* 9. Auto Start */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                开机自启动
+                {t('settings.general.autoStart')}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                登录 Windows 系统后自动在后台托盘运行 IOX
+                {t('settings.general.autoStartDesc')}
               </p>
             </div>
             <Switch

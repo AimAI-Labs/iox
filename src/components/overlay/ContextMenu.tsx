@@ -15,6 +15,7 @@ import {
   Monitor,
 } from 'lucide-react';
 import { switchThemeWithTransition } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 
 export interface ContextMenuProps {
@@ -60,6 +61,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   onResetSize,
   onOpenSettings,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
 
   // 点击外部收起与按键监听
@@ -124,7 +126,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         >
           <div className="flex items-center gap-2">
             <Scissors size={13.5} className="text-zinc-500 dark:text-zinc-400" />
-            <span>复制选中文本</span>
+            <span>{t('bubble.copySelected')}</span>
           </div>
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-white/10 text-zinc-500 dark:text-zinc-400 border border-zinc-200/60 dark:border-white/5">
             Ctrl+C
@@ -141,7 +143,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           >
             <div className="flex items-center gap-2">
               <Copy size={13.5} className="text-zinc-500 dark:text-zinc-400" />
-              <span>复制当前回答</span>
+              <span>{t('card.copyMessage')}</span>
             </div>
           </button>
 
@@ -152,7 +154,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           >
             <div className="flex items-center gap-2">
               <FileText size={13.5} className="text-zinc-500 dark:text-zinc-400" />
-              <span>导出对话 (Markdown)</span>
+              <span>{t('sessions.exportSessions')} (Markdown)</span>
             </div>
           </button>
         </>
@@ -170,7 +172,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       >
         <div className="flex items-center gap-2">
           <RotateCcw size={13.5} className="text-zinc-500 dark:text-zinc-400" />
-          <span>重新生成当前回答</span>
+          <span>{t('card.regenerate')}</span>
         </div>
         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-white/10 text-zinc-500 dark:text-zinc-400 border border-zinc-200/60 dark:border-white/5">
           Ctrl+R
@@ -184,7 +186,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       >
         <div className="flex items-center gap-2">
           <Sparkles size={13.5} className="text-blue-500" />
-          <span>开启新对话</span>
+          <span>{t('card.newChat')}</span>
         </div>
       </button>
 
@@ -202,7 +204,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           ) : (
             <Maximize2 size={13.5} className="text-emerald-500" />
           )}
-          <span>{isMaximized ? '还原窗口' : '全屏最大化'}</span>
+          <span>{isMaximized ? (resolvedLanguage === 'zh' ? '还原窗口' : 'Restore Window') : (resolvedLanguage === 'zh' ? '全屏最大化' : 'Maximize Window')}</span>
         </div>
       </button>
 
@@ -213,7 +215,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       >
         <div className="flex items-center gap-2">
           <Pin size={13.5} className={cn('text-blue-500', isPinned && 'fill-current')} />
-          <span>{isPinned ? '取消固定悬浮窗' : '固定悬浮窗 (Pin)'}</span>
+          <span>{isPinned ? t('common.unpin') : t('common.pin')}</span>
         </div>
       </button>
 
@@ -225,7 +227,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         >
           <div className="flex items-center gap-2">
             <ResetIcon size={13.5} className="text-zinc-500 dark:text-zinc-400" />
-            <span>恢复默认尺寸 (600×900)</span>
+            <span>{resolvedLanguage === 'zh' ? '恢复默认尺寸 (600×900)' : 'Reset Default Size (600×900)'}</span>
           </div>
         </button>
       )}
@@ -235,7 +237,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       {/* 4. 外观主题快速切换 (纯图标精致胶囊) */}
       {onThemeChange && (
         <div className="flex items-center justify-between px-2.5 py-1 text-[12px] font-medium text-zinc-600 dark:text-zinc-400">
-          <span>外观主题</span>
+          <span>{t('settings.general.theme')}</span>
           <div className="flex items-center gap-0.5 bg-zinc-100/90 dark:bg-white/5 p-0.5 rounded-lg border border-zinc-200/60 dark:border-white/5">
             <button
               type="button"
@@ -252,7 +254,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                   ? 'bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
                   : 'text-zinc-400 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-white/5'
               )}
-              title="跟随系统"
+              title={t('settings.general.themeSystem')}
             >
               <Monitor size={13} />
             </button>
@@ -272,7 +274,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                   ? 'bg-white dark:bg-zinc-800 text-amber-500 shadow-xs font-semibold'
                   : 'text-zinc-400 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-white/5'
               )}
-              title="浅色模式"
+              title={t('settings.general.themeLight')}
             >
               <Sun size={13} />
             </button>
@@ -292,7 +294,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                   ? 'bg-white dark:bg-zinc-800 text-purple-500 dark:text-purple-400 shadow-xs font-semibold'
                   : 'text-zinc-400 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-100 hover:bg-zinc-200/50 dark:hover:bg-white/5'
               )}
-              title="深色模式"
+              title={t('settings.general.themeDark')}
             >
               <Moon size={13} />
             </button>
@@ -310,7 +312,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       >
         <div className="flex items-center gap-2">
           <Settings size={13.5} className="text-zinc-500 dark:text-zinc-400" />
-          <span>API 卡片设置...</span>
+          <span>{t('settings.sidebar.apiCard')}...</span>
         </div>
       </button>
     </div>

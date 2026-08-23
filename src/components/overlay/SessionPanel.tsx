@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus, Trash2, X, MessageSquare, Clock, Layers } from 'lucide-react';
 import { SessionMeta } from '@/types/session';
+import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 
 export interface SessionPanelProps {
@@ -14,15 +15,15 @@ export interface SessionPanelProps {
   onClearAll: () => void;
 }
 
-function formatRelativeTime(timestamp: number): string {
+function formatRelativeTime(timestamp: number, isZh: boolean): string {
   if (!timestamp) return '';
   const now = Math.floor(Date.now() / 1000);
   const diff = now - timestamp;
 
-  if (diff < 60) return '刚刚';
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
-  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)} 天前`;
+  if (diff < 60) return isZh ? '刚刚' : 'Just now';
+  if (diff < 3600) return isZh ? `${Math.floor(diff / 60)} 分钟前` : `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return isZh ? `${Math.floor(diff / 3600)} 小时前` : `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400 * 7) return isZh ? `${Math.floor(diff / 86400)} 天前` : `${Math.floor(diff / 86400)}d ago`;
 
   const date = new Date(timestamp * 1000);
   return `${date.getMonth() + 1}/${date.getDate()}`;
@@ -38,6 +39,9 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
   onDeleteSession,
   onClearAll,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
+
   if (!isOpen) return null;
 
   return (
@@ -47,7 +51,7 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
         <div className="flex items-center gap-2">
           <MessageSquare size={16} className="text-zinc-600 dark:text-zinc-400" />
           <span className="text-[13.5px] font-semibold text-zinc-900 dark:text-zinc-100">
-            对话历史
+            {t('card.historySessions')}
           </span>
           <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-500">
             {sessions.length}
@@ -60,10 +64,10 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
               type="button"
               onClick={onClearAll}
               className="flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-zinc-500 hover:bg-red-500/10 hover:text-red-500 transition-colors cursor-pointer"
-              title="清空所有历史对话"
+              title={t('sessions.clearAllSessions')}
             >
               <Trash2 size={12} />
-              <span>清空</span>
+              <span>{t('common.clear')}</span>
             </button>
           )}
 
@@ -71,7 +75,7 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
             type="button"
             onClick={onClose}
             className="flex size-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-            title="关闭 (Esc)"
+            title={t('common.close') + ' (Esc)'}
           >
             <X size={15} />
           </button>
@@ -86,7 +90,7 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50/80 dark:bg-zinc-800/50 py-2 text-[12.5px] font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:border-zinc-400 transition-colors cursor-pointer"
         >
           <Plus size={14} strokeWidth={2.4} className="text-blue-500" />
-          <span>开启全新对话</span>
+          <span>{t('card.newChat')}</span>
         </button>
       </div>
 
@@ -95,8 +99,8 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
         {sessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-zinc-400 dark:text-zinc-500 space-y-2">
             <MessageSquare size={32} strokeWidth={1.5} className="opacity-40" />
-            <p className="text-[12.5px]">暂无历史会话记录</p>
-            <p className="text-[11px] opacity-75">发送对话后将自动为您保存在这里</p>
+            <p className="text-[12.5px]">{t('sessions.noSessions')}</p>
+            <p className="text-[11px] opacity-75">{isZh ? '发送对话后将自动为您保存在这里' : 'Conversations will be automatically saved here'}</p>
           </div>
         ) : (
           sessions.map((s) => {
@@ -122,14 +126,14 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
                         : 'text-zinc-900 dark:text-zinc-100'
                     )}
                   >
-                    {s.title || '未命名对话'}
+                    {s.title || t('card.newChat')}
                   </span>
 
                   <button
                     type="button"
                     onClick={(e) => onDeleteSession(e, s.id)}
                     className="opacity-0 group-hover:opacity-100 flex size-5.5 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-red-500/10 hover:text-red-500 transition-all cursor-pointer"
-                    title="删除此会话"
+                    title={t('sessions.deleteSession')}
                   >
                     <Trash2 size={12} />
                   </button>
@@ -146,7 +150,7 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
                   {s.updatedAt && (
                     <div className="flex items-center gap-1 shrink-0 ml-auto">
                       <Clock size={10} className="shrink-0" />
-                      <span>{formatRelativeTime(s.updatedAt)}</span>
+                      <span>{formatRelativeTime(s.updatedAt, isZh)}</span>
                     </div>
                   )}
                 </div>

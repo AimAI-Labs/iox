@@ -1,5 +1,6 @@
 import React from 'react';
 import { Copy, Check, RotateCcw, Brain } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ export const ResponseToolbar: React.FC<ResponseToolbarProps> = ({
   onRegenerate,
   className,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
   if (!text) return null;
 
   // 字符数计算 (剔除思维链标签)
@@ -51,7 +53,7 @@ export const ResponseToolbar: React.FC<ResponseToolbarProps> = ({
     >
       {/* 左侧元信息 — mono tabular-nums */}
       <div className="flex items-center gap-2 font-mono text-[11.5px] text-ink-3 tabular-nums">
-        <span>{charCount} 字</span>
+        <span>{charCount} {resolvedLanguage === 'zh' ? '字' : 'chars'}</span>
         {typeof durationSeconds === 'number' && durationSeconds > 0 && (
           <span>{durationSeconds.toFixed(1)}s</span>
         )}
@@ -67,7 +69,7 @@ export const ResponseToolbar: React.FC<ResponseToolbarProps> = ({
               iconBtn,
               isThinkingOpen ? 'bg-hover text-ink' : ''
             )}
-            title={isThinkingOpen ? '收起思考过程' : '展开思考过程'}
+            title={isThinkingOpen ? t('card.collapseThinking') : t('card.expandThinking')}
           >
             <Brain size={14} strokeWidth={1.8} />
           </button>
@@ -78,7 +80,7 @@ export const ResponseToolbar: React.FC<ResponseToolbarProps> = ({
             type="button"
             onClick={onRegenerate}
             className={iconBtn}
-            title="重新生成"
+            title={t('card.regenerate')}
           >
             <RotateCcw size={14} strokeWidth={1.8} />
           </button>
@@ -88,7 +90,7 @@ export const ResponseToolbar: React.FC<ResponseToolbarProps> = ({
           type="button"
           onClick={onCopy}
           className={cn(iconBtn, isCopied ? 'text-emerald-600' : '')}
-          title="复制回答"
+          title={t('card.copyMessage')}
         >
           {isCopied ? (
             <Check size={14} strokeWidth={2} />

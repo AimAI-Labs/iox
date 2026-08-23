@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Plus, X, Loader2, PanelLeftClose, PanelRightClose, Sparkles, Trash2 } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 
 export interface TabItem {
@@ -38,6 +39,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   onNewTab,
   className,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -136,7 +138,7 @@ export const TabBar: React.FC<TabBarProps> = ({
       >
         {tabs.map((tab, index) => {
           const isActive = tab.id === activeTabId;
-          const displayTitle = tab.title || '新对话';
+          const displayTitle = tab.title || t('card.newChat');
 
           return (
             <div
@@ -150,7 +152,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                   ? 'bg-white dark:bg-[#27272a] text-zinc-900 dark:text-zinc-100 shadow-xs border border-zinc-200/80 dark:border-zinc-700/80 font-medium'
                   : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/60 border border-transparent'
               )}
-              title={tab.title || '会话标签 (右键查看更多操作)'}
+              title={tab.title || t('card.tabNew')}
             >
               {/* 生成状态指示 */}
               {tab.isLoading ? (
@@ -181,7 +183,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                   'hover:bg-zinc-200 hover:text-red-500 dark:hover:bg-zinc-700 dark:hover:text-red-400',
                   isActive ? 'opacity-80 hover:opacity-100' : 'opacity-0 group-hover:opacity-80'
                 )}
-                title="关闭会话"
+                title={t('common.close')}
               >
                 <X size={10} strokeWidth={2.2} />
               </button>
@@ -195,7 +197,7 @@ export const TabBar: React.FC<TabBarProps> = ({
         type="button"
         onClick={onNewTab}
         className="flex size-6 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-900 hover:bg-zinc-200/60 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer ml-0.5"
-        title="新建标签页 (+)"
+        title={t('card.tabNew')}
       >
         <Plus size={13} strokeWidth={2.4} />
       </button>
@@ -223,7 +225,7 @@ export const TabBar: React.FC<TabBarProps> = ({
             className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11.5px] font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors cursor-pointer text-left"
           >
             <Trash2 size={12} className="text-zinc-400 shrink-0" />
-            <span>关闭当前标签</span>
+            <span>{t('common.close')}</span>
           </button>
 
           {/* 2. 关闭其他 */}
@@ -242,7 +244,7 @@ export const TabBar: React.FC<TabBarProps> = ({
             )}
           >
             <Sparkles size={12} className="text-zinc-400 shrink-0" />
-            <span>关闭其他标签</span>
+            <span>{t('card.tabCloseOthers')}</span>
           </button>
 
           <div className="my-0.5 h-px bg-zinc-200/60 dark:bg-white/5" />
@@ -263,7 +265,7 @@ export const TabBar: React.FC<TabBarProps> = ({
             )}
           >
             <PanelLeftClose size={12} className="text-zinc-400 shrink-0" />
-            <span>关闭左侧标签</span>
+            <span>{resolvedLanguage === 'zh' ? '关闭左侧标签' : 'Close to Left'}</span>
           </button>
 
           {/* 4. 关闭右侧 */}
@@ -282,7 +284,7 @@ export const TabBar: React.FC<TabBarProps> = ({
             )}
           >
             <PanelRightClose size={12} className="text-zinc-400 shrink-0" />
-            <span>关闭右侧标签</span>
+            <span>{t('card.tabCloseRight')}</span>
           </button>
         </div>
       )}

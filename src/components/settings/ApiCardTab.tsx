@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { ApiCardConfig, ActionConfig, GeneralConfig } from "@/types/config";
 import { switchThemeWithTransition } from "@/hooks/useTheme";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -47,6 +48,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
   onUpdateApiCard,
   onUpdateGeneral,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
+
   const [currentW, currentH] = apiCard.cardSize || [600, 900];
 
   const [widthInput, setWidthInput] = useState(String(Math.round(currentW)));
@@ -93,10 +97,12 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
       <div className="pb-1 border-b border-border/30">
         <h2 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-2">
           <Layers size={16} className="text-primary dark:text-blue-400" />
-          <span>API 流式卡片设置</span>
+          <span>{t('settings.apiCard.title')}</span>
         </h2>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          精细化管理流式结果卡片的窗口视窗、思考过程、排版代码与多轮追问交互
+          {isZh
+            ? "精细化管理流式结果卡片的窗口视窗、思考过程、排版代码与多轮追问交互"
+            : "Fine-tune result card viewport, reasoning blocks, typography, and follow-up interaction"}
         </p>
       </div>
 
@@ -105,7 +111,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center gap-2 pb-1 border-b border-border/40">
             <Maximize2 size={14} className="text-primary dark:text-blue-400" />
-            <span className="text-xs font-semibold text-foreground">窗口视窗与外观主题</span>
+            <span className="text-xs font-semibold text-foreground">
+              {isZh ? "窗口视窗与外观主题" : "Window Viewport & Theme"}
+            </span>
           </div>
 
           {/* 外观主题切换 */}
@@ -116,11 +124,13 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                   <div className="flex items-center gap-1.5">
                     <Palette size={12} className="text-muted-foreground" />
                     <Label className="text-xs text-foreground font-medium">
-                      卡片外观色彩主题
+                      {isZh ? "卡片外观色彩主题" : "Card Theme"}
                     </Label>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    调整流式卡片与悬浮界面的色彩模式（深色 / 浅色 / 跟随系统）
+                    {isZh
+                      ? "调整流式卡片与悬浮界面的色彩模式（深色 / 浅色 / 跟随系统）"
+                      : "Adjust appearance theme mode (Light, Dark, or System)"}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 bg-black/5 dark:bg-white/5 p-1 rounded-xl border border-black/5 dark:border-white/5">
@@ -138,10 +148,10 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                         ? "bg-background text-foreground shadow-xs border border-black/5 dark:border-white/10 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
                     )}
-                    title="跟随系统"
+                    title={t('settings.general.themeSystem')}
                   >
                     <Monitor size={13} className={general.theme === 'system' ? 'text-primary dark:text-blue-400' : ''} />
-                    <span>系统</span>
+                    <span>{isZh ? '系统' : 'System'}</span>
                   </button>
 
                   <button
@@ -158,10 +168,10 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                         ? "bg-background text-foreground shadow-xs border border-black/5 dark:border-white/10 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
                     )}
-                    title="浅色模式"
+                    title={t('settings.general.themeLight')}
                   >
                     <Sun size={13} className={general.theme === 'light' ? 'text-amber-500' : ''} />
-                    <span>浅色</span>
+                    <span>{isZh ? '浅色' : 'Light'}</span>
                   </button>
 
                   <button
@@ -178,10 +188,10 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                         ? "bg-background text-foreground shadow-xs border border-black/5 dark:border-white/10 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
                     )}
-                    title="深色模式"
+                    title={t('settings.general.themeDark')}
                   >
                     <Moon size={13} className={general.theme === 'dark' ? 'text-purple-500 dark:text-purple-400' : ''} />
-                    <span>深色</span>
+                    <span>{isZh ? '深色' : 'Dark'}</span>
                   </button>
                 </div>
               </div>
@@ -194,10 +204,12 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                默认卡片尺寸与记忆
+                {t('settings.apiCard.cardSize')}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                展开流式卡片时的默认宽高，在桌面拖拽右下角手柄缩放后将自动记忆
+                {isZh
+                  ? "展开流式卡片时的默认宽高，在桌面拖拽右下角手柄缩放后将自动记忆"
+                  : "Default width & height when opening result card; dragging corner handle memorizes new dimensions"}
               </p>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -244,10 +256,10 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                 size="sm"
                 onClick={handleResetSize}
                 className="h-7 text-xs gap-1 border-border/70 hover:border-primary/50 px-2 cursor-pointer"
-                title="恢复至推荐默认尺寸 600 × 900"
+                title={isZh ? "恢复至推荐默认尺寸 600 × 900" : "Reset to default size 600 × 900"}
               >
                 <RefreshCcw size={11} />
-                <span>重置</span>
+                <span>{t('common.reset')}</span>
               </Button>
             </div>
           </div>
@@ -260,11 +272,11 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
               <div className="flex items-center gap-1.5">
                 <Pin size={12} className="text-muted-foreground" />
                 <Label className="text-xs text-foreground font-medium">
-                  展开时默认自动 Pin 固定
+                  {t('settings.apiCard.autoPin')}
                 </Label>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                开启后，每次唤起 API 卡片均自动钉在桌面上，点击外部区域不会自动隐藏
+                {t('settings.apiCard.autoPinDesc')}
               </p>
             </div>
             <Switch
@@ -281,11 +293,11 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
               <div className="flex items-center gap-1.5">
                 <Keyboard size={12} className="text-muted-foreground" />
                 <Label className="text-xs text-foreground font-medium">
-                  展开时自动获取键盘焦点
+                  {t('settings.apiCard.autoFocus')}
                 </Label>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                开启后卡片展开时将主动聚焦追问输入框（注：会从宿主应用夺取焦点）
+                {t('settings.apiCard.autoFocusDesc')}
               </p>
             </div>
             <Switch
@@ -301,17 +313,19 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center gap-2 pb-1 border-b border-border/40">
             <BrainCircuit size={14} className="text-primary dark:text-blue-400" />
-            <span className="text-xs font-semibold text-foreground">思维链与推理生成</span>
+            <span className="text-xs font-semibold text-foreground">
+              {isZh ? "思维链与推理生成" : "Chain of Thought & Reasoning"}
+            </span>
           </div>
 
           {/* 思维链默认展开 */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                思维链生成中默认展开
+                {t('settings.apiCard.thinkingDefaultOpen')}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                检测到大模型包含 &lt;think&gt; 深度思考标签时，生成期间默认展开展示实时思考
+                {t('settings.apiCard.thinkingDefaultOpenDesc')}
               </p>
             </div>
             <Switch
@@ -326,10 +340,10 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                思考闭合后自动折叠
+                {t('settings.apiCard.autoCollapseDone')}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                模型结束推理并输出正文后，平滑收起思维链面板，聚焦展示核心回答
+                {t('settings.apiCard.autoCollapseDoneDesc')}
               </p>
             </div>
             <Switch
@@ -348,11 +362,11 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
               <div className="flex items-center gap-1.5">
                 <Clock size={12} className="text-muted-foreground" />
                 <Label className="text-xs text-foreground font-medium">
-                  显示生成与推理耗时统计
+                  {t('settings.apiCard.showDuration')}
                 </Label>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                在对话状态栏与工具区显示回答所消耗的时间（如 for 3.2s）
+                {t('settings.apiCard.showDurationDesc')}
               </p>
             </div>
             <Switch
@@ -368,7 +382,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center gap-2 pb-1 border-b border-border/40">
             <Type size={14} className="text-primary dark:text-blue-400" />
-            <span className="text-xs font-semibold text-foreground">正文排版与代码块</span>
+            <span className="text-xs font-semibold text-foreground">
+              {isZh ? "正文排版与代码块" : "Typography & Code Blocks"}
+            </span>
           </div>
 
           {/* 正文字号调节 */}
@@ -376,10 +392,12 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label className="text-xs text-foreground font-medium">
-                  正文显示字号大小
+                  {t('settings.apiCard.fontSize')}
                 </Label>
                 <p className="text-[11px] text-muted-foreground">
-                  调节卡片正文、段落及 Markdown 内容的全局显示比例
+                  {isZh
+                    ? "调节卡片正文、段落及 Markdown 内容的全局显示比例"
+                    : "Adjust font size for result card text and Markdown content"}
                 </p>
               </div>
               <span className="text-xs font-mono font-semibold text-primary dark:text-blue-400">
@@ -404,8 +422,10 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
               className="p-2.5 rounded-lg border border-border/50 bg-black/5 dark:bg-white/5 text-foreground/90 transition-all select-none"
               style={{ fontSize: `${apiCard.fontSize ?? 13}px` }}
             >
-              <span className="font-semibold text-primary dark:text-blue-400">示例预览：</span>
-              AI 流式卡片排版渲染效果，字号调节即时生效。
+              <span className="font-semibold text-primary dark:text-blue-400">
+                {isZh ? "示例预览：" : "Preview: "}
+              </span>
+              {isZh ? "AI 流式卡片排版渲染效果，字号调节即时生效。" : "Live preview for AI result card typography rendering."}
             </div>
           </div>
 
@@ -417,11 +437,11 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
               <div className="flex items-center gap-1.5">
                 <WrapText size={12} className="text-muted-foreground" />
                 <Label className="text-xs text-foreground font-medium">
-                  代码块长行自动折行
+                  {t('settings.apiCard.codeBlockWrap')}
                 </Label>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                开启时长代码行将自适应折行显示；关闭时长行保持横向平滑滚动
+                {t('settings.apiCard.codeBlockWrapDesc')}
               </p>
             </div>
             <Switch
@@ -438,11 +458,11 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
               <div className="flex items-center gap-1.5">
                 <ListOrdered size={12} className="text-muted-foreground" />
                 <Label className="text-xs text-foreground font-medium">
-                  代码块显示行号
+                  {t('settings.apiCard.codeBlockLineNumbers')}
                 </Label>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                在代码高亮展示区域左侧渲染粘性代码行序号
+                {t('settings.apiCard.codeBlockLineNumbersDesc')}
               </p>
             </div>
             <Switch
@@ -458,7 +478,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center gap-2 pb-1 border-b border-border/40">
             <MessageSquareQuote size={14} className="text-primary dark:text-blue-400" />
-            <span className="text-xs font-semibold text-foreground">多轮会话与追问交互</span>
+            <span className="text-xs font-semibold text-foreground">
+              {isZh ? "多轮会话与追问交互" : "Multi-Turn & Follow-up Interaction"}
+            </span>
           </div>
 
           {/* 上下文轮数调节 */}
@@ -466,18 +488,18 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label className="text-xs text-foreground font-medium">
-                  追问携带历史上下文深度
+                  {t('settings.apiCard.contextTurns')}
                 </Label>
                 <p className="text-[11px] text-muted-foreground">
-                  在流式卡片底部连续追问时，打包发送给大模型 API 的最近对话轮次
+                  {t('settings.apiCard.contextTurnsDesc')}
                 </p>
               </div>
               <span className="text-xs font-mono font-semibold text-primary dark:text-blue-400">
-                最近 {apiCard.contextTurns ?? 5} 轮
+                {isZh ? `最近 ${apiCard.contextTurns ?? 5} 轮` : `Last ${apiCard.contextTurns ?? 5} turns`}
               </span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-muted-foreground font-mono">1 轮</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{isZh ? "1 轮" : "1 turn"}</span>
               <Slider
                 min={1}
                 max={10}
@@ -486,7 +508,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                 onChange={(val) => onUpdateApiCard({ contextTurns: val })}
                 className="flex-1"
               />
-              <span className="text-[11px] text-muted-foreground font-mono">10 轮</span>
+              <span className="text-[11px] text-muted-foreground font-mono">{isZh ? "10 轮" : "10 turns"}</span>
             </div>
           </div>
 
@@ -498,11 +520,11 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
               <div className="flex items-center gap-1.5">
                 <SendHorizontal size={12} className="text-muted-foreground" />
                 <Label className="text-xs text-foreground font-medium">
-                  追问输入框发送快捷键
+                  {t('settings.apiCard.sendShortcut')}
                 </Label>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                选择回车直接发送还是使用组合键发送
+                {t('settings.apiCard.sendShortcutDesc')}
               </p>
             </div>
             <div className="w-56">
@@ -514,11 +536,11 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                 options={[
                   {
                     value: "Enter",
-                    label: "Enter 发送 / Shift+Enter 换行",
+                    label: isZh ? "Enter 发送 / Shift+Enter 换行" : "Enter to Send / Shift+Enter for Newline",
                   },
                   {
                     value: "Ctrl+Enter",
-                    label: "Ctrl+Enter 发送 / Enter 换行",
+                    label: isZh ? "Ctrl+Enter 发送 / Enter 换行" : "Ctrl+Enter to Send / Enter for Newline",
                   },
                 ]}
               />

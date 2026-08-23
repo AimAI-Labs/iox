@@ -3,6 +3,7 @@ import { useWindowDrag } from '@/hooks/useWindowDrag';
 import { DynamicIcon } from '@/components/Icons';
 import { MacTrafficLights } from '@/components/MacTrafficLights';
 import { TabBar, TabItem } from '@/components/overlay/TabBar';
+import { useTranslation } from '@/hooks/useTranslation';
 import { Pin, RotateCcw, Plus, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -62,6 +63,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   onMinimize,
   onResetSize,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
   const { handleMouseDown } = useWindowDrag();
 
   return (
@@ -76,9 +78,9 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
           onMinimize={onMinimize}
           onMaximize={onToggleMaximize}
           isMaximized={isMaximized}
-          closeTitle="关闭卡片 (Esc)"
-          minimizeTitle="收起并保留会话"
-          maximizeTitle={isMaximized ? '还原窗口尺寸' : '全屏最大化'}
+          closeTitle={t('card.closeCard')}
+          minimizeTitle={resolvedLanguage === 'zh' ? '收起并保留会话' : 'Minimize and Keep Session'}
+          maximizeTitle={isMaximized ? (resolvedLanguage === 'zh' ? '还原窗口尺寸' : 'Restore Window Size') : (resolvedLanguage === 'zh' ? '全屏最大化' : 'Maximize Window')}
         />
       </div>
 
@@ -120,7 +122,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
               onClick={onNewChat}
               onMouseDown={(e) => e.stopPropagation()}
               className="flex size-5 items-center justify-center rounded text-zinc-400 hover:bg-zinc-200/70 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors cursor-pointer ml-0.5"
-              title="开启新对话 (+)"
+              title={t('card.newChat')}
             >
               <Plus size={13} strokeWidth={2.4} />
             </button>
@@ -139,7 +141,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
             onClick={onToggleSessions}
             onMouseDown={(e) => e.stopPropagation()}
             className="flex size-6 items-center justify-center rounded-md text-zinc-500 transition-colors duration-150 hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer relative"
-            title="查看历史对话记录"
+            title={t('card.historySessions')}
           >
             <MessageSquare size={13} strokeWidth={1.8} />
             {sessionCount !== undefined && sessionCount > 0 && (
@@ -154,7 +156,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
             onClick={onResetSize}
             onMouseDown={(e) => e.stopPropagation()}
             className="flex size-6 items-center justify-center rounded-md text-zinc-500 transition-colors duration-150 hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer"
-            title="恢复默认卡片尺寸 (600 × 900)"
+            title={resolvedLanguage === 'zh' ? '恢复默认卡片尺寸 (600 × 900)' : 'Reset Default Size (600 × 900)'}
           >
             <RotateCcw size={12} />
           </button>
@@ -169,7 +171,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
             'hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer',
             isPinned && 'bg-blue-500/15 text-blue-600 dark:bg-blue-500/25 dark:text-blue-400 font-semibold'
           )}
-          title={isPinned ? '取消固定悬浮窗' : '固定悬浮窗 (Pin)'}
+          title={isPinned ? t('common.unpin') : t('common.pin')}
         >
           <Pin
             size={13}

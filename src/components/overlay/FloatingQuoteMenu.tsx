@@ -1,6 +1,7 @@
 import React from 'react';
 import { Quote } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export interface FloatingQuoteMenuProps {
   x: number;
@@ -17,6 +18,7 @@ export const FloatingQuoteMenu: React.FC<FloatingQuoteMenuProps> = ({
   onQuote,
   className,
 }) => {
+  const { t } = useTranslation();
   if (!visible) return null;
 
   return (
@@ -39,11 +41,11 @@ export const FloatingQuoteMenu: React.FC<FloatingQuoteMenuProps> = ({
         'transition-all duration-120 hover:scale-105 active:scale-95 animate-in fade-in zoom-in-95',
         className
       )}
-      title="引用选中文本到提问框"
+      title={t('card.quoteSelection')}
     >
       <Quote size={12} className="shrink-0 rotate-180 text-blue-400 dark:text-blue-600" />
       <span className="shrink-0 text-[12px] font-medium tracking-tight whitespace-nowrap">
-        引用
+        {t('card.quoteSelection')}
       </span>
     </div>
   );

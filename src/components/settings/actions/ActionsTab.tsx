@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { ChevronsUpDown } from "lucide-react";
 import { ActionConfig, ProviderConfig, GeneralConfig } from "@/types/config";
 import { Button } from "@/components/ui";
+import { useTranslation } from "@/hooks/useTranslation";
 import { BubbleLivePreview } from "./BubbleLivePreview";
 import { ActionPresetMenu } from "./ActionPresetMenu";
 import { ActionCardItem } from "./ActionCardItem";
@@ -27,6 +28,9 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
   onRemoveAction,
   onReorderActions,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
+
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(
     () => new Set(actions.map((a) => a.id))
   );
@@ -144,10 +148,12 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
       <div className="flex items-center justify-between pb-1 border-b border-border/30 shrink-0">
         <div>
           <h2 className="text-sm font-semibold tracking-tight text-foreground">
-            划词动作管理 ({actions.length})
+            {t('settings.actions.title')} ({actions.length})
           </h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            配置悬浮气泡中的 AI 动作、Web 官网直达与快捷复制，支持按住手柄自由排序
+            {isZh
+              ? "配置悬浮气泡中的 AI 动作、Web 官网直达与快捷复制，支持按住手柄自由排序"
+              : "Configure AI card actions, Web AI hub links, and copy tools in bubble bar"}
           </p>
         </div>
 
@@ -158,10 +164,10 @@ export const ActionsTab: React.FC<ActionsTabProps> = ({
               size="sm"
               variant="outline"
               className="gap-1 text-xs px-2 h-8 border-border/80 hover:border-primary/50 cursor-pointer"
-              title={allCollapsed ? "展开所有动作卡片" : "折叠所有动作卡片"}
+              title={allCollapsed ? (isZh ? "展开所有动作卡片" : "Expand All") : (isZh ? "折叠所有动作卡片" : "Collapse All")}
             >
               <ChevronsUpDown size={12} />
-              <span>{allCollapsed ? "全部展开" : "全部折叠"}</span>
+              <span>{allCollapsed ? (isZh ? "全部展开" : "Expand All") : (isZh ? "全部折叠" : "Collapse All")}</span>
             </Button>
           )}
 

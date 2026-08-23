@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Globe, LayoutGrid, Layers, RefreshCcw, ArrowUpRight, Zap } from "lucide-react";
 import { GeneralConfig, ActionConfig, WebWindowMode } from "@/types/config";
+import { useTranslation } from "@/hooks/useTranslation";
 import {
   Card,
   CardContent,
@@ -26,6 +27,9 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
   onUpdateGeneral,
   onNavigateToActions,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
+
   const [currentW, currentH] = general.webWindowSize || [860, 640];
   const webActions = actions.filter((a) => a.actionType === "web");
   const enabledWebActionsCount = webActions.filter((a) => a.enabled).length;
@@ -74,10 +78,12 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
       <div className="pb-1 border-b border-border/30">
         <h2 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-2">
           <Globe size={16} className="text-blue-500" />
-          <span>Web 官网浮窗设置</span>
+          <span>{t('settings.web.title')}</span>
         </h2>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          管理 AI 官网内置浮窗的呈现模式、剪贴板交互、窗口记忆尺寸及 Web 动作直达
+          {isZh
+            ? "管理 AI 官网内置浮窗的呈现模式、剪贴板交互、窗口记忆尺寸及 Web 动作直达"
+            : "Manage Web Hub window modes, clipboard integration, remembered window sizes, and quick actions"}
         </p>
       </div>
 
@@ -87,10 +93,10 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                Web 官网浮窗模式
+                {t('settings.web.windowMode')}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                选择点击 Web 官网动作时的窗口展现与实例复用机制
+                {isZh ? "选择点击 Web 官网动作时的窗口展现与实例复用机制" : "Select window presentation & instance reuse mechanism for Web actions"}
               </p>
             </div>
             <div className="w-56">
@@ -104,15 +110,15 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
                 options={[
                   {
                     value: "multi_window",
-                    label: "独立多窗口 (推荐)",
+                    label: isZh ? "独立多窗口 (推荐)" : "Multi-Window (Recommended)",
                     icon: LayoutGrid,
-                    description: "同动作单例复用，支持多 AI 官网并排对比",
+                    description: isZh ? "同动作单例复用，支持多 AI 官网并排对比" : "Reusable singleton per action, side-by-side comparison",
                   },
                   {
                     value: "tabbed",
-                    label: "统一单窗口 (Hub)",
+                    label: isZh ? "统一单窗口 (Hub)" : "Single Hub Window",
                     icon: Layers,
-                    description: "所有 Web 动作收拢在单一浮窗内集中切换",
+                    description: isZh ? "所有 Web 动作收拢在单一浮窗内集中切换" : "All Web actions consolidated into a unified tabbed window",
                   },
                 ]}
               />
@@ -125,10 +131,12 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                触发 Web 动作时自动复制文本
+                {isZh ? "触发 Web 动作时自动复制文本" : "Auto-Copy Text on Web Action"}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                调用 Web 官网动作时，自动将划选文本写入剪贴板，方便网页加载后直接粘贴
+                {isZh
+                  ? "调用 Web 官网动作时，自动将划选文本写入剪贴板，方便网页加载后直接粘贴"
+                  : "Automatically copy selected text to clipboard when triggering Web actions for easy pasting"}
               </p>
             </div>
             <Switch
@@ -145,10 +153,12 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                浮窗记忆尺寸与重置
+                {isZh ? "浮窗记忆尺寸与重置" : "Remembered Size & Reset"}
               </Label>
               <p className="text-[11px] text-muted-foreground">
-                拖拽浮窗边框时系统会自动记住最新尺寸，亦可在此直接输入指定分辨率
+                {isZh
+                  ? "拖拽浮窗边框时系统会自动记住最新尺寸，亦可在此直接输入指定分辨率"
+                  : "System automatically memorizes size when resized, or enter custom dimensions here"}
               </p>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -195,10 +205,10 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
                 size="sm"
                 onClick={handleResetSize}
                 className="h-7 text-xs gap-1 border-border/70 hover:border-primary/50 px-2 cursor-pointer"
-                title="恢复至推荐默认尺寸 860 × 640"
+                title={isZh ? "恢复至推荐默认尺寸 860 × 640" : "Reset to default size 860 × 640"}
               >
                 <RefreshCcw size={11} />
-                <span>重置</span>
+                <span>{t('common.reset')}</span>
               </Button>
             </div>
           </div>
@@ -212,14 +222,16 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">
                 <Label className="text-xs text-foreground font-medium">
-                  Web 官网动作概览
+                  {isZh ? "Web 官网动作概览" : "Web Actions Overview"}
                 </Label>
                 <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-500/10 text-blue-500 dark:text-blue-400 font-mono font-medium">
-                  {enabledWebActionsCount} / {webActions.length} 已启用
+                  {isZh ? `${enabledWebActionsCount} / ${webActions.length} 已启用` : `${enabledWebActionsCount} / ${webActions.length} Enabled`}
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                已配置的 Web 官网直达动作列表，支持自动 DOM 填入与免 API 登录会话复用
+                {isZh
+                  ? "已配置的 Web 官网直达动作列表，支持自动 DOM 填入与免 API 登录会话复用"
+                  : "List of configured Web AI actions with DOM injection & session reuse"}
               </p>
             </div>
 
@@ -231,7 +243,7 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
                 className="h-7 text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 gap-1 px-2 cursor-pointer"
               >
                 <Zap size={12} />
-                <span>管理动作</span>
+                <span>{isZh ? "管理动作" : "Manage Actions"}</span>
                 <ArrowUpRight size={12} />
               </Button>
             )}
@@ -255,7 +267,7 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
                           {action.name}
                         </div>
                         <div className="text-[10px] text-muted-foreground truncate">
-                          {isDomInject ? "智能 DOM 输入与自动提交" : "URL 传参模式"}
+                          {isDomInject ? (isZh ? "智能 DOM 输入与自动提交" : "DOM Inject & Auto Submit") : (isZh ? "URL 传参模式" : "URL Query Mode")}
                         </div>
                       </div>
                     </div>
@@ -268,7 +280,7 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
                             : "bg-muted text-muted-foreground"
                         }`}
                       >
-                        {action.enabled ? "启用" : "禁用"}
+                        {action.enabled ? t('common.enabled') : t('common.disabled')}
                       </span>
                     </div>
                   </div>
@@ -276,7 +288,7 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
               })
             ) : (
               <div className="col-span-2 text-center py-4 text-xs text-muted-foreground">
-                暂未配置 Web 官网动作
+                {isZh ? "暂未配置 Web 官网动作" : "No Web actions configured"}
               </div>
             )}
           </div>

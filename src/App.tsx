@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useConfig } from '@/hooks/useConfig';
 import { useTheme, broadcastThemeChange } from '@/hooks/useTheme';
 import { useOverlayState } from '@/hooks/useOverlayState';
+import { I18nProvider } from '@/hooks/useTranslation';
 import { BubbleBar, ResultCard, FloatingBall } from '@/components/overlay';
 import { Toaster } from 'sonner';
 import './App.css';
@@ -121,9 +122,11 @@ export function App() {
   // 0. Web 官网浮窗标题栏视图
   if (isWebTitleBar) {
     return (
-      <Suspense fallback={null}>
-        <WebTitleBar />
-      </Suspense>
+      <I18nProvider languageSetting={config.general.language}>
+        <Suspense fallback={null}>
+          <WebTitleBar />
+        </Suspense>
+      </I18nProvider>
     );
   }
 
@@ -132,7 +135,11 @@ export function App() {
     if (config.general.enableFloatingBall === false) {
       return null;
     }
-    return <FloatingBall config={config} />;
+    return (
+      <I18nProvider languageSetting={config.general.language}>
+        <FloatingBall config={config} />
+      </I18nProvider>
+    );
   }
 
   // 2. Overlay 悬浮窗视图 (保持同步直出渲染，零时延)
@@ -142,66 +149,68 @@ export function App() {
     }
 
     return (
-      <div className="overlay-root">
-        {overlayState.mode === 'bubble' ? (
-          <BubbleBar
-            key={overlayState.animKey}
-            actions={config.actions}
-            selectedText={overlayState.selectedText}
-            isClosing={overlayState.isClosing}
-            iconOnly={config.general.iconOnlyBubble}
-            onActionClick={overlayState.handleTriggerAction}
-            onActionDoubleClick={overlayState.handleTriggerQuoteAction}
-            onActionContextMenu={overlayState.handleTriggerActionWithoutText}
-            onOpenSettings={() => handleOpenSettings()}
-          />
-        ) : overlayState.activeAction ? (
-          <ResultCard
-            action={overlayState.activeAction}
-            providers={config.providers}
-            selectedModel={overlayState.selectedModel}
-            streamText={overlayState.streamText}
-            selectedText={overlayState.selectedText}
-            initialInput={overlayState.initialInput}
-            isLoading={overlayState.isLoading}
-            isPinned={overlayState.isPinned}
-            isClosing={overlayState.isClosing}
-            error={overlayState.error}
-            apiCard={config.apiCard}
-            theme={config.general.theme}
-            thinkingMode={overlayState.thinkingMode}
-            onThemeChange={(newTheme) => {
-              updateConfig({
-                ...config,
-                general: {
-                  ...config.general,
-                  theme: newTheme,
-                },
-              });
-              broadcastThemeChange(newTheme, config.general.overlayOpacity);
-            }}
-            onProviderChange={overlayState.handleProviderChange}
-            onModelChange={overlayState.handleModelChange}
-            onThinkingModeChange={overlayState.handleThinkingModeChange}
-            onSendFollowUp={overlayState.handleSendFollowUp}
-            onRegenerateCurrentTurn={overlayState.handleRegenerateCurrentTurn}
-            onNewChat={overlayState.handleNewChat}
-            onRestoreSession={overlayState.handleRestoreSession}
-            onExportMarkdown={overlayState.handleExportMarkdown}
-            onOpenSettings={() => handleOpenSettings('api_card')}
-            onCancel={overlayState.handleCancel}
-            onPinToggle={overlayState.handlePinToggle}
-            onClose={overlayState.handleClose}
-            onResetSize={overlayState.handleResetCardSize}
-          />
-        ) : null}
-      </div>
+      <I18nProvider languageSetting={config.general.language}>
+        <div className="overlay-root">
+          {overlayState.mode === 'bubble' ? (
+            <BubbleBar
+              key={overlayState.animKey}
+              actions={config.actions}
+              selectedText={overlayState.selectedText}
+              isClosing={overlayState.isClosing}
+              iconOnly={config.general.iconOnlyBubble}
+              onActionClick={overlayState.handleTriggerAction}
+              onActionDoubleClick={overlayState.handleTriggerQuoteAction}
+              onActionContextMenu={overlayState.handleTriggerActionWithoutText}
+              onOpenSettings={() => handleOpenSettings()}
+            />
+          ) : overlayState.activeAction ? (
+            <ResultCard
+              action={overlayState.activeAction}
+              providers={config.providers}
+              selectedModel={overlayState.selectedModel}
+              streamText={overlayState.streamText}
+              selectedText={overlayState.selectedText}
+              initialInput={overlayState.initialInput}
+              isLoading={overlayState.isLoading}
+              isPinned={overlayState.isPinned}
+              isClosing={overlayState.isClosing}
+              error={overlayState.error}
+              apiCard={config.apiCard}
+              theme={config.general.theme}
+              thinkingMode={overlayState.thinkingMode}
+              onThemeChange={(newTheme) => {
+                updateConfig({
+                  ...config,
+                  general: {
+                    ...config.general,
+                    theme: newTheme,
+                  },
+                });
+                broadcastThemeChange(newTheme, config.general.overlayOpacity);
+              }}
+              onProviderChange={overlayState.handleProviderChange}
+              onModelChange={overlayState.handleModelChange}
+              onThinkingModeChange={overlayState.handleThinkingModeChange}
+              onSendFollowUp={overlayState.handleSendFollowUp}
+              onRegenerateCurrentTurn={overlayState.handleRegenerateCurrentTurn}
+              onNewChat={overlayState.handleNewChat}
+              onRestoreSession={overlayState.handleRestoreSession}
+              onExportMarkdown={overlayState.handleExportMarkdown}
+              onOpenSettings={() => handleOpenSettings('api_card')}
+              onCancel={overlayState.handleCancel}
+              onPinToggle={overlayState.handlePinToggle}
+              onClose={overlayState.handleClose}
+              onResetSize={overlayState.handleResetCardSize}
+            />
+          ) : null}
+        </div>
+      </I18nProvider>
     );
   }
 
   // 2. Settings 设置面板视图 (主窗口异步载入)
   return (
-    <>
+    <I18nProvider languageSetting={config.general.language}>
       <Toaster
         position="top-center"
         richColors
@@ -222,7 +231,7 @@ export function App() {
       >
         <Settings config={config} onSave={updateConfig} />
       </Suspense>
-    </>
+    </I18nProvider>
   );
 }
 

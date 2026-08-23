@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, Copy, Check, ChevronDown } from 'lucide-react';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
+import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────────────────────────────────
@@ -19,6 +20,7 @@ export const UserBubble: React.FC<UserBubbleProps> = ({
   isInitialContext = false,
   className,
 }) => {
+  const { t } = useTranslation();
   const { copied, copy } = useCopyFeedback(2000);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -40,7 +42,7 @@ export const UserBubble: React.FC<UserBubbleProps> = ({
         {isInitialContext && (
           <div className="flex items-center gap-1.5 px-1 text-[11px] text-ink-3 select-none">
             <User size={10} className="shrink-0" />
-            <span>选中文本</span>
+            <span>{t('bubble.copySelected')}</span>
           </div>
         )}
 
@@ -60,7 +62,7 @@ export const UserBubble: React.FC<UserBubbleProps> = ({
               onClick={() => setIsExpanded((prev) => !prev)}
               className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors cursor-pointer select-none"
             >
-              <span>{isExpanded ? '收起' : '展开'}</span>
+              <span>{isExpanded ? t('card.collapseThinking') : t('card.expandThinking')}</span>
               <ChevronDown
                 size={10}
                 className={cn(
@@ -77,7 +79,7 @@ export const UserBubble: React.FC<UserBubbleProps> = ({
           type="button"
           onClick={() => copy(content)}
           className="flex size-5 items-center justify-center rounded-[5px] text-ink-3 opacity-0 transition-opacity duration-150 hover:bg-hover hover:text-ink cursor-pointer select-none group-hover/bubble:opacity-100"
-          title="复制内容"
+          title={t('common.copy')}
         >
           {copied ? (
             <Check size={11} className="text-emerald-600" />

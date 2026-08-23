@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { ProviderConfig } from "@/types/config";
 import { DynamicIcon } from "@/components/Icons";
+import { useTranslation } from "@/hooks/useTranslation";
 import {
   Card,
   CardHeader,
@@ -28,6 +29,8 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
   onUpdateProvider,
   onRemoveProvider,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
   const [showKeys, setShowKeys] = useState<{ [key: string]: boolean }>({});
   const [fetchingIds, setFetchingIds] = useState<{ [key: string]: boolean }>({});
   // 缓存各服务商拉取或已知的候选模型列表池 (id -> models[])
@@ -40,14 +43,14 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
   const handleFetchModels = async (p: ProviderConfig) => {
     const trimmedUrl = p.baseUrl.trim();
     if (!trimmedUrl) {
-      toast.error("请先填写 API Base URL", {
-        description: `服务商 [${p.name || p.id}] 未配置有效 Base URL`,
+      toast.error(isZh ? "请先填写 API Base URL" : "Please enter API Base URL first", {
+        description: isZh ? `服务商 [${p.name || p.id}] 未配置有效 Base URL` : `Provider [${p.name || p.id}] has no valid Base URL`,
       });
       return;
     }
 
     setFetchingIds((prev) => ({ ...prev, [p.id]: true }));
-    const toastId = toast.loading(`正在从 ${p.name || "服务商"} 获取可用模型...`);
+    const toastId = toast.loading(isZh ? `正在从 ${p.name || "服务商"} 获取可用模型...` : `Fetching available models from ${p.name || "provider"}...`);
 
     try {
       const models = await invoke<string[]>("fetch_provider_models", {
@@ -65,14 +68,14 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
           defaultModel: models[0],
         });
 
-        toast.success(`成功获取 ${models.length} 个可用模型`, {
+        toast.success(isZh ? `成功获取 ${models.length} 个可用模型` : `Successfully fetched ${models.length} models`, {
           id: toastId,
-          description: `已默认选择第 1 个模型: ${models[0]}`,
+          description: isZh ? `已默认选择第 1 个模型: ${models[0]}` : `Defaulted to 1st model: ${models[0]}`,
         });
       } else {
-        toast.error("服务商返回的模型列表为空", {
+        toast.error(isZh ? "服务商返回的模型列表为空" : "Model list returned is empty", {
           id: toastId,
-          description: "接口未返回任何可用模型，请检查服务商配置",
+          description: isZh ? "接口未返回任何可用模型，请检查服务商配置" : "No models found, check provider settings",
         });
       }
     } catch (err: unknown) {
@@ -81,9 +84,9 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
           ? err
           : err instanceof Error
           ? err.message
-          : "获取模型列表失败";
+          : (isZh ? "获取模型列表失败" : "Failed to fetch models");
 
-      toast.error("获取模型列表失败", {
+      toast.error(isZh ? "获取模型列表失败" : "Failed to fetch models", {
         id: toastId,
         description: errorMsg,
       });
@@ -111,10 +114,12 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
       <div className="flex items-center justify-between pb-1 border-b border-border/30">
         <div>
           <h2 className="text-sm font-semibold tracking-tight text-foreground">
-            模型服务商管理
+            {t('settings.providers.title')}
           </h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            配置支持 OpenAI Compatible 协议的大语言模型 API 接口，支持下拉复选与自动获取模型
+            {isZh
+              ? "配置支持 OpenAI Compatible 协议的大语言模型 API 接口，支持下拉复选与自动获取模型"
+              : "Configure OpenAI-compatible LLM endpoints with auto model discovery"}
           </p>
         </div>
         <Button
@@ -124,7 +129,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
           className="gap-1 text-xs border-border/80 hover:border-primary/50"
         >
           <Plus size={13} />
-          <span>添加服务商</span>
+          <span>{t('settings.providers.addProvider')}</span>
         </Button>
       </div>
 
@@ -156,7 +161,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                       onUpdateProvider(p.id, { name: e.target.value })
                     }
                     className="h-6 w-44 font-semibold text-xs bg-transparent border-transparent hover:border-border/60 focus-visible:bg-background/80 px-1.5"
-                    placeholder="服务商名称"
+                    placeholder={t('settings.providers.providerName')}
                   />
                 </div>
                 <Button
@@ -164,7 +169,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                   size="icon-sm"
                   onClick={() => onRemoveProvider(p.id)}
                   className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10"
-                  title="删除此服务商"
+                  title={t('common.delete')}
                 >
                   <Trash2 size={12} />
                 </Button>
@@ -198,11 +203,11 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                       >
                         {isKeyVisible ? (
                           <>
-                            <EyeOff size={11} /> 隐藏
+                            <EyeOff size={11} /> {isZh ? '隐藏' : 'Hide'}
                           </>
                         ) : (
                           <>
-                            <Eye size={11} /> 显示
+                            <Eye size={11} /> {isZh ? '显示' : 'Show'}
                           </>
                         )}
                       </button>
@@ -223,19 +228,19 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                   {/* Available Models (MultiSelect Dropdown Checkboxes) */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between h-5">
-                      <Label>可用模型列表 ({p.models.length})</Label>
+                      <Label>{isZh ? `可用模型列表 (${p.models.length})` : `Available Models (${p.models.length})`}</Label>
                       <button
                         type="button"
                         disabled={isFetching}
                         onClick={() => handleFetchModels(p)}
                         className="text-[11px] text-primary hover:text-primary/80 font-medium flex items-center gap-1 outline-none disabled:opacity-50 transition-colors cursor-pointer"
-                        title="从 API 自动拉取可用模型列表"
+                        title={t('settings.providers.fetchModels')}
                       >
                         <RefreshCw
                           size={11}
                           className={isFetching ? "animate-spin" : ""}
                         />
-                        <span>{isFetching ? "获取中..." : "获取模型"}</span>
+                        <span>{isFetching ? t('settings.providers.fetching') : t('settings.providers.fetchModels')}</span>
                       </button>
                     </div>
 
@@ -245,7 +250,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                         value: m,
                         label: m,
                       }))}
-                      placeholder="点击右上角「获取模型」或手动输入回车添加..."
+                      placeholder={isZh ? "点击右上角「获取模型」或手动输入回车添加..." : "Click Fetch Models or type & enter..."}
                       onChange={(newModels) => handleModelsChange(p, newModels)}
                       allowCustomInput={true}
                     />
@@ -254,7 +259,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                   {/* Default Model */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between h-5">
-                      <Label>默认调用模型</Label>
+                      <Label>{t('settings.providers.defaultModel')}</Label>
                     </div>
                     {p.models.length > 0 ? (
                       <Select
@@ -272,7 +277,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                       <Input
                         type="text"
                         value={p.defaultModel}
-                        placeholder="请先在左侧勾选或添加可用模型"
+                        placeholder={isZh ? "请先在左侧勾选或添加可用模型" : "Select or enter models on the left first"}
                         onChange={(e) =>
                           onUpdateProvider(p.id, {
                             defaultModel: e.target.value,

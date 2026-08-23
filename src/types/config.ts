@@ -1,4 +1,5 @@
 export type WebWindowMode = 'multi_window' | 'tabbed';
+export type LanguageSetting = 'auto' | 'zh' | 'en';
 
 export interface GeneralConfig {
   autoPopupOnSelection: boolean;
@@ -9,6 +10,7 @@ export interface GeneralConfig {
   autoStart: boolean;
   webWindowMode: WebWindowMode;
   autoCopyOnWebAction: boolean;
+  language: LanguageSetting;
   overlayOpacity?: number;
   webWindowSize?: [number, number];
   apiCardSize?: [number, number];

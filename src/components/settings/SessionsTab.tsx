@@ -16,6 +16,7 @@ import {
 import { ChatSessionData } from '@/types/session';
 import { CodeBlock } from '@/components/overlay/CodeBlock';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
+import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 
 function formatFullTime(timestamp: number): string {
@@ -29,6 +30,9 @@ function formatFullTime(timestamp: number): string {
 }
 
 export const SessionsTab: React.FC = () => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
+
   const [sessions, setSessions] = useState<ChatSessionData[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,7 +75,7 @@ export const SessionsTab: React.FC = () => {
   };
 
   const handleClearAll = async () => {
-    if (!window.confirm('确定要清空所有历史对话记录吗？此操作不可恢复。')) return;
+    if (!window.confirm(isZh ? '确定要清空所有历史对话记录吗？此操作不可恢复。' : 'Are you sure you want to clear all history records? This cannot be undone.')) return;
     try {
       await invoke('clear_all_chat_sessions');
       setSessions([]);
@@ -113,7 +117,7 @@ export const SessionsTab: React.FC = () => {
           />
           <input
             type="text"
-            placeholder="搜索会话标题、模型或内容..."
+            placeholder={isZh ? "搜索会话标题、模型或内容..." : "Search sessions, models, or text..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-8.5 pr-3 py-1.5 rounded-lg text-xs bg-white/80 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/80 text-foreground outline-none focus:border-blue-500 transition-colors"
@@ -125,10 +129,10 @@ export const SessionsTab: React.FC = () => {
             type="button"
             onClick={handleOpenFolder}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-300 bg-white/80 dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200/80 dark:border-zinc-700/80 transition-colors cursor-pointer"
-            title="在资源管理器中打开 JSONL 存储目录"
+            title={isZh ? "在资源管理器中打开 JSONL 存储目录" : "Open JSONL storage directory"}
           >
             <FolderOpen size={13} />
-            <span>打开存储目录</span>
+            <span>{isZh ? "打开存储目录" : "Open Directory"}</span>
           </button>
 
           {sessions.length > 0 && (
@@ -138,7 +142,7 @@ export const SessionsTab: React.FC = () => {
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer"
             >
               <Trash2 size={13} />
-              <span>清空全部</span>
+              <span>{t('sessions.clearAll')}</span>
             </button>
           )}
         </div>
@@ -149,17 +153,17 @@ export const SessionsTab: React.FC = () => {
         {/* 左侧会话卡片列表 */}
         <div className="w-72 shrink-0 flex flex-col rounded-xl bg-white/40 dark:bg-zinc-900/40 border border-black/5 dark:border-white/5 overflow-hidden">
           <div className="px-3 py-2 border-b border-black/5 dark:border-white/5 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 flex justify-between">
-            <span>会话列表 ({filteredSessions.length})</span>
-            <span>JSONL 格式存储</span>
+            <span>{isZh ? `会话列表 (${filteredSessions.length})` : `Sessions (${filteredSessions.length})`}</span>
+            <span>JSONL</span>
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
             {loading ? (
-              <div className="py-12 text-center text-xs text-zinc-400">正在加载会话...</div>
+              <div className="py-12 text-center text-xs text-zinc-400">{isZh ? "正在加载会话..." : "Loading sessions..."}</div>
             ) : filteredSessions.length === 0 ? (
               <div className="py-12 text-center text-xs text-zinc-400 space-y-1">
                 <MessageSquare size={24} className="mx-auto opacity-30" />
-                <p>暂无匹配会话</p>
+                <p>{t('sessions.noSessions')}</p>
               </div>
             ) : (
               filteredSessions.map((s) => {
@@ -181,7 +185,7 @@ export const SessionsTab: React.FC = () => {
                         type="button"
                         onClick={(e) => handleDelete(e, s.id)}
                         className="opacity-0 group-hover:opacity-100 flex size-5 items-center justify-center rounded text-zinc-400 hover:text-red-500 hover:bg-red-500/10 transition-all"
-                        title="删除该条记录"
+                        title={t('sessions.deleteSession')}
                       >
                         <Trash2 size={11} />
                       </button>
@@ -223,14 +227,14 @@ export const SessionsTab: React.FC = () => {
                     type="button"
                     onClick={() => copy(currentSession.streamText)}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white/80 dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200/80 dark:border-zinc-700/80 transition-colors cursor-pointer text-foreground"
-                    title="复制回答全文"
+                    title={t('card.copyFullResponse')}
                   >
                     {copied ? (
                       <Check size={13} className="text-emerald-500" />
                     ) : (
                       <Copy size={13} />
                     )}
-                    <span>{copied ? '已复制' : '复制回答'}</span>
+                    <span>{copied ? t('common.copied') : t('common.copy')}</span>
                   </button>
                 </div>
               </div>
@@ -242,7 +246,7 @@ export const SessionsTab: React.FC = () => {
                   <div className="rounded-lg bg-zinc-100/80 dark:bg-zinc-800/60 p-3 border border-zinc-200/60 dark:border-zinc-700/60">
                     <div className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-500 mb-1.5">
                       <FileText size={12} />
-                      <span>原始选中文本</span>
+                      <span>{isZh ? "原始选中文本" : "Original Selected Text"}</span>
                     </div>
                     <p className="text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
                       {currentSession.selectedText}
@@ -272,7 +276,7 @@ export const SessionsTab: React.FC = () => {
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-zinc-400 space-y-2">
               <Sparkles size={32} className="opacity-30" />
-              <p className="text-xs">选择左侧会话查看完整对话记录</p>
+              <p className="text-xs">{isZh ? "选择左侧会话查看完整对话记录" : "Select a session from the left to view records"}</p>
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────────────────────────────────
@@ -23,6 +24,7 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   codeBlockLineNumbers = false,
   ...props
 }) => {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const language = match ? match[1] : '';
@@ -99,14 +101,14 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
             'transition-colors duration-100 hover:bg-hover cursor-pointer',
             copied ? 'text-emerald-600' : 'text-ink-3 hover:text-ink'
           )}
-          title="复制代码"
+          title={t('card.codeCopy')}
         >
           {copied ? (
             <Check size={10} strokeWidth={2.5} />
           ) : (
             <Copy size={10} strokeWidth={2} />
           )}
-          <span>{copied ? '已复制' : '复制'}</span>
+          <span>{copied ? t('card.codeCopied') : t('card.codeCopy')}</span>
         </button>
       </div>
 

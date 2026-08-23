@@ -18,15 +18,8 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import { ProviderConfig } from '@/types/config';
 import { DynamicIcon } from '@/components/Icons';
+import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
-
-/* ─────────────────────────────────────────────────────────
- * 极简胶囊提问栏
- * 包含：
- * 1. 独立白底圆角卡片容器 (rounded-2xl)
- * 2. 顶部透明无框输入框
- * 3. 底部工具条：+ 快捷预设、[服务商图标 / 模型名] 级联芯片、⚡极速/🧠深度思考切换、圆形发送按钮
- * ───────────────────────────────────────────────────────── */
 
 export interface ActionChip {
   label: string;
@@ -34,33 +27,65 @@ export interface ActionChip {
   icon: React.ReactNode;
 }
 
-const DEFAULT_ACTION_CHIPS: ActionChip[] = [
-  {
-    label: '深度思考',
-    prompt: '请开启深度思考模式，详细列出严谨的逐步推理与思考过程：',
-    icon: <Brain size={13} className="text-purple-500 shrink-0" />,
-  },
-  {
-    label: '总结要点',
-    prompt: '请帮我精简总结以上内容的核心要点：',
-    icon: <FileText size={13} className="text-blue-500 shrink-0" />,
-  },
-  {
-    label: '润色优化',
-    prompt: '请帮我润色优化这段内容，使其更加地道通顺：',
-    icon: <Wand2 size={13} className="text-amber-500 shrink-0" />,
-  },
-  {
-    label: '深入解释',
-    prompt: '请结合原理与背景，更详细地展开解释：',
-    icon: <Sparkles size={13} className="text-emerald-500 shrink-0" />,
-  },
-  {
-    label: '对照翻译',
-    prompt: '请将以上内容进行精准对照翻译：',
-    icon: <Languages size={13} className="text-indigo-500 shrink-0" />,
-  },
-];
+function getActionChips(isZh: boolean): ActionChip[] {
+  if (isZh) {
+    return [
+      {
+        label: '深度思考',
+        prompt: '请开启深度思考模式，详细列出严谨的逐步推理与思考过程：',
+        icon: <Brain size={13} className="text-purple-500 shrink-0" />,
+      },
+      {
+        label: '总结要点',
+        prompt: '请帮我精简总结以上内容的核心要点：',
+        icon: <FileText size={13} className="text-blue-500 shrink-0" />,
+      },
+      {
+        label: '润色优化',
+        prompt: '请帮我润色优化这段内容，使其更加地道通顺：',
+        icon: <Wand2 size={13} className="text-amber-500 shrink-0" />,
+      },
+      {
+        label: '深入解释',
+        prompt: '请结合原理与背景，更详细地展开解释：',
+        icon: <Sparkles size={13} className="text-emerald-500 shrink-0" />,
+      },
+      {
+        label: '对照翻译',
+        prompt: '请将以上内容进行精准对照翻译：',
+        icon: <Languages size={13} className="text-indigo-500 shrink-0" />,
+      },
+    ];
+  }
+
+  return [
+    {
+      label: 'Deep Reasoning',
+      prompt: 'Please use deep reasoning to systematically analyze and explain step-by-step:',
+      icon: <Brain size={13} className="text-purple-500 shrink-0" />,
+    },
+    {
+      label: 'Summarize',
+      prompt: 'Please provide a clear and concise summary of the key takeaways above:',
+      icon: <FileText size={13} className="text-blue-500 shrink-0" />,
+    },
+    {
+      label: 'Polish & Refine',
+      prompt: 'Please polish and improve the following text for better fluency and clarity:',
+      icon: <Wand2 size={13} className="text-amber-500 shrink-0" />,
+    },
+    {
+      label: 'Explain in Detail',
+      prompt: 'Please elaborate on the underlying principles and background in detail:',
+      icon: <Sparkles size={13} className="text-emerald-500 shrink-0" />,
+    },
+    {
+      label: 'Translate',
+      prompt: 'Please translate the following text accurately and fluently:',
+      icon: <Languages size={13} className="text-indigo-500 shrink-0" />,
+    },
+  ];
+}
 
 export interface PromptBarProps {
   value: string;
@@ -105,6 +130,10 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   inputRef,
   className,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
+  const actionChips = getActionChips(isZh);
+
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showCascaderMenu, setShowCascaderMenu] = useState(false);
   const [activeCascaderProviderId, setActiveCascaderProviderId] = useState<string>(
@@ -118,9 +147,9 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const cascaderContainerRef = useRef<HTMLDivElement>(null);
 
   const currentProvider = providers.find((p) => p.id === selectedProviderId);
-  const providerName = currentProvider?.name || '选择服务商';
+  const providerName = currentProvider?.name || (isZh ? '选择服务商' : 'Select Provider');
   const providerIconName = currentProvider?.id || currentProvider?.name || 'Cpu';
-  const modelLabel = selectedModel || `${providerName} · 未选模型`;
+  const modelLabel = selectedModel || `${providerName} · ${isZh ? '未选模型' : 'No Model'}`;
 
   // 计算允许的最大输入高度：最高不超过整体视图高度的 2/3 (预留底部按钮空间)
   const getMaxHeight = () => Math.max(80, Math.floor(window.innerHeight * 0.66) - 55);
@@ -235,7 +264,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     onThinkingModeChange?.(nextMode);
   };
 
-  const inputPlaceholder = placeholder || `向${title}提问`;
+  const inputPlaceholder = placeholder || (isZh ? `向 ${title} 提问...` : `Ask ${title}...`);
 
   // 获取当前在级联面板中高亮的服务商对象及其模型列表
   const cascaderProvider =
@@ -268,7 +297,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
           onMouseDown={handleDragResize}
           onDoubleClick={() => setCustomHeight(null)}
           className="group/drag -mx-3 -mt-2 mb-1 flex h-2.5 cursor-row-resize items-center justify-center select-none"
-          title="上下拖拽调整输入框高度 (最高可达视图 2/3，双击恢复自适应)"
+          title={isZh ? '上下拖拽调整输入框高度 (最高可达视图 2/3，双击恢复自适应)' : 'Drag to adjust input height (double-click to reset)'}
         >
           <div
             className={cn(
@@ -310,7 +339,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                   setShowCascaderMenu(false);
                 }}
                 className="flex size-6 items-center justify-center rounded-md text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 cursor-pointer"
-                title="快捷提示词"
+                title={isZh ? '快捷提示词' : 'Quick Prompts'}
               >
                 <Plus size={15} strokeWidth={2} />
               </button>
@@ -319,10 +348,10 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               {showPlusMenu && (
                 <div className="absolute bottom-full left-0 mb-1.5 z-50 w-56 rounded-2xl border border-black/10 dark:border-white/10 bg-white/95 p-1.5 shadow-2xl backdrop-blur-2xl dark:bg-zinc-900/95 animate-in fade-in zoom-in-95 duration-120">
                   <div className="px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                    快捷预设提示词
+                    {isZh ? '快捷预设提示词' : 'Quick Prompt Presets'}
                   </div>
                   <div className="flex flex-col gap-0.5">
-                    {DEFAULT_ACTION_CHIPS.map((chip) => (
+                    {actionChips.map((chip) => (
                       <button
                         key={chip.label}
                         type="button"
@@ -355,7 +384,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                       ? 'bg-zinc-200/90 dark:bg-zinc-700/90 border-zinc-300 dark:border-zinc-600 text-zinc-900 dark:text-zinc-100'
                       : 'bg-zinc-100/90 dark:bg-zinc-800/90 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60'
                   )}
-                  title={`当前服务商: ${providerName}，模型: ${selectedModel || '未选模型'} (点击级联切换)`}
+                  title={isZh ? `当前服务商: ${providerName}，模型: ${selectedModel || '未选模型'} (点击级联切换)` : `Provider: ${providerName}, Model: ${selectedModel || 'No Model'} (Click to switch)`}
                 >
                   <DynamicIcon name={providerIconName} size={14} className="shrink-0" />
                   <span className={cn('truncate', !selectedModel && 'text-zinc-400 dark:text-zinc-500 font-normal')}>
@@ -376,7 +405,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                     {/* 左侧列：服务商列表 (宽 150px) */}
                     <div className="w-[155px] p-1.5 flex flex-col gap-0.5">
                       <div className="px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                        服务商
+                        {t('settings.sidebar.providers')}
                       </div>
                       <div className="max-h-56 overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
                         {providers.map((p) => {
@@ -418,8 +447,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                     {/* 右侧列：当前高亮服务商下的模型列表 (宽 190px) */}
                     <div className="w-[190px] p-1.5 flex flex-col gap-0.5">
                       <div className="flex items-center justify-between px-2 py-1 text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
-                        <span className="truncate max-w-28">{cascaderProvider?.name || '模型'}</span>
-                        <span className="text-[10px]">点击切换</span>
+                        <span className="truncate max-w-28">{cascaderProvider?.name || (isZh ? '模型' : 'Models')}</span>
+                        <span className="text-[10px]">{isZh ? '点击切换' : 'Select'}</span>
                       </div>
                       <div className="max-h-56 overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
                         {cascaderModels.length > 0 ? (
@@ -453,7 +482,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                                 <div className="flex items-center gap-1 shrink-0">
                                   {isDefault && (
                                     <span className="text-[9.5px] px-1 py-0.2 rounded bg-zinc-200/60 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-normal">
-                                      默认
+                                      {isZh ? '默认' : 'Default'}
                                     </span>
                                   )}
                                   {isCurrentModel && (
@@ -466,9 +495,9 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                         ) : (
                           <div className="flex flex-col items-center justify-center py-5 px-2 text-center">
                             <Box size={22} className="text-zinc-400 dark:text-zinc-500 mb-1.5" />
-                            <p className="text-[12px] font-medium text-zinc-700 dark:text-zinc-200">暂无可用模型</p>
+                            <p className="text-[12px] font-medium text-zinc-700 dark:text-zinc-200">{t('card.noModelConfigured')}</p>
                             <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5 mb-2.5 leading-tight">
-                              请前往设置配置并获取模型
+                              {isZh ? '请前往设置配置并获取模型' : 'Please configure in Settings'}
                             </p>
                             <button
                               type="button"
@@ -484,7 +513,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                               className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors cursor-pointer"
                             >
                               <Settings size={11} />
-                              <span>前往设置</span>
+                              <span>{t('bubble.openSettings')}</span>
                             </button>
                           </div>
                         )}
@@ -507,19 +536,19 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               )}
               title={
                 thinkingMode === 'deep'
-                  ? '当前模式: 深度思考 (点击切换为极速模式)'
-                  : '当前模式: 极速模式 (点击切换为深度思考)'
+                  ? (isZh ? '当前模式: 深度思考 (点击切换为极速模式)' : 'Current mode: Reasoning (Click for Fast)')
+                  : (isZh ? '当前模式: 极速模式 (点击切换为深度思考)' : 'Current mode: Fast (Click for Reasoning)')
               }
             >
               {thinkingMode === 'deep' ? (
                 <>
                   <Brain size={12} className="shrink-0 text-purple-500 animate-pulse" />
-                  <span>深度思考</span>
+                  <span>{isZh ? '深度思考' : 'Reasoning'}</span>
                 </>
               ) : (
                 <>
                   <Zap size={12} className="shrink-0 text-amber-500 fill-amber-500" />
-                  <span>极速</span>
+                  <span>{isZh ? '极速' : 'Fast'}</span>
                 </>
               )}
             </button>
@@ -532,7 +561,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                 type="button"
                 onClick={onCancel}
                 className="flex size-7.5 items-center justify-center rounded-full bg-red-500 text-white shadow-sm transition-transform duration-150 hover:bg-red-600 active:scale-95 cursor-pointer"
-                title="停止生成"
+                title={t('card.stopGenerating')}
               >
                 <Square size={10} className="fill-current" />
               </button>
@@ -551,7 +580,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                     ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm hover:opacity-90 cursor-pointer'
                     : 'bg-zinc-200/80 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed'
                 )}
-                title={sendKeyShortcut === 'Ctrl+Enter' ? '发送 (Ctrl+Enter)' : '发送 (Enter)'}
+                title={t('card.send') + (sendKeyShortcut === 'Ctrl+Enter' ? ' (Ctrl+Enter)' : ' (Enter)')}
               >
                 <ArrowUp size={16} strokeWidth={2.4} />
               </button>

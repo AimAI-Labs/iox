@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ActionConfig, ActionType, ProviderConfig } from "@/types/config";
 import { DynamicIcon } from "@/components/Icons";
+import { useTranslation } from "@/hooks/useTranslation";
 import {
   IconPicker,
   Card,
@@ -60,6 +61,9 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({
   onDragEnd,
   onDrop,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
+
   return (
     <div
       onDragOver={onDragOver}
@@ -86,7 +90,7 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
               className="cursor-grab active:cursor-grabbing text-muted-foreground/60 hover:text-foreground p-0.5 rounded hover:bg-muted/60 transition-colors shrink-0"
-              title="按住拖拽调整排序"
+              title={isZh ? "按住拖拽调整排序" : "Drag to reorder"}
             >
               <GripVertical size={13} />
             </div>
@@ -96,7 +100,7 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({
               type="button"
               onClick={onToggleCollapse}
               className="text-muted-foreground/60 hover:text-foreground p-0.5 rounded hover:bg-muted/60 transition-colors shrink-0 cursor-pointer"
-              title={isCollapsed ? "展开详情配置" : "折叠卡片"}
+              title={isCollapsed ? (isZh ? "展开详情配置" : "Expand Details") : (isZh ? "折叠卡片" : "Collapse Card")}
             >
               {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
             </button>
@@ -108,7 +112,7 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({
               trigger={
                 <div
                   className="flex items-center justify-center w-6 h-6 rounded bg-muted/60 hover:bg-primary/20 hover:text-primary transition-all border border-border/60 cursor-pointer shadow-2xs"
-                  title="点击更改图标"
+                  title={isZh ? "点击更改图标" : "Click to change icon"}
                 >
                   <DynamicIcon name={action.icon} size={14} />
                 </div>
@@ -121,7 +125,7 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({
               value={action.name}
               onChange={(e) => onUpdate({ name: e.target.value })}
               className="h-6 w-36 font-semibold text-xs bg-transparent border-transparent hover:border-border/60 focus-visible:bg-background/80 px-1.5"
-              placeholder="动作名称"
+              placeholder={t('settings.actions.actionName')}
             />
 
             {/* 动作类型标识 Badge */}
@@ -133,7 +137,7 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({
                 action.actionType === "copy" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
               )}
             >
-              {action.actionType === "api" ? "API 流式" : action.actionType === "web" ? "Web 官网" : "复制"}
+              {action.actionType === "api" ? (isZh ? "API 流式" : "API Stream") : action.actionType === "web" ? (isZh ? "Web 官网" : "Web Hub") : (isZh ? "复制" : "Copy")}
             </span>
           </div>
 
@@ -141,7 +145,7 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({
             {/* 启用/禁用 开关 */}
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] text-muted-foreground select-none">
-                {action.enabled ? "已启用" : "已禁用"}
+                {action.enabled ? t('common.enabled') : t('common.disabled')}
               </span>
               <Switch
                 checked={action.enabled}
@@ -154,8 +158,8 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({
               variant="ghost"
               size="icon-sm"
               onClick={onRemove}
-              className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10"
-              title="删除此动作"
+              className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+              title={t('common.delete')}
             >
               <Trash2 size={12} />
             </Button>
@@ -168,7 +172,7 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({
             {/* 动作核心调度类型选择 */}
             <div className="grid grid-cols-2 gap-3 items-start">
               <div className="space-y-1.5">
-                <Label>动作调度类型</Label>
+                <Label>{t('settings.actions.actionType')}</Label>
                 <Select
                   value={action.actionType}
                   onChange={(val) => {
@@ -176,22 +180,22 @@ export const ActionCardItem: React.FC<ActionCardItemProps> = ({
                     const updates: Partial<ActionConfig> = { actionType: newType };
                     if (newType === "api" && !action.providerId) {
                       updates.providerId = providers[0]?.id || "deepseek";
-                      updates.promptTemplate = action.promptTemplate || "请分析以下内容：\n\n{text}";
+                      updates.promptTemplate = action.promptTemplate || (isZh ? "请分析以下内容：\n\n{text}" : "Please analyze the following content:\n\n{text}");
                     } else if (newType === "web" && !action.urlTemplate) {
                       updates.urlTemplate = "https://chat.deepseek.com/";
                     }
                     onUpdate(updates);
                   }}
                   options={[
-                    { value: "api", label: "API 流式卡片模式 (原生展开)", icon: Bot },
-                    { value: "web", label: "Web 官网原生浮窗 (免API登录)", icon: Globe },
-                    { value: "copy", label: "快捷复制动作 (直接入剪贴板)", icon: Copy },
+                    { value: "api", label: isZh ? "API 流式卡片模式 (原生展开)" : "API Streaming Card", icon: Bot },
+                    { value: "web", label: isZh ? "Web 官网原生浮窗 (免API登录)" : "Web Hub Window", icon: Globe },
+                    { value: "copy", label: isZh ? "快捷复制动作 (直接入剪贴板)" : "Copy to Clipboard", icon: Copy },
                   ]}
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label>动作内部唯一 ID</Label>
+                <Label>{isZh ? "动作内部唯一 ID" : "Action Unique ID"}</Label>
                 <Input
                   type="text"
                   readOnly

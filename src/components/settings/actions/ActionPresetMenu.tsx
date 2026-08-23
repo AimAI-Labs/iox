@@ -4,6 +4,7 @@ import { ActionConfig } from "@/types/config";
 import { PRESET_ACTIONS, PresetActionTemplate } from "@/lib/presetActions";
 import { DynamicIcon } from "@/components/Icons";
 import { Button } from "@/components/ui";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface ActionPresetMenuProps {
   isOpen: boolean;
@@ -18,6 +19,8 @@ export const ActionPresetMenu: React.FC<ActionPresetMenuProps> = ({
   onClose,
   onSelectPreset,
 }) => {
+  const { t, resolvedLanguage } = useTranslation();
+  const isZh = resolvedLanguage === 'zh';
   const menuRef = useRef<HTMLDivElement>(null);
 
   // 点击外部自动关闭
@@ -37,9 +40,9 @@ export const ActionPresetMenu: React.FC<ActionPresetMenuProps> = ({
 
   // 按分类分组预设
   const categories: { key: PresetActionTemplate["category"]; label: string; icon: React.ElementType }[] = [
-    { key: "web", label: "Web 官网直达 (免 API 登录)", icon: Globe },
-    { key: "api", label: "API 流式智能动作", icon: Bot },
-    { key: "utility", label: "基础快捷工具", icon: Cpu },
+    { key: "web", label: isZh ? "Web 官网直达 (免 API 登录)" : "Web Hub AI (No API Key Required)", icon: Globe },
+    { key: "api", label: isZh ? "API 流式智能动作" : "API Streaming Actions", icon: Bot },
+    { key: "utility", label: isZh ? "基础快捷工具" : "Utility Tools", icon: Cpu },
   ];
 
   return (
@@ -51,7 +54,7 @@ export const ActionPresetMenu: React.FC<ActionPresetMenuProps> = ({
         className="gap-1 text-xs px-2.5 shadow-sm cursor-pointer"
       >
         <Plus size={13} />
-        <span>添加动作</span>
+        <span>{t('settings.actions.addAction')}</span>
         <ChevronDown size={11} className="opacity-70 ml-0.5" />
       </Button>
 
@@ -71,8 +74,12 @@ export const ActionPresetMenu: React.FC<ActionPresetMenuProps> = ({
                 <Plus size={13} />
               </div>
               <div className="min-w-0">
-                <div className="font-semibold text-xs leading-tight">新建空白自定义动作</div>
-                <div className="text-[10px] text-muted-foreground truncate">完全自定义名称、图标、类型与提示词</div>
+                <div className="font-semibold text-xs leading-tight">
+                  {isZh ? "新建空白自定义动作" : "New Blank Custom Action"}
+                </div>
+                <div className="text-[10px] text-muted-foreground truncate">
+                  {isZh ? "完全自定义名称、图标、类型与提示词" : "Customize name, icon, type, and prompts"}
+                </div>
               </div>
             </button>
           </div>

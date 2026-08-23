@@ -4,6 +4,7 @@ import { DynamicIcon } from '@/components/Icons';
 import { IOXLogo } from '@/components/common';
 import { Send, Settings as SettingsIcon, X, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export interface FloatingMenuProps {
   config: AppConfig;
@@ -21,6 +22,7 @@ export const FloatingMenu: React.FC<FloatingMenuProps> = ({
   onTriggerAction,
   onOpenSettings,
 }) => {
+  const { t } = useTranslation();
   const [inputText, setInputText] = useState('');
   const enabledActions = (config.actions || []).filter((a) => a.enabled);
 
@@ -72,14 +74,14 @@ export const FloatingMenu: React.FC<FloatingMenuProps> = ({
       <div className="flex items-center justify-between pb-1 border-b border-black/5 dark:border-white/5">
         <div className="flex items-center gap-1.5">
           <IOXLogo size={16} />
-          <span className="text-xs font-semibold tracking-tight">IOX 快捷助手</span>
+          <span className="text-xs font-semibold tracking-tight">{t('bubble.quickAction')}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={onOpenSettings}
             className="p-1 rounded-md text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-            title="打开设置"
+            title={t('common.options')}
           >
             <SettingsIcon size={13} />
           </button>
@@ -87,7 +89,7 @@ export const FloatingMenu: React.FC<FloatingMenuProps> = ({
             type="button"
             onClick={onClose}
             className="p-1 rounded-md text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-            title="收起"
+            title={t('common.close')}
           >
             <X size={13} />
           </button>
@@ -99,7 +101,7 @@ export const FloatingMenu: React.FC<FloatingMenuProps> = ({
         <div className="rounded-lg bg-primary/10 border border-primary/20 px-2 py-1.5 text-[11px] flex flex-col gap-0.5">
           <div className="flex items-center gap-1 text-primary font-medium text-[10px]">
             <Sparkles size={11} />
-            <span>已捕获选中文本</span>
+            <span>{t('bubble.copySelected')}</span>
           </div>
           <p className="line-clamp-2 text-zinc-700 dark:text-zinc-300 italic font-mono text-[10.5px]">
             "{selectedText}"
@@ -138,7 +140,7 @@ export const FloatingMenu: React.FC<FloatingMenuProps> = ({
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={selectedText ? '针对选中文本提问...' : '快速提问 AI... (Enter 发送)'}
+          placeholder={selectedText ? t('card.inputPlaceholder') : t('card.inputPlaceholderWithKey', { key: 'Enter' })}
           className={cn(
             'w-full text-xs pl-2.5 pr-8 py-1.5 rounded-xl transition-all outline-none',
             'bg-black/[0.04] dark:bg-white/[0.06] border border-black/10 dark:border-white/10',

@@ -2,6 +2,7 @@ import React from "react";
 import { Cpu, Zap, Layers, MessageSquare, Globe, Sliders, Shield, Save } from "lucide-react";
 import { Button } from "@/components/ui";
 import { IOXLogo } from "@/components/common";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 import { SettingsTab } from "@/types/config";
 
@@ -13,21 +14,23 @@ interface SettingsSidebarProps {
   onSave: () => void;
 }
 
-const navItems: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
-  { id: "providers", label: "模型服务商", icon: Cpu },
-  { id: "actions", label: "动作管理", icon: Zap },
-  { id: "api_card", label: "API 卡片", icon: Layers },
-  { id: "sessions", label: "会话记录", icon: MessageSquare },
-  { id: "web", label: "Web 浮窗", icon: Globe },
-  { id: "general", label: "划词与通用", icon: Sliders },
-  { id: "blacklist", label: "应用黑名单", icon: Shield },
-];
-
 export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   activeTab,
   onTabChange,
   onSave,
 }) => {
+  const { t } = useTranslation();
+
+  const navItems: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
+    { id: "providers", label: t('settings.sidebar.providers'), icon: Cpu },
+    { id: "actions", label: t('settings.sidebar.actions'), icon: Zap },
+    { id: "api_card", label: t('settings.sidebar.apiCard'), icon: Layers },
+    { id: "sessions", label: t('settings.sidebar.sessions'), icon: MessageSquare },
+    { id: "web", label: t('settings.sidebar.web'), icon: Globe },
+    { id: "general", label: t('settings.sidebar.general'), icon: Sliders },
+    { id: "blacklist", label: t('settings.sidebar.blacklist'), icon: Shield },
+  ];
+
   return (
     <aside className="w-48 shrink-0 flex flex-col justify-between border-r border-border/40 bg-transparent p-3.5 select-none">
       {/* Brand Header */}
@@ -43,7 +46,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
               IOX
             </span>
             <p className="text-[10.5px] text-muted-foreground mt-1 font-medium leading-none">
-              划词 AI
+              {t('settings.subtitle')}
             </p>
           </div>
         </div>
@@ -83,11 +86,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
       <div className="pt-3 border-t border-border/30">
         <Button
           onClick={onSave}
-          title="保存设置 (Ctrl + S)"
+          title={`${t('common.save')} (Ctrl + S)`}
           className="w-full h-8 gap-1.5 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-all duration-150 shadow-xs active:scale-[0.98]"
         >
           <Save size={13} />
-          <span>保存配置</span>
+          <span>{t('common.save')}</span>
         </Button>
       </div>
     </aside>
