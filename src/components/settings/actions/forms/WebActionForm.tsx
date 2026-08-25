@@ -49,7 +49,7 @@ export const WebActionForm: React.FC<WebActionFormProps> = ({
         <Input
           type="text"
           value={action.urlTemplate || ""}
-          placeholder={isUrlTemplateMode ? (isZh ? "例如: https://metaso.cn/?q={text}" : "e.g. https://www.google.com/search?q={text}") : (isZh ? "例如: https://tongyi.aliyun.com/qianwen/ 或 https://chat.deepseek.com/" : "e.g. https://chat.deepseek.com/")}
+          placeholder={isUrlTemplateMode ? (isZh ? "例如: https://metaso.cn/?q={text}" : "e.g. https://www.google.com/search?q={text}") : (isZh ? "例如: https://www.qianwen.com/ 或 https://chat.deepseek.com/" : "e.g. https://chat.deepseek.com/")}
           onChange={(e) => onUpdate({ urlTemplate: e.target.value })}
           className="text-xs font-mono"
         />

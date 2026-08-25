@@ -33,7 +33,7 @@ pub static SITE_PRESETS: &[SitePreset] = &[
     SitePreset {
         id: "tongyi",
         name: "通义千问",
-        url_template: "https://tongyi.aliyun.com/qianwen/",
+        url_template: "https://www.qianwen.com/",
         category: "ai",
     },
     SitePreset {

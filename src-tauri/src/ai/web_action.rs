@@ -48,6 +48,108 @@ impl WebHubState {
     }
 }
 
+/// 智能规范化 Web Action URL，处理已废弃或重定向的官方历史 URL
+pub fn normalize_web_action_url(raw_url: &str) -> String {
+    let trimmed = raw_url.trim();
+    if trimmed.contains("tongyi.aliyun.com/qianwen") {
+        "https://www.qianwen.com/".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// 提取域名的主域（例如 passport.aliyun.com -> aliyun.com）
+pub fn get_registrable_domain(host: &str) -> &str {
+    let parts: Vec<&str> = host.split('.').collect();
+    if parts.len() >= 2 {
+        if parts.len() >= 3 {
+            let last_two = format!("{}.{}", parts[parts.len() - 2], parts[parts.len() - 1]);
+            if ["com.cn", "net.cn", "org.cn", "gov.cn", "co.uk", "com.hk"].contains(&last_two.as_str()) {
+                let start_idx = host.len() - parts[parts.len() - 3].len() - 1 - last_two.len();
+                return &host[start_idx..];
+            }
+        }
+        let start_idx = host.len() - parts[parts.len() - 2].len() - 1 - parts[parts.len() - 1].len();
+        &host[start_idx..]
+    } else {
+        host
+    }
+}
+
+/// 判断导航跳转是否应在当前 WebView 内部进行（允许重定向/认证），还是应在系统默认浏览器中打开（外部出站链接）
+pub fn is_allowed_internal_navigation(initial_origin: &str, nav_url: &tauri::Url) -> bool {
+    // 1. 非 HTTP/HTTPS 协议（例如 about:blank, data: 等）在内部处理
+    let scheme = nav_url.scheme();
+    if scheme != "http" && scheme != "https" {
+        return true;
+    }
+
+    let nav_origin = nav_url.origin().ascii_serialization();
+    // 2. 完全同源
+    if nav_origin == initial_origin {
+        return true;
+    }
+
+    let nav_host = match nav_url.host_str() {
+        Some(h) => h.to_lowercase(),
+        None => return true,
+    };
+
+    let initial_parsed = tauri::Url::parse(initial_origin).ok();
+    let initial_host = initial_parsed
+        .as_ref()
+        .and_then(|u| u.host_str())
+        .map(|h| h.to_lowercase())
+        .unwrap_or_default();
+
+    // 3. 同主域（例如 chat.deepseek.com 与 auth.deepseek.com）
+    if !initial_host.is_empty() {
+        let initial_domain = get_registrable_domain(&initial_host);
+        let nav_domain = get_registrable_domain(&nav_host);
+        if !initial_domain.is_empty() && initial_domain == nav_domain {
+            return true;
+        }
+    }
+
+    // 4. 常见 AI 官方重定向与多域名生态放行
+    // 阿里 / 通义千问生态
+    let is_ali_init = initial_host.contains("aliyun.com") || initial_host.contains("qianwen.com") || initial_host.contains("tongyi.cn");
+    let is_ali_nav = nav_host.contains("aliyun.com") || nav_host.contains("qianwen.com") || nav_host.contains("tongyi.cn") || nav_host.contains("taobao.com") || nav_host.contains("alibaba.com");
+    if is_ali_init && is_ali_nav {
+        return true;
+    }
+
+    // OpenAI / ChatGPT 生态
+    let is_openai_init = initial_host.contains("openai.com") || initial_host.contains("chatgpt.com");
+    let is_openai_nav = nav_host.contains("openai.com") || nav_host.contains("chatgpt.com") || nav_host.contains("oaistatic.com") || nav_host.contains("auth0.com");
+    if is_openai_init && is_openai_nav {
+        return true;
+    }
+
+    // 字节 / 豆包生态
+    let is_doubao_init = initial_host.contains("doubao.com");
+    let is_doubao_nav = nav_host.contains("doubao.com") || nav_host.contains("volcengine.com") || nav_host.contains("bytedance.com");
+    if is_doubao_init && is_doubao_nav {
+        return true;
+    }
+
+    // 5. 身份认证与统一登录授权放行 (SSO, OAuth, CAS, Clerk, Auth0)
+    if nav_host.starts_with("passport.")
+        || nav_host.starts_with("auth.")
+        || nav_host.starts_with("login.")
+        || nav_host.starts_with("accounts.")
+        || nav_host.starts_with("account.")
+        || nav_host.starts_with("sso.")
+        || nav_host.contains("clerk.com")
+        || nav_host.contains("auth0.com")
+    {
+        return true;
+    }
+
+    // 6. 其他非同源外部链接在系统浏览器中打开
+    false
+}
+
 /// 执行 Web 动作：根据配置以 Multi-Window 独立浮窗或 Multi-Tab Hub 统一浮窗形式调度 AI 官网
 pub fn execute_web_action(
     app: &AppHandle,
@@ -72,14 +174,17 @@ pub fn execute_web_action(
     }
 
     // 2. 提取并决定目标 URL 及注入脚本
-    let template = action
+    let raw_template = action
         .url_template
         .as_deref()
         .unwrap_or("")
         .trim();
-    if template.is_empty() {
+    if raw_template.is_empty() {
         return Err(format!("Web action '{}' has no configured URL template", action.name));
     }
+
+    let normalized_template = normalize_web_action_url(raw_template);
+    let template = normalized_template.as_str();
 
     let is_url_template = template.contains("{text}") || template.contains("{query}") || template.contains("{raw_text}");
     let use_url_mode = action.use_url_template.unwrap_or(false);
@@ -107,8 +212,8 @@ pub fn execute_web_action(
         let input_sel = action.input_selector.as_deref().unwrap_or_else(|| {
             if template.contains("deepseek.com") || action.id == "act_web_deepseek" {
                 "textarea#chat-input, textarea"
-            } else if template.contains("tongyi.aliyun.com") || action.id == "act_web_tongyi" || action.id == "tongyi" {
-                "textarea, div[contenteditable='true']"
+            } else if template.contains("qianwen.com") || template.contains("tongyi.aliyun.com") || action.id == "act_web_qwen" || action.id == "act_web_tongyi" || action.id == "tongyi" {
+                "textarea, div[contenteditable='true'], [contenteditable='true']"
             } else if template.contains("kimi.moonshot.cn") {
                 "div[contenteditable='true'], textarea"
             } else if template.contains("claude.ai") {
@@ -116,13 +221,15 @@ pub fn execute_web_action(
             } else if template.contains("doubao.com") {
                 "textarea[data-testid*='input'], textarea"
             } else {
-                "textarea, div[contenteditable='true']"
+                "textarea, div[contenteditable='true'], [contenteditable='true']"
             }
         });
 
         let submit_sel = action.submit_selector.as_deref().or_else(|| {
             if template.contains("deepseek.com") || action.id == "act_web_deepseek" {
                 Some("div[role='button'][aria-label*='发送'], div[role='button'][aria-label*='Send'], button[type='submit']")
+            } else if template.contains("qianwen.com") || template.contains("tongyi.aliyun.com") || action.id == "act_web_qwen" || action.id == "act_web_tongyi" || action.id == "tongyi" {
+                Some("button[class*='send'], div[class*='send'], button[class*='operate'], button[type='submit'], div[role='button'][aria-label*='发送'], div[role='button'][aria-label*='Send']")
             } else if template.contains("kimi.moonshot.cn") {
                 Some("button[data-testid*='send'], button.send-button")
             } else if template.contains("claude.ai") {
@@ -173,7 +280,15 @@ fn execute_multi_window_action(
     if let Some(window) = app.get_window(&label) {
         if let Some(content_wv) = app.get_webview(&content_label) {
             if let Some(ref script) = injection_script {
-                let _ = content_wv.eval(script);
+                let wv_clone = content_wv.clone();
+                let script_clone = script.clone();
+                tauri::async_runtime::spawn(async move {
+                    let delays = [30, 300, 1000];
+                    for delay in delays {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
+                        let _ = wv_clone.eval(&script_clone);
+                    }
+                });
             } else {
                 let _ = content_wv.navigate(target_url);
             }
@@ -226,18 +341,17 @@ fn execute_multi_window_action(
         )
         .map_err(|e| format!("Failed to create titlebar webview: {}", e))?;
 
-    let init_script = build_initialization_script(&config.general.theme, injection_script.as_deref());
+    let init_script = build_initialization_script(&config.general.theme, None);
     let initial_origin = target_url.origin().ascii_serialization();
     let content_builder = WebviewBuilder::new(&content_label, WebviewUrl::External(target_url))
         .transparent(true)
         .zoom_hotkeys_enabled(true)
         .on_navigation(move |nav_url| {
-            let nav_origin = nav_url.origin().ascii_serialization();
-            if nav_origin != initial_origin && (nav_url.scheme() == "http" || nav_url.scheme() == "https") {
+            if is_allowed_internal_navigation(&initial_origin, nav_url) {
+                true
+            } else {
                 let _ = open::that_detached(nav_url.as_str());
                 false
-            } else {
-                true
             }
         })
         .initialization_script(&init_script);
@@ -362,7 +476,7 @@ fn execute_tabbed_hub_action(
     let initial_height = if saved_h >= 400.0 { saved_h } else { 640.0 };
     let titlebar_height = 38.0;
 
-    let init_script = build_initialization_script(&config.general.theme, injection_script.as_deref());
+    let init_script = build_initialization_script(&config.general.theme, None);
 
     // 1. 如果 web_hub 窗口已存在
     if let Some(window) = app.get_window(window_label) {
@@ -377,7 +491,15 @@ fn execute_tabbed_hub_action(
         // 检查该 Tab 的 child webview 是否已挂载
         if let Some(content_wv) = app.get_webview(&tab_content_label) {
             if let Some(ref script) = injection_script {
-                let _ = content_wv.eval(script);
+                let wv_clone = content_wv.clone();
+                let script_clone = script.clone();
+                tauri::async_runtime::spawn(async move {
+                    let delays = [30, 300, 1000];
+                    for delay in delays {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
+                        let _ = wv_clone.eval(&script_clone);
+                    }
+                });
             } else {
                 let _ = content_wv.navigate(target_url);
             }
@@ -388,12 +510,11 @@ fn execute_tabbed_hub_action(
                 .transparent(true)
                 .zoom_hotkeys_enabled(true)
                 .on_navigation(move |nav_url| {
-                    let nav_origin = nav_url.origin().ascii_serialization();
-                    if nav_origin != initial_origin && (nav_url.scheme() == "http" || nav_url.scheme() == "https") {
+                    if is_allowed_internal_navigation(&initial_origin, nav_url) {
+                        true
+                    } else {
                         let _ = open::that_detached(nav_url.as_str());
                         false
-                    } else {
-                        true
                     }
                 })
                 .initialization_script(&init_script);
@@ -474,12 +595,11 @@ fn execute_tabbed_hub_action(
         .transparent(true)
         .zoom_hotkeys_enabled(true)
         .on_navigation(move |nav_url| {
-            let nav_origin = nav_url.origin().ascii_serialization();
-            if nav_origin != initial_origin && (nav_url.scheme() == "http" || nav_url.scheme() == "https") {
+            if is_allowed_internal_navigation(&initial_origin, nav_url) {
+                true
+            } else {
                 let _ = open::that_detached(nav_url.as_str());
                 false
-            } else {
-                true
             }
         })
         .initialization_script(&init_script);
@@ -743,5 +863,44 @@ mod tests {
         assert_eq!(next_active2, None);
         assert_eq!(state.active_tab_id, None);
         assert!(state.tabs.is_empty());
+    }
+
+    #[test]
+    fn test_normalize_web_action_url() {
+        assert_eq!(
+            normalize_web_action_url("https://tongyi.aliyun.com/qianwen/"),
+            "https://www.qianwen.com/"
+        );
+        assert_eq!(
+            normalize_web_action_url("https://tongyi.aliyun.com/qianwen/?q={text}"),
+            "https://www.qianwen.com/"
+        );
+        assert_eq!(
+            normalize_web_action_url("https://chat.deepseek.com/"),
+            "https://chat.deepseek.com/"
+        );
+    }
+
+    #[test]
+    fn test_is_allowed_internal_navigation() {
+        // 同源导航放行
+        let initial = "https://www.qianwen.com";
+        let nav1: tauri::Url = "https://www.qianwen.com/chat/123".parse().unwrap();
+        assert!(is_allowed_internal_navigation(initial, &nav1));
+
+        // 阿里 / 千问跨域重定向与认证放行
+        let nav_sso: tauri::Url = "https://passport.aliyun.com/login".parse().unwrap();
+        assert!(is_allowed_internal_navigation(initial, &nav_sso));
+
+        let initial_tongyi = "https://tongyi.aliyun.com";
+        let nav_qw: tauri::Url = "https://www.qianwen.com/".parse().unwrap();
+        assert!(is_allowed_internal_navigation(initial_tongyi, &nav_qw));
+
+        // 外部无关第三方链接拦截（例如跳转到 wikipedia/github）
+        let nav_ext: tauri::Url = "https://en.wikipedia.org/wiki/AI".parse().unwrap();
+        assert!(!is_allowed_internal_navigation(initial, &nav_ext));
+
+        let nav_github: tauri::Url = "https://github.com/rust-lang/rust".parse().unwrap();
+        assert!(!is_allowed_internal_navigation(initial, &nav_github));
     }
 }

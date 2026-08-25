@@ -242,17 +242,6 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
               <button
                 key={action.id}
                 onClick={(e) => handleActionButtonClick(action, e)}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  if (clickTimerRef.current) {
-                    clearTimeout(clickTimerRef.current);
-                    clickTimerRef.current = null;
-                    lastClickedIdRef.current = null;
-                  }
-                  if (!isPreview) {
-                    onActionDoubleClick?.(action);
-                  }
-                }}
                 onMouseDown={(e) => e.stopPropagation()}
                 onContextMenu={(e) => {
                   e.preventDefault();

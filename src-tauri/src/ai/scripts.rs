@@ -35,13 +35,21 @@ pub const ZOOM_PERSISTENCE_SCRIPT: &str = r#"(function() {
     } catch(_) {}
 })();"#;
 
-/// 构造针对现代 SPA AI 官网（如 DeepSeek、Kimi 等）的通用 DOM 注入与受控组件同步脚本
+/// 构造针对现代 SPA AI 官网（如 DeepSeek、通义千问、Kimi 等）的通用 DOM 注入与受控组件同步脚本
 pub fn build_dom_injection_script(
     text: &str,
     input_selector: &str,
     submit_selector: Option<&str>,
     auto_submit: bool,
 ) -> String {
+    let task_id = format!(
+        "task_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    );
+    let task_id_json = serde_json::to_string(&task_id).unwrap_or_else(|_| "\"\"".to_string());
     let text_json = serde_json::to_string(text).unwrap_or_else(|_| "\"\"".to_string());
     let input_sel_json =
         serde_json::to_string(input_selector).unwrap_or_else(|_| "\"\"".to_string());
@@ -55,6 +63,7 @@ pub fn build_dom_injection_script(
 
     format!(
         r#"(function() {{
+    const taskId = {task_id_json};
     const targetText = {text_json};
     const inputSel = {input_sel_json};
     const submitSel = {submit_sel_json};
@@ -62,16 +71,16 @@ pub fn build_dom_injection_script(
 
     if (!targetText) return;
 
-    // 防止在同一次文本划选中重复执行
-    if (window.__iox_last_text === targetText && window.__iox_injected_done) {{
+    // 1. 同一任务防重：如果当前 taskId 已经完整执行并提交完毕，直接退出避免重复处理
+    if (window.__iox_completed_task === taskId) {{
         return;
     }}
 
     let attempts = 0;
-    const maxAttempts = 60; // 60 * 250ms = 15s
+    const maxAttempts = 60; // 60 * 200ms = 12s
 
     function findInput() {{
-        // 1. 优先使用用户或预设指定的选择器
+        // 优先使用指定的选择器
         if (inputSel) {{
             try {{
                 const el = document.querySelector(inputSel);
@@ -80,7 +89,7 @@ pub fn build_dom_injection_script(
             }} catch (_) {{}}
         }}
 
-        // 2. 启发式回退：查找可见的 textarea
+        // 查找可见的 textarea
         const textareas = Array.from(document.querySelectorAll('textarea'));
         for (const ta of textareas) {{
             if (ta.offsetParent !== null && !ta.disabled && !ta.readOnly) {{
@@ -88,88 +97,45 @@ pub fn build_dom_injection_script(
             }}
         }}
 
-        // 3. 启发式回退：查找可见的 contenteditable
-        const editables = Array.from(document.querySelectorAll('div[contenteditable="true"], [contenteditable="true"]'));
+        // 查找可见的富文本 (包含千问专用的 Slate.js 与 contenteditable)
+        const editables = Array.from(document.querySelectorAll('div[data-slate-editor="true"], div[contenteditable="true"], [contenteditable="true"]'));
         for (const ed of editables) {{
-            if (ed.offsetParent !== null) {{
+            if (ed.offsetParent !== null && ed.getAttribute('contenteditable') !== 'false') {{
                 return ed;
             }}
         }}
 
-        // 4. 最宽容回退
-        return document.querySelector('textarea, div[contenteditable="true"]');
+        return document.querySelector('div[data-slate-editor="true"], textarea, div[contenteditable="true"], [contenteditable="true"]');
     }}
 
-    function triggerSubmit(inputEl) {{
-        let clicked = false;
-
-        // 1. 优先使用指定的 submitSel (需过滤掉明显的非发送功能按钮如搜索/思考/设置等)
-        if (submitSel) {{
-            try {{
-                const elements = Array.from(document.querySelectorAll(submitSel));
-                for (const btn of elements) {{
-                    if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') continue;
-                    const text = (btn.textContent || '').trim();
-                    const aria = (btn.getAttribute('aria-label') || '').trim();
-                    const title = (btn.getAttribute('title') || '').trim();
-                    const combined = `${{text}} ${{aria}} ${{title}}`;
-
-                    // 严密避免误点击“联网搜索”、“深度思考”、“附件”、“设置”等按钮
-                    if (/搜索|Search|思考|Think|联网|附件|Upload|设置|Setting/i.test(combined) && !/发送|Send|Submit/i.test(combined)) {{
-                        continue;
-                    }}
-
-                    btn.click();
-                    clicked = true;
-                    break;
-                }}
-            }} catch (_) {{}}
-        }}
-
-        // 2. 启发式查找发送按钮
-        if (!clicked) {{
-            const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
-            for (const b of buttons) {{
-                const aria = b.getAttribute('aria-label') || '';
-                const title = b.getAttribute('title') || '';
-                const text = b.textContent?.trim() || '';
-                const combined = `${{text}} ${{aria}} ${{title}}`;
-
-                // 严格排除非发送按钮 (如搜索、深度思考等)
-                if (/搜索|Search|思考|Think|联网|附件|Upload|设置|Setting/i.test(combined) && !/发送|Send|Submit/i.test(combined)) {{
-                    continue;
-                }}
-
-                const isSend = /发送|Send|Submit/i.test(aria) || /发送|Send|Submit/i.test(title) || /发送|Send/i.test(text);
-                const notDisabled = !b.disabled && b.getAttribute('aria-disabled') !== 'true';
-                if (isSend && notDisabled) {{
-                    b.click();
-                    clicked = true;
-                    break;
+    function setCursorToEnd(el) {{
+        try {{
+            el.focus();
+            if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {{
+                const len = (el.value || '').length;
+                el.setSelectionRange(len, len);
+            }} else if (el.isContentEditable || el.getAttribute('contenteditable') === 'true') {{
+                const range = document.createRange();
+                const sel = window.getSelection();
+                range.selectNodeContents(el);
+                range.collapse(false);
+                if (sel) {{
+                    sel.removeAllRanges();
+                    sel.addRange(range);
                 }}
             }}
-        }}
-
-        // 3. 回车键盘事件双保险 (keydown -> keypress -> keyup)
-        const enterOpts = {{
-            key: 'Enter',
-            code: 'Enter',
-            keyCode: 13,
-            which: 13,
-            charCode: 13,
-            bubbles: true,
-            cancelable: true
-        }};
-        inputEl.dispatchEvent(new KeyboardEvent('keydown', enterOpts));
-        inputEl.dispatchEvent(new KeyboardEvent('keypress', enterOpts));
-        inputEl.dispatchEvent(new KeyboardEvent('keyup', enterOpts));
+        }} catch (_) {{}}
     }}
 
     function doInject() {{
+        if (window.__iox_completed_task === taskId) {{
+            return;
+        }}
+
         const el = findInput();
         if (!el) {{
             if (++attempts < maxAttempts) {{
-                setTimeout(doInject, 250);
+                setTimeout(doInject, 200);
             }}
             return;
         }}
@@ -177,44 +143,194 @@ pub fn build_dom_injection_script(
         try {{
             el.focus();
 
-            if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {{
-                const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
-                const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-                if (setter) {{
-                    setter.call(el, targetText);
-                }} else {{
-                    el.value = targetText;
+            const isRichEditor = el.hasAttribute('data-slate-editor') ||
+                Boolean(el.closest('[data-slate-editor="true"]')) ||
+                el.isContentEditable ||
+                el.getAttribute('contenteditable') === 'true';
+
+            // 2. 注入文本 (立即抢占 taskId 锁，彻底杜绝任何并发或延迟协程导致的二次输入)
+            if (window.__iox_injected_task !== taskId) {{
+                window.__iox_injected_task = taskId;
+
+                if (isRichEditor) {{
+                    const targetEditor = el.hasAttribute('data-slate-editor') ? el : (el.closest('[data-slate-editor="true"]') || el);
+                    targetEditor.focus();
+
+                    // 主动建立选区
+                    try {{
+                        const range = document.createRange();
+                        const sel = window.getSelection();
+                        range.selectNodeContents(targetEditor);
+                        if (sel) {{
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                        }}
+                    }} catch (_) {{}}
+
+                    try {{
+                        document.execCommand('selectAll', false, null);
+                    }} catch (_) {{}}
+
+                    try {{
+                        const dt = new DataTransfer();
+                        dt.setData('text/plain', targetText);
+                        const pasteEvt = new ClipboardEvent('paste', {{
+                            bubbles: true,
+                            cancelable: true,
+                            composed: true,
+                            clipboardData: dt,
+                        }});
+                        targetEditor.dispatchEvent(pasteEvt);
+                    }} catch (_) {{}}
+
+                }} else if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {{
+                    if (el._valueTracker) {{
+                        el._valueTracker.setValue('');
+                    }}
+                    const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+                    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                    if (setter) {{
+                        setter.call(el, targetText);
+                    }} else {{
+                        el.value = targetText;
+                    }}
+
+                    el.dispatchEvent(new Event('input', {{ bubbles: true, composed: true }}));
+                    try {{
+                        el.dispatchEvent(new InputEvent('input', {{ bubbles: true, composed: true, inputType: 'insertText', data: targetText }}));
+                    }} catch (_) {{}}
+                    el.dispatchEvent(new Event('change', {{ bubbles: true, composed: true }}));
                 }}
 
-                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                try {{
-                    el.dispatchEvent(new InputEvent('input', {{ bubbles: true, inputType: 'insertText', data: targetText }}));
-                }} catch (_) {{}}
-                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-            }} else if (el.isContentEditable) {{
-                document.execCommand('selectAll', false, null);
-                document.execCommand('insertText', false, targetText);
-                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                // 光标置尾
+                setCursorToEnd(el);
             }}
 
-            window.__iox_last_text = targetText;
-            window.__iox_injected_done = true;
-
-            // 自动聚焦输入框并将光标移至末尾，方便用户直接打字
-            try {{
-                el.focus();
-                if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {{
-                    const len = el.value.length;
-                    el.setSelectionRange(len, len);
-                }}
-            }} catch (_) {{}}
-
+            // 3. 自动提交处理 (autoSubmit: true 时智能等待 React 状态更新并激活发送按钮)
             if (autoSubmit) {{
-                setTimeout(() => {{
-                    triggerSubmit(el);
-                }}, 200);
+                let submitAttempts = 0;
+                const maxSubmitAttempts = 35; // 35 * 100ms = 3.5s
+
+                function trySubmit() {{
+                    if (window.__iox_completed_task === taskId) return;
+
+                    let clicked = false;
+
+                    // A. 优先查找指定的 submitSel (需处于未禁用可用状态)
+                    if (submitSel) {{
+                        try {{
+                            const elements = Array.from(document.querySelectorAll(submitSel));
+                            for (const btn of elements) {{
+                                if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') continue;
+                                const text = (btn.textContent || '').trim();
+                                const aria = (btn.getAttribute('aria-label') || '').trim();
+                                const title = (btn.getAttribute('title') || '').trim();
+                                const combined = `${{text}} ${{aria}} ${{title}}`;
+
+                                if (/搜索|Search|思考|Think|联网|附件|Upload|设置|Setting|语音/i.test(combined) && !/发送|Send|Submit/i.test(combined)) {{
+                                    continue;
+                                }}
+
+                                btn.click();
+                                clicked = true;
+                                break;
+                            }}
+                        }} catch (_) {{}}
+                    }}
+
+                    // B. 千问官方专属精准选择器 (button[aria-label="发送消息"], button[data-session-switch-target="send-query"])
+                    if (!clicked) {{
+                        const qwenBtn = document.querySelector('button[aria-label="发送消息"]:not([disabled]), button[data-session-switch-target="send-query"]:not([disabled])');
+                        if (qwenBtn) {{
+                            qwenBtn.click();
+                            clicked = true;
+                        }}
+                    }}
+
+                    // C. 在输入框同级或祖先操作区查找发送按钮
+                    if (!clicked && el) {{
+                        try {{
+                            const container = el.closest('form, div[class*="chat"], div[class*="input"], div[class*="search"], div[class*="box"]') || el.parentElement;
+                            if (container) {{
+                                const btns = Array.from(container.querySelectorAll('button, div[role="button"]'));
+                                for (const b of btns) {{
+                                    if (b.disabled || b.getAttribute('aria-disabled') === 'true') continue;
+                                    const aria = b.getAttribute('aria-label') || '';
+                                    const title = b.getAttribute('title') || '';
+                                    const text = b.textContent?.trim() || '';
+                                    const cls = b.className?.toString() || '';
+                                    const combined = `${{text}} ${{aria}} ${{title}} ${{cls}}`;
+
+                                    if (/搜索|Search|思考|Think|联网|附件|Upload|设置|Setting|语音/i.test(combined) && !/发送|Send|Submit/i.test(combined)) {{
+                                        continue;
+                                    }}
+
+                                    if (/send|submit|发送|operate/i.test(combined) || b.querySelector('svg')) {{
+                                        b.click();
+                                        clicked = true;
+                                        break;
+                                    }}
+                                }}
+                            }}
+                        }} catch (_) {{}}
+                    }}
+
+                    // D. 全局启发式查找已激活的发送按钮
+                    if (!clicked) {{
+                        const buttons = Array.from(document.querySelectorAll('button, div[role="button"]'));
+                        for (const b of buttons) {{
+                            const aria = b.getAttribute('aria-label') || '';
+                            const title = b.getAttribute('title') || '';
+                            const text = b.textContent?.trim() || '';
+                            const combined = `${{text}} ${{aria}} ${{title}}`;
+
+                            if (/搜索|Search|思考|Think|联网|附件|Upload|设置|Setting|语音/i.test(combined) && !/发送|Send|Submit/i.test(combined)) {{
+                                continue;
+                            }}
+
+                            const isSend = /发送|Send|Submit/i.test(aria) || /发送|Send|Submit/i.test(title) || /发送|Send/i.test(text);
+                            const notDisabled = !b.disabled && b.getAttribute('aria-disabled') !== 'true';
+                            if (isSend && notDisabled) {{
+                                b.click();
+                                clicked = true;
+                                break;
+                            }}
+                        }}
+                    }}
+
+                    if (clicked) {{
+                        window.__iox_completed_task = taskId;
+                        return;
+                    }}
+
+                    // 若 React 尚未完成 state 同步点亮按钮，持续轮询等待
+                    if (++submitAttempts < maxSubmitAttempts) {{
+                        setTimeout(trySubmit, 100);
+                    }} else {{
+                        // 超时回退回车键盘事件
+                        const enterOpts = {{
+                            key: 'Enter',
+                            code: 'Enter',
+                            keyCode: 13,
+                            which: 13,
+                            charCode: 13,
+                            bubbles: true,
+                            cancelable: true,
+                            composed: true
+                        }};
+                        el.dispatchEvent(new KeyboardEvent('keydown', enterOpts));
+                        el.dispatchEvent(new KeyboardEvent('keypress', enterOpts));
+                        el.dispatchEvent(new KeyboardEvent('keyup', enterOpts));
+                        window.__iox_completed_task = taskId;
+                    }}
+                }}
+
+                setTimeout(trySubmit, 150);
+            }} else {{
+                // 双击引用模式 (autoSubmit: false)：光标移至末尾，标记任务处理完成
+                window.__iox_completed_task = taskId;
             }}
+
         }} catch (err) {{
             console.error('[iox] DOM injection error:', err);
         }}
@@ -226,6 +342,7 @@ pub fn build_dom_injection_script(
         doInject();
     }}
 }})();"#,
+        task_id_json = task_id_json,
         text_json = text_json,
         input_sel_json = input_sel_json,
         submit_sel_json = submit_sel_json,
