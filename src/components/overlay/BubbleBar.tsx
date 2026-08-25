@@ -72,7 +72,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
 
   // 动作按钮点击处理器：
   // 1. 快捷复制：直接触发，零延迟
-  // 2. API 动作与 Web 官网动作：通过 200ms 防抖解耦单击（即时生成/发送）与双击（填入引用且不自动发送）
+  // 2. API 动作与 Web 官网动作：通过 280ms 防抖解耦单击（即时生成/发送）与双击（填入引用且不自动发送）
   const handleActionButtonClick = (action: ActionConfig, e: React.MouseEvent) => {
     e.stopPropagation();
     if (isPreview) return;
@@ -82,7 +82,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
       return;
     }
 
-    // 检查是否在 200ms 内收到针对同一动作的第二次点击
+    // 检查是否在 280ms 内收到针对同一动作的第二次点击
     if (clickTimerRef.current && lastClickedIdRef.current === action.id) {
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
@@ -99,7 +99,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
       clickTimerRef.current = null;
       lastClickedIdRef.current = null;
       onActionClick(action);
-    }, 200);
+    }, 280);
   };
 
   // 拖拽完成排序处理
@@ -242,6 +242,17 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
               <button
                 key={action.id}
                 onClick={(e) => handleActionButtonClick(action, e)}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  if (clickTimerRef.current) {
+                    clearTimeout(clickTimerRef.current);
+                    clickTimerRef.current = null;
+                    lastClickedIdRef.current = null;
+                  }
+                  if (!isPreview) {
+                    onActionDoubleClick?.(action);
+                  }
+                }}
                 onMouseDown={(e) => e.stopPropagation()}
                 onContextMenu={(e) => {
                   e.preventDefault();

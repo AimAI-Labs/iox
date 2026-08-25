@@ -161,14 +161,20 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   useEffect(() => {
     if (initialInput) {
       setFollowUpInput(initialInput);
-      const timer = setTimeout(() => {
+      const focusTextarea = () => {
         if (promptInputRef.current) {
           promptInputRef.current.focus();
           const len = promptInputRef.current.value.length;
           promptInputRef.current.setSelectionRange(len, len);
         }
-      }, 60);
-      return () => clearTimeout(timer);
+      };
+      focusTextarea();
+      const t1 = setTimeout(focusTextarea, 60);
+      const t2 = setTimeout(focusTextarea, 150);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
   }, [initialInput]);
   const [quoteMenu, setQuoteMenu] = useState<{
@@ -704,7 +710,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           <UserBubble content={selectedText} isInitialContext={true} />
         )}
 
-        {!streamText && !selectedText && !isLoading ? (
+        {!streamText && !isLoading && !error ? (
           /* 聚焦型新对话欢迎看板 (Empty State) */
           <div className="flex flex-col items-center justify-center h-full min-h-[220px] px-4 py-8 text-center select-none animate-in fade-in zoom-in-95 duration-200">
             <div className="flex size-12 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/60 shadow-xs mb-3">
@@ -867,12 +873,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
               );
             })}
           </div>
-        ) : (
+        ) : isLoading ? (
           /* 首字等待 — 仅在 isLoading === true 且 streamText 为空时展示 */
           <div className="pt-1.5">
             <LoadingState onCancel={onCancel} />
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* 3. 样图风格独立胶囊提问栏 */}

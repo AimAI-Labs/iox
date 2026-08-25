@@ -126,6 +126,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         visible: true,
         activeAction: action.action,
         mode: 'card',
+        selectedText: '',
         streamText: '',
         error: null,
         isLoading: false,
