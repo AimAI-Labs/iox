@@ -1,5 +1,6 @@
-use super::scripts::{build_dom_injection_script, build_initialization_script};
+use super::scripts::build_initialization_script;
 use super::template::render_url_template;
+use super::vendors::get_vendor_adapter;
 use crate::config::{ActionConfig, AppConfig};
 use crate::AppState;
 use arboard::Clipboard;
@@ -209,39 +210,13 @@ pub fn execute_web_action(
             template.to_string()
         };
 
-        let input_sel = action.input_selector.as_deref().unwrap_or_else(|| {
-            if template.contains("deepseek.com") || action.id == "act_web_deepseek" {
-                "textarea#chat-input, textarea"
-            } else if template.contains("qianwen.com") || template.contains("tongyi.aliyun.com") || action.id == "act_web_qwen" || action.id == "act_web_tongyi" || action.id == "tongyi" {
-                "textarea, div[contenteditable='true'], [contenteditable='true']"
-            } else if template.contains("kimi.moonshot.cn") {
-                "div[contenteditable='true'], textarea"
-            } else if template.contains("claude.ai") {
-                "div[contenteditable='true'], fieldset textarea"
-            } else if template.contains("doubao.com") {
-                "textarea[data-testid*='input'], textarea"
-            } else {
-                "textarea, div[contenteditable='true'], [contenteditable='true']"
-            }
-        });
-
-        let submit_sel = action.submit_selector.as_deref().or_else(|| {
-            if template.contains("deepseek.com") || action.id == "act_web_deepseek" {
-                Some("div[role='button'][aria-label*='发送'], div[role='button'][aria-label*='Send'], button[type='submit']")
-            } else if template.contains("qianwen.com") || template.contains("tongyi.aliyun.com") || action.id == "act_web_qwen" || action.id == "act_web_tongyi" || action.id == "tongyi" {
-                Some("button[class*='send'], div[class*='send'], button[class*='operate'], button[type='submit'], div[role='button'][aria-label*='发送'], div[role='button'][aria-label*='Send']")
-            } else if template.contains("kimi.moonshot.cn") {
-                Some("button[data-testid*='send'], button.send-button")
-            } else if template.contains("claude.ai") {
-                Some("button[aria-label='Send Message']")
-            } else if template.contains("doubao.com") {
-                Some("button[data-testid*='send']")
-            } else {
-                None
-            }
-        });
-
-        let script = build_dom_injection_script(text, input_sel, submit_sel, auto_sub);
+        let adapter = get_vendor_adapter(&action.id, template);
+        let script = adapter.build_injection_script(
+            text,
+            action.input_selector.as_deref(),
+            action.submit_selector.as_deref(),
+            auto_sub,
+        );
         (base_url, Some(script))
     };
 

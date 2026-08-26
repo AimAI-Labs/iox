@@ -2,7 +2,10 @@ pub mod models;
 pub mod scripts;
 pub mod stream;
 pub mod template;
+pub mod vendors;
 pub mod web_action;
+
+pub use vendors::{get_vendor_adapter, VendorAdapter, VendorRegistry};
 
 pub use models::fetch_provider_models;
 pub use scripts::{build_dom_injection_script, build_initialization_script, ZOOM_PERSISTENCE_SCRIPT};
