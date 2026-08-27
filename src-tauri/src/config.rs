@@ -336,10 +336,10 @@ impl AppConfig {
                     action_type: "web".to_string(),
                     provider_id: None,
                     prompt_template: None,
-                    url_template: Some("https://kimi.moonshot.cn/".to_string()),
+                    url_template: Some("https://www.kimi.com/".to_string()),
                     copy_to_clipboard: Some(false),
-                    input_selector: Some("div[contenteditable='true'], textarea".to_string()),
-                    submit_selector: Some("button[data-testid*='send'], button.send-button".to_string()),
+                    input_selector: Some("div[contenteditable='true'], textarea, [contenteditable='true']".to_string()),
+                    submit_selector: Some("button[data-testid*='send'], button.send-button, div[role='button'][aria-label*='发送'], button[type='submit']".to_string()),
                     auto_submit: Some(true),
                     use_url_template: None,
                     enabled: false,
@@ -643,11 +643,14 @@ impl AppConfig {
                             modified = true;
                         }
 
-                        // 2. 自动向前兼容：迁移已过期的通义千问 URL 至 qianwen.com 官方新域名
+                        // 2. 自动向前兼容：迁移已过期的通义千问与 Kimi URL 至官方新域名
                         if action.action_type == "web" {
                             if let Some(ref mut tmpl) = action.url_template {
                                 if tmpl.contains("tongyi.aliyun.com/qianwen") {
                                     *tmpl = "https://www.qianwen.com/".to_string();
+                                    modified = true;
+                                } else if tmpl.contains("kimi.moonshot.cn") {
+                                    *tmpl = "https://www.kimi.com/".to_string();
                                     modified = true;
                                 }
                             }
@@ -683,13 +686,13 @@ impl AppConfig {
                                     action.auto_submit = Some(true);
                                     modified = true;
                                 }
-                            } else if url.contains("kimi.moonshot.cn") || action.id == "act_web_kimi" {
+                            } else if url.contains("kimi.moonshot.cn") || url.contains("kimi.com") || action.id == "act_web_kimi" {
                                 if action.input_selector.is_none() {
-                                    action.input_selector = Some("div[contenteditable='true'], textarea".to_string());
+                                    action.input_selector = Some("div[contenteditable='true'], textarea, [contenteditable='true']".to_string());
                                     modified = true;
                                 }
                                 if action.submit_selector.is_none() {
-                                    action.submit_selector = Some("button[data-testid*='send'], button.send-button".to_string());
+                                    action.submit_selector = Some("button[data-testid*='send'], button.send-button, div[role='button'][aria-label*='发送'], button[type='submit']".to_string());
                                     modified = true;
                                 }
                                 if action.auto_submit.is_none() {
@@ -1021,6 +1024,44 @@ mod tests {
         assert_eq!(zh_translate.name, "翻译");
         assert_eq!(en_translate.name, "Translate");
         assert!(en_translate.prompt_template.as_ref().unwrap().contains("professional translator"));
+    }
+
+    #[test]
+    fn test_kimi_legacy_url_migration() {
+        let raw_json = r#"{
+            "general": {
+                "autoPopupOnSelection": true,
+                "minSelectionLength": 1,
+                "triggerModifier": "None",
+                "globalHotkey": "Alt+Space",
+                "theme": "system",
+                "autoStart": false
+            },
+            "blacklist": [],
+            "providers": [],
+            "actions": [
+                {
+                    "id": "act_web_kimi",
+                    "name": "Kimi",
+                    "icon": "Kimi",
+                    "actionType": "web",
+                    "urlTemplate": "https://kimi.moonshot.cn/",
+                    "copyToClipboard": false,
+                    "enabled": true
+                }
+            ]
+        }"#;
+        let mut config: AppConfig = serde_json::from_str(raw_json).expect("Deserialize legacy kimi config");
+        for action in &mut config.actions {
+            if action.action_type == "web" {
+                if let Some(ref mut tmpl) = action.url_template {
+                    if tmpl.contains("kimi.moonshot.cn") {
+                        *tmpl = "https://www.kimi.com/".to_string();
+                    }
+                }
+            }
+        }
+        assert_eq!(config.actions[0].url_template.as_deref(), Some("https://www.kimi.com/"));
     }
 }
 

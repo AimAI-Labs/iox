@@ -54,6 +54,8 @@ pub fn normalize_web_action_url(raw_url: &str) -> String {
     let trimmed = raw_url.trim();
     if trimmed.contains("tongyi.aliyun.com/qianwen") {
         "https://www.qianwen.com/".to_string()
+    } else if trimmed.contains("kimi.moonshot.cn") {
+        "https://www.kimi.com/".to_string()
     } else {
         trimmed.to_string()
     }
@@ -131,6 +133,13 @@ pub fn is_allowed_internal_navigation(initial_origin: &str, nav_url: &tauri::Url
     let is_doubao_init = initial_host.contains("doubao.com");
     let is_doubao_nav = nav_host.contains("doubao.com") || nav_host.contains("volcengine.com") || nav_host.contains("bytedance.com");
     if is_doubao_init && is_doubao_nav {
+        return true;
+    }
+
+    // Kimi / 月之暗面生态
+    let is_kimi_init = initial_host.contains("kimi.com") || initial_host.contains("moonshot.cn") || initial_host.contains("kimi.ai") || initial_host.contains("moonshot.ai");
+    let is_kimi_nav = nav_host.contains("kimi.com") || nav_host.contains("moonshot.cn") || nav_host.contains("kimi.ai") || nav_host.contains("moonshot.ai");
+    if is_kimi_init && is_kimi_nav {
         return true;
     }
 
@@ -851,6 +860,14 @@ mod tests {
             "https://www.qianwen.com/"
         );
         assert_eq!(
+            normalize_web_action_url("https://kimi.moonshot.cn/"),
+            "https://www.kimi.com/"
+        );
+        assert_eq!(
+            normalize_web_action_url("https://kimi.moonshot.cn/chat/"),
+            "https://www.kimi.com/"
+        );
+        assert_eq!(
             normalize_web_action_url("https://chat.deepseek.com/"),
             "https://chat.deepseek.com/"
         );
@@ -870,6 +887,15 @@ mod tests {
         let initial_tongyi = "https://tongyi.aliyun.com";
         let nav_qw: tauri::Url = "https://www.qianwen.com/".parse().unwrap();
         assert!(is_allowed_internal_navigation(initial_tongyi, &nav_qw));
+
+        // Kimi / Moonshot 跨域重定向放行
+        let initial_kimi = "https://kimi.moonshot.cn";
+        let nav_kimi_new: tauri::Url = "https://www.kimi.com/chat/".parse().unwrap();
+        assert!(is_allowed_internal_navigation(initial_kimi, &nav_kimi_new));
+
+        let initial_kimi_com = "https://www.kimi.com";
+        let nav_moonshot: tauri::Url = "https://auth.moonshot.cn/login".parse().unwrap();
+        assert!(is_allowed_internal_navigation(initial_kimi_com, &nav_moonshot));
 
         // 外部无关第三方链接拦截（例如跳转到 wikipedia/github）
         let nav_ext: tauri::Url = "https://en.wikipedia.org/wiki/AI".parse().unwrap();

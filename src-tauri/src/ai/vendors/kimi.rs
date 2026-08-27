@@ -21,15 +21,18 @@ impl VendorAdapter for KimiAdapter {
     }
 
     fn matches(&self, action_id: &str, url: &str) -> bool {
-        action_id == "act_web_kimi" || url.contains("kimi.moonshot.cn")
+        action_id == "act_web_kimi"
+            || url.contains("kimi.moonshot.cn")
+            || url.contains("kimi.com")
+            || url.contains("kimi.ai")
     }
 
     fn default_input_selector(&self) -> &'static str {
-        "div[contenteditable='true'], textarea"
+        "div[contenteditable='true'], textarea, [contenteditable='true']"
     }
 
     fn default_submit_selector(&self) -> Option<&'static str> {
-        Some("button[data-testid*='send'], button.send-button")
+        Some("button[data-testid*='send'], button.send-button, div[role='button'][aria-label*='发送'], button[type='submit']")
     }
 
     fn build_injection_script(
@@ -64,8 +67,11 @@ mod tests {
     #[test]
     fn test_kimi_matching() {
         let adapter = KimiAdapter::new();
+        assert!(adapter.matches("act_web_kimi", "https://www.kimi.com/"));
         assert!(adapter.matches("act_web_kimi", "https://kimi.moonshot.cn/"));
         assert!(adapter.matches("custom_kimi", "https://kimi.moonshot.cn/chat"));
+        assert!(adapter.matches("custom_kimi", "https://www.kimi.com/chat"));
+        assert!(adapter.matches("custom_kimi_ai", "https://kimi.ai/"));
         assert!(!adapter.matches("act_web_deepseek", "https://chat.deepseek.com/"));
     }
 

@@ -45,7 +45,7 @@ pub static SITE_PRESETS: &[SitePreset] = &[
     SitePreset {
         id: "kimi",
         name: "Kimi",
-        url_template: "https://kimi.moonshot.cn/chat/",
+        url_template: "https://www.kimi.com/",
         category: "ai",
     },
     SitePreset {
