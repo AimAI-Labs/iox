@@ -1,21 +1,9 @@
 import React, { useState, useEffect } from "react";
 import {
-  Layers,
-  Maximize2,
-  Pin,
-  Keyboard,
-  BrainCircuit,
-  Clock,
-  Type,
-  WrapText,
-  ListOrdered,
-  MessageSquareQuote,
-  SendHorizontal,
   RefreshCcw,
   Sun,
   Moon,
   Monitor,
-  Palette,
 } from "lucide-react";
 import { ApiCardConfig, ActionConfig, GeneralConfig } from "@/types/config";
 import { switchThemeWithTransition } from "@/hooks/useTheme";
@@ -96,7 +84,6 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
       {/* Header */}
       <div className="pb-1 border-b border-border/30">
         <h2 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-2">
-          <Layers size={16} className="text-primary dark:text-blue-400" />
           <span>{t('settings.apiCard.title')}</span>
         </h2>
         <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -110,7 +97,6 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
       <Card className="border-border/60 bg-card/60">
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center gap-2 pb-1 border-b border-border/40">
-            <Maximize2 size={14} className="text-primary dark:text-blue-400" />
             <span className="text-xs font-semibold text-foreground">
               {isZh ? "窗口视窗与外观主题" : "Window Viewport & Theme"}
             </span>
@@ -121,12 +107,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
             <>
               <div className="flex items-center justify-between gap-4">
                 <div className="space-y-0.5">
-                  <div className="flex items-center gap-1.5">
-                    <Palette size={12} className="text-muted-foreground" />
-                    <Label className="text-xs text-foreground font-medium">
-                      {isZh ? "卡片外观色彩主题" : "Card Theme"}
-                    </Label>
-                  </div>
+                  <Label className="text-xs text-foreground font-medium">
+                    {isZh ? "卡片外观色彩主题" : "Card Theme"}
+                  </Label>
                   <p className="text-[11px] text-muted-foreground">
                     {isZh
                       ? "调整流式卡片与悬浮界面的色彩模式（深色 / 浅色 / 跟随系统）"
@@ -269,12 +252,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
           {/* 默认自动固定 */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5">
-                <Pin size={12} className="text-muted-foreground" />
-                <Label className="text-xs text-foreground font-medium">
-                  {t('settings.apiCard.autoPin')}
-                </Label>
-              </div>
+              <Label className="text-xs text-foreground font-medium">
+                {t('settings.apiCard.autoPin')}
+              </Label>
               <p className="text-[11px] text-muted-foreground">
                 {t('settings.apiCard.autoPinDesc')}
               </p>
@@ -290,12 +270,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
           {/* 自动获取键盘焦点 */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5">
-                <Keyboard size={12} className="text-muted-foreground" />
-                <Label className="text-xs text-foreground font-medium">
-                  {t('settings.apiCard.autoFocus')}
-                </Label>
-              </div>
+              <Label className="text-xs text-foreground font-medium">
+                {t('settings.apiCard.autoFocus')}
+              </Label>
               <p className="text-[11px] text-muted-foreground">
                 {t('settings.apiCard.autoFocusDesc')}
               </p>
@@ -312,7 +289,6 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
       <Card className="border-border/60 bg-card/60">
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center gap-2 pb-1 border-b border-border/40">
-            <BrainCircuit size={14} className="text-primary dark:text-blue-400" />
             <span className="text-xs font-semibold text-foreground">
               {isZh ? "思维链与推理生成" : "Chain of Thought & Reasoning"}
             </span>
@@ -359,12 +335,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
           {/* 耗时统计 */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5">
-                <Clock size={12} className="text-muted-foreground" />
-                <Label className="text-xs text-foreground font-medium">
-                  {t('settings.apiCard.showDuration')}
-                </Label>
-              </div>
+              <Label className="text-xs text-foreground font-medium">
+                {t('settings.apiCard.showDuration')}
+              </Label>
               <p className="text-[11px] text-muted-foreground">
                 {t('settings.apiCard.showDurationDesc')}
               </p>
@@ -381,7 +354,6 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
       <Card className="border-border/60 bg-card/60">
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center gap-2 pb-1 border-b border-border/40">
-            <Type size={14} className="text-primary dark:text-blue-400" />
             <span className="text-xs font-semibold text-foreground">
               {isZh ? "正文排版与代码块" : "Typography & Code Blocks"}
             </span>
@@ -434,12 +406,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
           {/* 代码块自动折行 */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5">
-                <WrapText size={12} className="text-muted-foreground" />
-                <Label className="text-xs text-foreground font-medium">
-                  {t('settings.apiCard.codeBlockWrap')}
-                </Label>
-              </div>
+              <Label className="text-xs text-foreground font-medium">
+                {t('settings.apiCard.codeBlockWrap')}
+              </Label>
               <p className="text-[11px] text-muted-foreground">
                 {t('settings.apiCard.codeBlockWrapDesc')}
               </p>
@@ -455,12 +424,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
           {/* 代码块显示行号 */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5">
-                <ListOrdered size={12} className="text-muted-foreground" />
-                <Label className="text-xs text-foreground font-medium">
-                  {t('settings.apiCard.codeBlockLineNumbers')}
-                </Label>
-              </div>
+              <Label className="text-xs text-foreground font-medium">
+                {t('settings.apiCard.codeBlockLineNumbers')}
+              </Label>
               <p className="text-[11px] text-muted-foreground">
                 {t('settings.apiCard.codeBlockLineNumbersDesc')}
               </p>
@@ -477,7 +443,6 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
       <Card className="border-border/60 bg-card/60">
         <CardContent className="p-4 space-y-4">
           <div className="flex items-center gap-2 pb-1 border-b border-border/40">
-            <MessageSquareQuote size={14} className="text-primary dark:text-blue-400" />
             <span className="text-xs font-semibold text-foreground">
               {isZh ? "多轮会话与追问交互" : "Multi-Turn & Follow-up Interaction"}
             </span>
@@ -517,12 +482,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
           {/* 快捷发送按键 */}
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5">
-                <SendHorizontal size={12} className="text-muted-foreground" />
-                <Label className="text-xs text-foreground font-medium">
-                  {t('settings.apiCard.sendShortcut')}
-                </Label>
-              </div>
+              <Label className="text-xs text-foreground font-medium">
+                {t('settings.apiCard.sendShortcut')}
+              </Label>
               <p className="text-[11px] text-muted-foreground">
                 {t('settings.apiCard.sendShortcutDesc')}
               </p>

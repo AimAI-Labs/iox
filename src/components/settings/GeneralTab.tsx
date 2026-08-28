@@ -1,5 +1,5 @@
 import React from "react";
-import { Monitor, Moon, Sun, Sparkles, Globe } from "lucide-react";
+import { Monitor, Moon, Sun, Sparkles } from "lucide-react";
 import { GeneralConfig, LanguageSetting } from "@/types/config";
 import { switchThemeWithTransition } from "@/hooks/useTheme";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -46,7 +46,6 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <div className="flex items-center gap-1.5">
-                <Globe size={13} className="text-primary" />
                 <Label className="text-xs text-foreground font-medium">
                   {t('settings.general.language')}
                 </Label>
