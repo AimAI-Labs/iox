@@ -31,6 +31,12 @@ pub struct SitePreset {
 pub static SITE_PRESETS: &[SitePreset] = &[
     // ---------- AI 对话 ----------
     SitePreset {
+        id: "mimo",
+        name: "MiMo",
+        url_template: "https://aistudio.xiaomimimo.com/#/c",
+        category: "ai",
+    },
+    SitePreset {
         id: "tongyi",
         name: "通义千问",
         url_template: "https://www.qianwen.com/",

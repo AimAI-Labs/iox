@@ -12,6 +12,24 @@ export const PRESET_ACTIONS: PresetActionTemplate[] = [
   {
     category: 'web',
     categoryLabel: 'Web 官网直达',
+    description: '小米 MiMo AI Studio 官网，自动填入并发送划词内容',
+    template: {
+      defaultIdPrefix: 'act_web_mimo',
+      name: 'MiMo',
+      icon: 'Xiaomi',
+      actionType: 'web',
+      urlTemplate: 'https://aistudio.xiaomimimo.com/#/c',
+      useUrlTemplate: false,
+      inputSelector: 'textarea',
+      submitSelector: "button[data-track-id='home_send_btn']",
+      autoSubmit: true,
+      copyToClipboard: false,
+      enabled: true,
+    },
+  },
+  {
+    category: 'web',
+    categoryLabel: 'Web 官网直达',
     description: 'DeepSeek 官方大模型对话，全自动注入并提交',
     template: {
       defaultIdPrefix: 'act_web_deepseek',

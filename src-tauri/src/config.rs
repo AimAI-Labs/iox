@@ -6,6 +6,27 @@ fn default_web_window_mode() -> String {
     "multi_window".to_string()
 }
 
+/// 仅修复最初发布的 MiMo 预设；设置选择器后不会再次覆盖用户的自动发送选择。
+fn migrate_legacy_mimo_action(action: &mut ActionConfig) -> bool {
+    let is_preset = action.id == "act_web_mimo" || action.id.starts_with("act_web_mimo_");
+    if !is_preset
+        || action.action_type != "web"
+        || action.url_template.as_deref() != Some("https://aistudio.xiaomimimo.com/#/c")
+        || action.input_selector.is_some()
+        || action.submit_selector.is_some()
+        || action.auto_submit != Some(false)
+        || action.copy_to_clipboard != Some(true)
+        || action.use_url_template == Some(true)
+    {
+        return false;
+    }
+    action.input_selector = Some("textarea".to_string());
+    action.submit_selector = Some("button[data-track-id='home_send_btn']".to_string());
+    action.auto_submit = Some(true);
+    action.copy_to_clipboard = Some(false);
+    true
+}
+
 fn default_overlay_opacity() -> u32 {
     90
 }
@@ -657,6 +678,7 @@ impl AppConfig {
                         }
 
                         // 3. 自动向前兼容：补齐与纠正已知 SPA 官网的 DOM 注入与自动提交配置
+                        modified |= migrate_legacy_mimo_action(action);
                         if action.action_type == "web" {
                             let url = action.url_template.as_deref().unwrap_or("");
                             if url.contains("deepseek.com") || action.id == "act_web_deepseek" {
@@ -763,6 +785,44 @@ impl AppConfig {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn mimo_legacy_preset_migrates_once_and_preserves_later_opt_out() {
+        let mut action: super::ActionConfig = serde_json::from_value(serde_json::json!({
+            "id": "act_web_mimo_123", "name": "MiMo", "icon": "Xiaomi",
+            "actionType": "web", "urlTemplate": "https://aistudio.xiaomimimo.com/#/c",
+            "autoSubmit": false, "copyToClipboard": true, "useUrlTemplate": false,
+            "enabled": true
+        })).unwrap();
+        assert!(super::migrate_legacy_mimo_action(&mut action));
+        assert_eq!(action.auto_submit, Some(true));
+        assert_eq!(action.input_selector.as_deref(), Some("textarea"));
+        assert_eq!(action.submit_selector.as_deref(), Some("button[data-track-id='home_send_btn']"));
+        assert!(!super::migrate_legacy_mimo_action(&mut action));
+        action.auto_submit = Some(false);
+        assert!(!super::migrate_legacy_mimo_action(&mut action));
+        assert_eq!(action.auto_submit, Some(false));
+    }
+
+    #[test]
+    fn mimo_migration_preserves_custom_actions() {
+        let action: super::ActionConfig = serde_json::from_value(serde_json::json!({
+            "id": "act_web_mimo", "name": "MiMo", "icon": "Xiaomi",
+            "actionType": "web", "urlTemplate": "https://aistudio.xiaomimimo.com/#/c",
+            "autoSubmit": false, "copyToClipboard": true, "enabled": true
+        })).unwrap();
+        for variant in 0..3 {
+            let mut custom = action.clone();
+            match variant {
+                0 => custom.id = "act_custom".into(),
+                1 => custom.url_template = Some("https://example.com".into()),
+                _ => custom.submit_selector = Some("button.custom-send".into()),
+            }
+            let original = custom.clone();
+            assert!(!super::migrate_legacy_mimo_action(&mut custom));
+            assert_eq!(custom, original);
+        }
+    }
+
     use super::*;
 
     #[test]

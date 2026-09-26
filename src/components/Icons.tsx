@@ -1,4 +1,5 @@
 import React from 'react';
+import xiaomiLogo from '@/assets/xiaomi.svg';
 import {
   Sparkles,
   Search,
@@ -185,7 +186,12 @@ Felo.Color = FeloColor;
 /**
  * LobeHub AI 官方矢量品牌图标映射表
  */
+const Xiaomi: React.FC<{ size?: number | string; className?: string }> = ({ size = 16, className }) => (
+  <img src={xiaomiLogo} width={size} height={size} className={className} alt="" aria-hidden="true" />
+);
+
 const AI_ICON_MAP: Record<string, any> = {
+  Xiaomi,
   DeepSeek,
   OpenAI,
   Claude,
@@ -286,6 +292,9 @@ const LUCIDE_ICON_MAP: Record<string, React.ComponentType<LucideProps>> = {
  */
 const ALIAS_MAP: Record<string, string> = {
   // AI 品牌映射
+  xiaomi: 'Xiaomi',
+  mimo: 'Xiaomi',
+  '小米': 'Xiaomi',
   deepseek: 'DeepSeek',
   'deepseek-chat': 'DeepSeek',
   'deepseek-reasoner': 'DeepSeek',
@@ -362,6 +371,7 @@ export interface IconItemMeta {
  * 常用 AI 品牌图标元数据列表（用于图标选择器）
  */
 export const POPULAR_AI_ICONS: IconItemMeta[] = [
+  { name: 'Xiaomi', label: 'MiMo / 小米', keywords: ['xiaomi', 'mimo', '小米'] },
   { name: 'DeepSeek', label: 'DeepSeek 深度求索', keywords: ['deepseek', 'r1', 'v3', '深度求索'] },
   { name: 'OpenAI', label: 'ChatGPT / OpenAI', keywords: ['openai', 'chatgpt', 'gpt', 'gpt-4o', 'o1', 'o3'] },
   { name: 'Claude', label: 'Claude (Anthropic)', keywords: ['claude', 'anthropic', 'sonnet', 'opus', '克劳德'] },
