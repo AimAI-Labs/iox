@@ -1,16 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { CalendarDays, ExternalLink, LoaderCircle, MessageSquare, RefreshCw, Search } from 'lucide-react';
+import {
+  Calendar,
+  CalendarDays,
+  CalendarRange,
+  Clock,
+  ExternalLink,
+  Globe,
+  LoaderCircle,
+  MessageSquare,
+  RefreshCw,
+  Search,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { ActionConfig } from '@/types/config';
 import { PlatformSync, WebHistory, WebSession } from '@/types/web-session';
 import { filterHistory, groupHistory, localDayKey, TimeFilter } from '@/lib/web-history';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
+import { Select, SelectOption } from '@/components/ui';
+import { DynamicIcon } from '@/components/Icons';
 
-const fieldClass = 'rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-primary/30';
-const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-lg border border-border/60 px-3 py-2 text-xs text-foreground hover:bg-primary/10 disabled:opacity-50';
+const fieldClass = 'rounded-lg border border-border/60 bg-background/70 px-3 py-1.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-primary/30';
+const buttonClass = 'inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border/60 px-3 text-xs text-foreground hover:bg-primary/10 disabled:opacity-50 transition-colors';
 const activeStatuses = new Set(['queued', 'collecting']);
 
 export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
@@ -60,6 +73,7 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
   }, [load, sync]);
 
   const enabledIds = useMemo(() => new Set(actions.filter(a => a.actionType === 'web' && a.enabled).map(a => a.id)), [actions]);
+  const actionMap = useMemo(() => new Map(actions.map(a => [a.id, a])), [actions]);
   const platforms = history.platforms.filter(p => enabledIds.has(p.actionId));
   const syncing = platforms.some(p => activeStatuses.has(p.status));
   const lastChecked = Math.max(0, ...platforms.map(p => p.syncedAt ?? 0));
@@ -70,6 +84,31 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
   const today = localDayKey(Date.now() / 1000);
   const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
   const yesterday = localDayKey(yesterdayDate.getTime() / 1000);
+
+  const platformOptions = useMemo<SelectOption[]>(() => [
+    {
+      value: '',
+      label: text('全部平台', 'All platforms'),
+      icon: Globe,
+    },
+    ...platforms.map(p => {
+      const action = actionMap.get(p.actionId);
+      const iconName = action?.icon || p.platform;
+      return {
+        value: p.actionId,
+        label: p.platform,
+        icon: (props: any) => <DynamicIcon name={iconName} {...props} size={14} />,
+      };
+    }),
+  ], [platforms, actionMap, text]);
+
+  const timeOptions = useMemo<SelectOption[]>(() => [
+    { value: 'all', label: text('全部时间', 'All time'), icon: Clock },
+    { value: 'today', label: text('今天', 'Today'), icon: Calendar },
+    { value: '7d', label: text('最近 7 天', 'Last 7 days'), icon: CalendarRange },
+    { value: '30d', label: text('最近 30 天', 'Last 30 days'), icon: CalendarDays },
+    { value: 'custom', label: text('自定义日期', 'Custom dates'), icon: CalendarDays },
+  ], [text]);
 
   const statusLabel = (status: PlatformSync['status']) => ({
     queued: text('等待同步', 'Queued'), collecting: text('正在读取侧栏', 'Reading sidebar'),
@@ -117,26 +156,38 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
         </div>
       </header>
 
-      <div className="flex flex-wrap gap-2">
-        <label className="relative min-w-40 flex-1">
-          <Search size={14} className="absolute left-3 top-2.5 text-muted-foreground" />
-          <input className={cn(fieldClass, 'w-full pl-9')} aria-label={text('搜索会话', 'Search conversations')} placeholder={text('搜索会话标题', 'Search conversation titles')} value={query} onChange={e => setQuery(e.target.value)} />
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="relative min-w-44 flex-1">
+          <Search size={13} className="absolute left-3 top-2.5 text-muted-foreground pointer-events-none" />
+          <input
+            className={cn(fieldClass, 'h-8 w-full pl-9 py-0')}
+            aria-label={text('搜索会话', 'Search conversations')}
+            placeholder={text('搜索会话标题', 'Search conversation titles')}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
         </label>
-        <select className={cn(fieldClass, 'max-w-40')} aria-label={text('筛选平台', 'Filter platform')} value={platform} onChange={e => setPlatform(e.target.value)}>
-          <option value="">{text('全部平台', 'All platforms')}</option>
-          {platforms.map(p => <option key={p.actionId} value={p.actionId}>{p.platform}</option>)}
-        </select>
-        <select className={fieldClass} aria-label={text('筛选时间', 'Filter time')} value={time} onChange={e => setTime(e.target.value as TimeFilter)}>
-          <option value="all">{text('全部时间', 'All time')}</option><option value="today">{text('今天', 'Today')}</option>
-          <option value="7d">{text('最近 7 天', 'Last 7 days')}</option><option value="30d">{text('最近 30 天', 'Last 30 days')}</option>
-          <option value="custom">{text('自定义日期', 'Custom dates')}</option>
-        </select>
+        <Select
+          wrapperClassName="w-40 shrink-0"
+          value={platform}
+          onChange={val => setPlatform(val)}
+          options={platformOptions}
+          aria-label={text('筛选平台', 'Filter platform')}
+        />
+        <Select
+          wrapperClassName="w-36 shrink-0"
+          value={time}
+          onChange={val => setTime(val as TimeFilter)}
+          options={timeOptions}
+          aria-label={text('筛选时间', 'Filter time')}
+        />
       </div>
       {time === 'custom' && <div className="flex flex-wrap items-center gap-2 text-xs">
-        <CalendarDays size={14} className="text-muted-foreground" />
-        <input type="date" className={fieldClass} aria-label={text('开始日期', 'Start date')} value={from} onChange={e => setFrom(e.target.value)} />
-        <span>—</span><input type="date" className={fieldClass} aria-label={text('结束日期', 'End date')} value={to} onChange={e => setTo(e.target.value)} />
-        {invalidRange && <span role="alert" className="text-red-500">{text('开始日期不能晚于结束日期', 'Start date must precede end date')}</span>}
+        <CalendarDays size={13} className="text-muted-foreground" />
+        <input type="date" className={cn(fieldClass, 'h-8 py-0')} aria-label={text('开始日期', 'Start date')} value={from} onChange={e => setFrom(e.target.value)} />
+        <span>—</span>
+        <input type="date" className={cn(fieldClass, 'h-8 py-0')} aria-label={text('结束日期', 'End date')} value={to} onChange={e => setTo(e.target.value)} />
+        {invalidRange && <span role="alert" className="text-red-500 text-xs">{text('开始日期不能晚于结束日期', 'Start date must precede end date')}</span>}
       </div>}
 
       {error && <div role="alert" className="rounded-lg bg-red-500/10 p-3 text-xs text-red-500">{error}<button type="button" className="ml-2 underline" onClick={() => void sync()}>{text('重试', 'Retry')}</button></div>}
@@ -162,14 +213,52 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
           </div>
         ) : groups.map(group => <div key={group.key}>
           <h3 className="sticky top-0 z-10 border-b border-border/30 bg-background/95 px-4 py-2 text-[11px] font-medium text-muted-foreground backdrop-blur-sm">{groupLabel(group.key, group.sessions[0])}<span className="ml-2 opacity-60">{group.sessions.length}</span></h3>
-          {group.sessions.map(session => <div key={session.id} className="group flex items-center gap-1 border-b border-border/20 pr-3 hover:bg-primary/5">
-            <button type="button" className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left outline-none focus-visible:bg-primary/10" disabled={!!opening} title={session.url} onClick={() => void open(session, false)}>
-              <span className="w-20 shrink-0 truncate rounded-md bg-primary/10 px-2 py-1 text-center text-[11px] font-medium text-primary">{session.platform}</span>
-              <span className="min-w-0 flex-1 truncate text-sm">{session.title}</span>
-              {opening === session.id ? <LoaderCircle size={14} className="shrink-0 animate-spin" /> : <span className="shrink-0 text-[10px] text-muted-foreground">{session.precision === 'exact' && session.dateEnd ? new Date(session.dateEnd * 1000).toLocaleTimeString(resolvedLanguage, { hour: '2-digit', minute: '2-digit' }) : session.precision === 'range' ? text('范围', 'Range') : ''}</span>}
-            </button>
-            <button type="button" disabled={!!opening} className="rounded-md p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary" aria-label={`${text('在浏览器打开', 'Open in browser')}: ${session.title}`} onClick={() => void open(session, true)}><ExternalLink size={13} /></button>
-          </div>)}
+          {group.sessions.map(session => {
+            const action = actionMap.get(session.actionId);
+            const iconName = action?.icon || session.platform;
+
+            return (
+              <div key={session.id} className="group flex items-center gap-1 border-b border-border/20 pr-3 hover:bg-primary/5">
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-3 px-4 py-2.5 text-left outline-none focus-visible:bg-primary/10"
+                  disabled={!!opening}
+                  title={session.url}
+                  onClick={() => void open(session, false)}
+                >
+                  <div
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-black/5 dark:bg-white/5 text-muted-foreground transition-all group-hover:border-primary/30 group-hover:bg-primary/10"
+                    title={session.platform}
+                    data-platform={session.platform}
+                  >
+                    <DynamicIcon name={iconName} size={15} />
+                    <span className="sr-only">{session.platform}</span>
+                  </div>
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground/90">{session.title}</span>
+                  {opening === session.id ? (
+                    <LoaderCircle size={13} className="shrink-0 animate-spin text-muted-foreground" />
+                  ) : (
+                    <span className="shrink-0 text-[10px] text-muted-foreground font-mono">
+                      {session.precision === 'exact' && session.dateEnd
+                        ? new Date(session.dateEnd * 1000).toLocaleTimeString(resolvedLanguage, { hour: '2-digit', minute: '2-digit' })
+                        : session.precision === 'range'
+                        ? text('范围', 'Range')
+                        : ''}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={!!opening}
+                  className="rounded-md p-1.5 text-muted-foreground/70 hover:bg-primary/10 hover:text-primary transition-colors"
+                  aria-label={`${text('在浏览器打开', 'Open in browser')}: ${session.title}`}
+                  onClick={() => void open(session, true)}
+                >
+                  <ExternalLink size={13} />
+                </button>
+              </div>
+            );
+          })}
         </div>)}
       </div>
       <footer className="flex flex-wrap justify-between gap-1 text-[10px] leading-relaxed text-muted-foreground">

@@ -12,6 +12,7 @@ export interface SelectOption {
 }
 
 export interface SelectProps {
+  id?: string;
   value?: string;
   defaultValue?: string;
   options?: SelectOption[];
@@ -21,11 +22,14 @@ export interface SelectProps {
   wrapperClassName?: string;
   onChange?: (value: string) => void;
   children?: React.ReactNode;
+  'aria-label'?: string;
+  title?: string;
 }
 
 export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
   (
     {
+      id,
       value: controlledValue,
       defaultValue,
       options: propOptions,
@@ -35,6 +39,8 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
       wrapperClassName,
       onChange,
       children,
+      'aria-label': ariaLabel,
+      title,
     },
     ref
   ) => {
@@ -83,18 +89,19 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
       const spaceBelow = window.innerHeight - rect.bottom;
       const spaceAbove = rect.top;
       const placement = spaceBelow < 180 && spaceAbove > spaceBelow ? "top" : "bottom";
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8));
 
       if (placement === "bottom") {
         setCoords({
           top: rect.bottom + 4,
-          left: rect.left,
+          left,
           width: rect.width,
           placement: "bottom",
         });
       } else {
         setCoords({
           bottom: window.innerHeight - rect.top + 4,
-          left: rect.left,
+          left,
           width: rect.width,
           placement: "top",
         });
@@ -170,6 +177,11 @@ export const Select = React.forwardRef<HTMLDivElement, SelectProps>(
         <button
           ref={triggerRef}
           type="button"
+          id={id}
+          role="combobox"
+          aria-label={ariaLabel || placeholder}
+          aria-expanded={isOpen}
+          title={title}
           disabled={disabled}
           onClick={toggleOpen}
           className={cn(
