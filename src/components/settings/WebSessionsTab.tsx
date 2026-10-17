@@ -26,6 +26,117 @@ const fieldClass = 'rounded-lg border border-border/60 bg-background/70 px-3 py-
 const buttonClass = 'inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border/60 px-3 text-xs text-foreground hover:bg-primary/10 disabled:opacity-50 transition-colors';
 const activeStatuses = new Set(['queued', 'collecting']);
 
+function PlatformSyncBadge({
+  platform,
+  actionIcon,
+  isSelected,
+  onClick,
+  onDoubleClick,
+  statusLabel,
+  text,
+}: {
+  platform: PlatformSync;
+  actionIcon?: string;
+  isSelected?: boolean;
+  onClick: () => void;
+  onDoubleClick: () => void;
+  statusLabel: string;
+  text: (cn: string, en: string) => string;
+}) {
+  const isSyncing = activeStatuses.has(platform.status);
+
+  return (
+    <div className="relative group/badge flex shrink-0 items-center justify-center">
+      <button
+        type="button"
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
+        data-platform-badge={platform.actionId}
+        data-platform-status={platform.status}
+        data-platform-count={platform.count}
+        data-selected={isSelected ? "true" : "false"}
+        className={cn(
+          "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background/80 transition-all duration-200 outline-none cursor-pointer",
+          isSelected
+            ? "border-primary bg-primary/15 ring-2 ring-primary/40 ring-offset-1.5 ring-offset-background shadow-xs scale-105"
+            : isSyncing
+            ? "border-primary/40 shadow-xs"
+            : platform.status === 'error'
+            ? "border-red-500/60 hover:border-red-500 hover:bg-red-500/10"
+            : ['login_required', 'unavailable', 'partial'].includes(platform.status)
+            ? "border-amber-500/60 hover:border-amber-500 hover:bg-amber-500/10"
+            : "border-border/60 hover:border-primary/50 hover:bg-muted/70"
+        )}
+        aria-label={`${platform.platform}: ${statusLabel} (${platform.count})`}
+        title={`${platform.platform}: ${statusLabel} · ${text(`已同步 ${platform.count} 条 (单击筛选，双击打开)`, `${platform.count} synced (Click to filter, double click to open)`)}`}
+      >
+        {/* Syncing spinning ring */}
+        {isSyncing && (
+          <span className="absolute -inset-[2.5px] rounded-full border-2 border-transparent border-t-primary border-r-primary/50 animate-spin pointer-events-none" />
+        )}
+
+        {/* Brand Icon */}
+        <DynamicIcon name={actionIcon || platform.platform} size={15} />
+
+        {/* Status dot in bottom right */}
+        <span
+          className={cn(
+            "absolute bottom-0 right-0 flex h-2 w-2 items-center justify-center rounded-full border-[1.5px] border-background",
+            isSyncing
+              ? "bg-primary animate-pulse"
+              : platform.status === 'error'
+              ? "bg-red-500"
+              : ['login_required', 'unavailable', 'partial'].includes(platform.status)
+              ? "bg-amber-500"
+              : "bg-emerald-500"
+          )}
+        />
+      </button>
+
+      {/* Hover Floating Card Tooltip */}
+      <div
+        role="tooltip"
+        className={cn(
+          "absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none",
+          "opacity-0 scale-95 group-hover/badge:opacity-100 group-hover/badge:scale-100 transition-all duration-150 flex flex-col items-center"
+        )}
+      >
+        <div className="flex flex-col items-center rounded-lg border border-border/80 bg-popover/95 dark:bg-zinc-900/95 px-3 py-2 text-center shadow-xl backdrop-blur-md whitespace-nowrap min-w-32">
+          <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+            <DynamicIcon name={actionIcon || platform.platform} size={13} />
+            <span>{platform.platform}</span>
+          </div>
+          <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+            <span
+              className={cn(
+                isSyncing && "text-primary font-medium",
+                platform.status === 'error' && "text-red-500",
+                ['login_required', 'unavailable', 'partial'].includes(platform.status) && "text-amber-500",
+                ['ready', 'incremental'].includes(platform.status) && "text-emerald-500 font-medium"
+              )}
+            >
+              {statusLabel}
+            </span>
+            <span className="font-mono text-foreground/90">
+              · {text(`已同步 ${platform.count} 条`, `${platform.count} conversations`)}
+            </span>
+          </div>
+          {platform.error && (
+            <p className="mt-1 max-w-44 break-words text-[10px] text-red-500/90 leading-tight">
+              {platform.error}
+            </p>
+          )}
+          <span className="mt-1.5 text-[9px] text-muted-foreground/60 border-t border-border/40 pt-1 w-full">
+            {text('单击筛选此平台 · 双击打开平台', 'Click to filter · Double-click to open')}
+          </span>
+        </div>
+        {/* Tooltip arrow */}
+        <div className="w-2 h-2 rotate-45 -mt-1 bg-popover dark:bg-zinc-900 border-r border-b border-border/80" />
+      </div>
+    </div>
+  );
+}
+
 export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
   const { resolvedLanguage } = useTranslation();
   const zh = resolvedLanguage === 'zh';
@@ -191,19 +302,42 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
       </div>}
 
       {error && <div role="alert" className="rounded-lg bg-red-500/10 p-3 text-xs text-red-500">{error}<button type="button" className="ml-2 underline" onClick={() => void sync()}>{text('重试', 'Retry')}</button></div>}
-      <details className="rounded-lg border border-border/40 px-3 py-2 text-xs" open={platforms.some(p => ['error', 'login_required', 'unavailable', 'partial'].includes(p.status)) || undefined}>
-        <summary className="cursor-pointer text-muted-foreground">{text('平台同步状态', 'Platform sync status')} · {platforms.filter(p => ['ready', 'incremental', 'empty'].includes(p.status)).length}/{platforms.length}</summary>
-        <div className="mt-2 max-h-36 space-y-2 overflow-y-auto">
-          {!enabledIds.size && <p>{text('请先启用网页 AI 动作，然后在 IOX 中登录。', 'Enable a web AI action and sign in within IOX first.')}</p>}
-          {platforms.map(p => <div key={p.actionId} className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{p.platform}</span>
-            <span className={cn('text-muted-foreground', ['error', 'unavailable', 'login_required', 'partial'].includes(p.status) && 'text-amber-600 dark:text-amber-400')} title={p.error ?? undefined}>{statusLabel(p.status)}</span>
-            {p.count > 0 && <span className="text-muted-foreground">{p.count}</span>}
-            {!activeStatuses.has(p.status) && <button type="button" className="text-primary hover:underline" onClick={() => void openPlatform(p.actionId)}>{text('打开平台', 'Open platform')}</button>}
-            {p.error && <span className="w-full break-words text-[11px] text-muted-foreground">{p.error}</span>}
-          </div>)}
+      {/* Horizontal Circular Platform Sync Status Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-border/40 bg-background/30 px-3.5 py-2.5 no-scrollbar select-none">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="text-xs font-medium text-muted-foreground shrink-0">{text('平台状态', 'Platforms')}:</span>
+          {!enabledIds.size ? (
+            <span className="text-xs text-muted-foreground">{text('请先启用网页 AI 动作，然后在 IOX 中登录。', 'Enable a web AI action and sign in within IOX first.')}</span>
+          ) : (
+            platforms.map(p => {
+              const action = actionMap.get(p.actionId);
+              return (
+                <PlatformSyncBadge
+                  key={p.actionId}
+                  platform={p}
+                  actionIcon={action?.icon}
+                  isSelected={platform === p.actionId}
+                  onClick={() => setPlatform(prev => (prev === p.actionId ? '' : p.actionId))}
+                  onDoubleClick={() => void openPlatform(p.actionId)}
+                  statusLabel={statusLabel(p.status)}
+                  text={text}
+                />
+              );
+            })
+          )}
         </div>
-      </details>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0">
+          <span>
+            {text(
+              `已就绪 ${platforms.filter(p => ['ready', 'incremental', 'empty'].includes(p.status)).length}/${platforms.length}`,
+              `${platforms.filter(p => ['ready', 'incremental', 'empty'].includes(p.status)).length}/${platforms.length} ready`
+            )}
+          </span>
+          {platforms.some(p => p.status === 'login_required') && (
+            <span className="text-amber-500 font-medium">· {text('需登录', 'Sign in required')}</span>
+          )}
+        </div>
+      </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-border/40 bg-background/20">
         {loading ? <p className="p-6 text-sm text-muted-foreground">{text('正在加载…', 'Loading…')}</p> : groups.length === 0 ? (
