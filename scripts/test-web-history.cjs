@@ -21,6 +21,23 @@ async function main() {
     await page.route('https://history.test/**', route => route.fulfill({ contentType: 'text/html', body: '<body></body>' }));
     await page.goto('https://history.test/');
 
+    const cached = Array.from({length:50}, (_,i) => ({url:`https://history.test/c/cache-${i}`, title:`Cached ${i}`, dateStart:null, dateEnd:null, precision:'unknown'}));
+    await page.setContent('<aside>' + cached.slice(0,40).map(row=>`<a href="${row.url}">${row.title}</a>`).join('') + '</aside>');
+    await page.evaluate(rows => { window.__ioxHistoryCache = rows; delete window.__ioxHistoryCollector; }, cached);
+    for(let i=0;i<4;i++) await page.evaluate(collector);
+    assert.equal((await page.evaluate(collector)).status, 'incremental', 'Unchanged cached frontier should finish without traversing all history');
+    await page.evaluate(() => { delete window.__ioxHistoryCollector; document.querySelector('aside').prepend(Object.assign(document.createElement('a'), {href:'/c/new-row',textContent:'Newly created'})); });
+    for(let i=0;i<4;i++) await page.evaluate(collector);
+    assert.equal((await page.evaluate(collector)).status, 'incremental');
+    assert.ok((await page.evaluate(collector)).entries.some(row=>row.url.endsWith('/new-row')),'New rows must be returned before stopping on known history');
+    await page.evaluate(() => { delete window.__ioxHistoryCollector; document.querySelector('aside').lastElementChild.textContent='Renamed old conversation'; });
+    for(let i=0;i<4;i++) await page.evaluate(collector);
+    assert.equal((await page.evaluate(collector)).status, 'collecting','A changed tail is not an unchanged frontier');
+    await page.evaluate(() => { delete window.__ioxHistoryCache; delete window.__ioxHistoryCollector; });
+    for(let i=0;i<4;i++) await page.evaluate(collector);
+    assert.equal((await page.evaluate(collector)).status, 'collecting', 'Full sync must not stop on the cached frontier');
+    await page.goto('https://history.test/');
+
     // Public Qianwen sidebar uses non-anchor session rows plus nested tool buttons.
     await page.route('https://www.qianwen.com/**', route => route.fulfill({ contentType: 'text/html', body: '<body></body>' }));
     await page.goto('https://www.qianwen.com/');

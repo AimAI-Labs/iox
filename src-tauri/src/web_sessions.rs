@@ -9,7 +9,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 static STORE_LOCK: Mutex<()> = Mutex::new(());
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebSession {
     pub id: String,
@@ -24,7 +24,7 @@ pub struct WebSession {
     pub source_order: usize,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformSync {
     pub action_id: String,
@@ -35,7 +35,7 @@ pub struct PlatformSync {
     pub error: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryCache {
     pub version: u32,
@@ -111,15 +111,14 @@ pub fn same_platform_origin(left: &str, right: &str) -> bool {
     })
 }
 
-fn store_path() -> Result<PathBuf, String> {
-    let root = std::env::var_os("APPDATA").ok_or("APPDATA is unavailable")?;
+fn store_path() -> PathBuf {
     // Keep manual bookmarks untouched. They are not platform history.
     let name = if cfg!(debug_assertions) {
         "web-history-dev.json"
     } else {
         "web-history.json"
     };
-    Ok(PathBuf::from(root).join("iox").join(name))
+    crate::config::AppConfig::config_dir().join(name)
 }
 
 impl HistoryCache {
@@ -151,7 +150,12 @@ impl HistoryCache {
         fs::rename(temp, path).map_err(|e| e.to_string())
     }
 
-    fn replace_sidebar(&mut self, status: PlatformSync, origin: &str, entries: Vec<SidebarEntry>) {
+    fn replace_sidebar(
+        &mut self,
+        mut status: PlatformSync,
+        origin: &str,
+        entries: Vec<SidebarEntry>,
+    ) {
         let mut sessions = vec![];
         let mut seen = std::collections::HashSet::new();
         for entry in entries.into_iter().take(2000) {
@@ -186,12 +190,56 @@ impl HistoryCache {
                 source_order: entry.source_order,
             });
         }
-        // Replace the source snapshot, rather than mixing different login accounts.
+        let mut existing: Vec<_> = self
+            .sessions
+            .iter()
+            .filter(|s| {
+                s.action_id == status.action_id
+                    && tauri::Url::parse(&s.url).is_ok_and(|url| {
+                        same_platform_origin(origin, &url.origin().ascii_serialization())
+                    })
+            })
+            .cloned()
+            .collect();
+        existing.sort_by_key(|s| s.source_order);
+        let merge = matches!(status.status.as_str(), "incremental" | "partial");
+        if merge {
+            for row in &mut sessions {
+                if row.precision == "unknown" {
+                    if let Some(old) = existing.iter().find(|old| old.id == row.id) {
+                        row.date_start = old.date_start;
+                        row.date_end = old.date_end;
+                        row.precision = old.precision.clone();
+                        row.date_label = old.date_label.clone();
+                    }
+                }
+            }
+            let observed: std::collections::HashSet<_> =
+                sessions.iter().map(|s| s.id.clone()).collect();
+            sessions.sort_by_key(|s| s.source_order);
+            sessions.extend(existing.into_iter().filter(|s| !observed.contains(&s.id)));
+            for (index, row) in sessions.iter_mut().enumerate() {
+                row.source_order = index;
+            }
+        }
+        // Only a complete scan can reconcile deletions. No overlap can simply mean many new chats.
         if !sessions.is_empty()
             || matches!(status.status.as_str(), "empty" | "login_required" | "ready")
         {
             self.sessions.retain(|s| s.action_id != status.action_id);
             self.sessions.extend(sessions);
+        }
+        status.count = self
+            .sessions
+            .iter()
+            .filter(|s| s.action_id == status.action_id)
+            .count();
+        if status.synced_at.is_none() {
+            status.synced_at = self
+                .platforms
+                .iter()
+                .find(|p| p.action_id == status.action_id)
+                .and_then(|p| p.synced_at);
         }
         self.platforms.retain(|p| p.action_id != status.action_id);
         self.platforms.push(status);
@@ -205,9 +253,13 @@ pub fn update_cache(
     entries: Vec<SidebarEntry>,
 ) -> Result<(), String> {
     let _guard = STORE_LOCK.lock().map_err(|e| e.to_string())?;
-    let path = store_path()?;
+    let path = store_path();
     let mut cache = HistoryCache::read(&path)?;
+    let previous = cache.clone();
     cache.replace_sidebar(status, origin, entries);
+    if cache == previous {
+        return Ok(());
+    }
     cache.write(&path)?;
     let _ = app.emit("web_sessions_changed", ());
     Ok(())
@@ -218,10 +270,14 @@ pub fn retain_sources(
     active: &std::collections::HashSet<String>,
 ) -> Result<(), String> {
     let _guard = STORE_LOCK.lock().map_err(|e| e.to_string())?;
-    let path = store_path()?;
+    let path = store_path();
     let mut cache = HistoryCache::read(&path)?;
+    let previous = cache.clone();
     cache.sessions.retain(|s| active.contains(&s.action_id));
     cache.platforms.retain(|p| active.contains(&p.action_id));
+    if cache == previous {
+        return Ok(());
+    }
     cache.write(&path)?;
     let _ = app.emit("web_sessions_changed", ());
     Ok(())
@@ -230,7 +286,7 @@ pub fn retain_sources(
 #[tauri::command]
 pub fn list_web_sessions() -> Result<HistoryCache, String> {
     let _guard = STORE_LOCK.lock().map_err(|e| e.to_string())?;
-    let mut cache = HistoryCache::read(&store_path()?)?;
+    let mut cache = HistoryCache::read(&store_path())?;
     cache.sessions.sort_by(|a, b| {
         b.date_end
             .cmp(&a.date_end)
@@ -353,5 +409,104 @@ mod tests {
         ] {
             assert!(normalize_url(raw).is_err());
         }
+    }
+
+    #[test]
+    fn incremental_updates_keep_older_rows_and_update_existing_titles() {
+        let mut cache = HistoryCache::default();
+        cache.replace_sidebar(
+            status("ready"),
+            "https://chatgpt.com",
+            vec![
+                entry("https://chatgpt.com/c/old"),
+                entry("https://chatgpt.com/c/current"),
+            ],
+        );
+        let mut changed = entry("https://chatgpt.com/c/current");
+        changed.title = "Renamed on website".into();
+        changed.date_start = None;
+        changed.date_end = None;
+        changed.precision = "unknown".into();
+        cache.replace_sidebar(
+            status("incremental"),
+            "https://chatgpt.com",
+            vec![entry("https://chatgpt.com/c/new"), changed],
+        );
+        assert_eq!(cache.sessions.len(), 3);
+        let current = cache
+            .sessions
+            .iter()
+            .find(|s| s.url.ends_with("/current"))
+            .unwrap();
+        assert_eq!(current.title, "Renamed on website");
+        assert_eq!(current.date_end, Some(1700000000));
+        assert_eq!(cache.platforms[0].count, 3);
+    }
+
+    #[test]
+    fn incomplete_scans_preserve_overlap_but_complete_scans_reconcile_deletions() {
+        let mut cache = HistoryCache::default();
+        cache.replace_sidebar(
+            status("ready"),
+            "https://chatgpt.com",
+            vec![
+                entry("https://chatgpt.com/c/1"),
+                entry("https://chatgpt.com/c/2"),
+            ],
+        );
+        cache.replace_sidebar(
+            status("partial"),
+            "https://chatgpt.com",
+            vec![entry("https://chatgpt.com/c/2")],
+        );
+        assert_eq!(cache.sessions.len(), 2);
+        cache.replace_sidebar(status("error"), "", vec![]);
+        assert_eq!(cache.sessions.len(), 2);
+        cache.replace_sidebar(
+            status("ready"),
+            "https://chatgpt.com",
+            vec![entry("https://chatgpt.com/c/2")],
+        );
+        assert_eq!(cache.sessions.len(), 1);
+    }
+
+    #[test]
+    fn queued_updates_preserve_cache_metadata_and_repeated_updates_are_idempotent() {
+        let mut cache = HistoryCache::default();
+        cache.replace_sidebar(
+            status("ready"),
+            "https://chatgpt.com",
+            vec![
+                entry("https://chatgpt.com/c/1"),
+                entry("https://chatgpt.com/c/2"),
+            ],
+        );
+        let mut queued = status("queued");
+        queued.synced_at = None;
+        queued.count = 0;
+        cache.replace_sidebar(queued.clone(), "https://chatgpt.com", vec![]);
+        assert_eq!(cache.platforms[0].count, 2);
+        assert_eq!(cache.platforms[0].synced_at, Some(1800000000));
+        let previous = cache.clone();
+        cache.replace_sidebar(queued, "https://chatgpt.com", vec![]);
+        assert_eq!(cache, previous);
+    }
+
+    #[test]
+    fn disjoint_partial_results_do_not_delete_older_cached_conversations() {
+        let mut cache = HistoryCache::default();
+        cache.replace_sidebar(
+            status("ready"),
+            "https://chatgpt.com",
+            vec![entry("https://chatgpt.com/c/old")],
+        );
+        cache.replace_sidebar(
+            status("partial"),
+            "https://chatgpt.com",
+            vec![entry("https://chatgpt.com/c/new")],
+        );
+        assert_eq!(cache.sessions.len(), 2);
+        cache.replace_sidebar(status("login_required"), "https://chatgpt.com", vec![]);
+        assert!(cache.sessions.is_empty());
     }
 }

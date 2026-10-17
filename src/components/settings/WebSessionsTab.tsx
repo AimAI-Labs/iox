@@ -40,8 +40,8 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
     }
   }, []);
 
-  const sync = useCallback(async () => {
-    try { await invoke('sync_web_sessions'); await load(); }
+  const sync = useCallback(async (fullSync = false, skipFresh = false) => {
+    try { await invoke('sync_web_sessions', { fullSync, skipFresh }); await load(); }
     catch (e) { setError(String(e)); }
   }, [load]);
 
@@ -49,8 +49,8 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
     let alive = true;
     void load();
     const subscription = listen('web_sessions_changed', () => { if (alive) void load(); });
-    void subscription.then(() => { if (alive) void sync(); }).catch(e => { if (alive) setError(String(e)); });
-    const timer = window.setInterval(() => void sync(), 180_000);
+    void subscription.then(() => { if (alive) void sync(false, true); }).catch(e => { if (alive) setError(String(e)); });
+    const timer = window.setInterval(() => void sync(false, true), 180_000);
     return () => {
       alive = false;
       generation.current++;
@@ -62,6 +62,7 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
   const enabledIds = useMemo(() => new Set(actions.filter(a => a.actionType === 'web' && a.enabled).map(a => a.id)), [actions]);
   const platforms = history.platforms.filter(p => enabledIds.has(p.actionId));
   const syncing = platforms.some(p => activeStatuses.has(p.status));
+  const lastChecked = Math.max(0, ...platforms.map(p => p.syncedAt ?? 0));
   const sessions = useMemo(() => history.sessions.filter(s => enabledIds.has(s.actionId)), [history.sessions, enabledIds]);
   const filtered = useMemo(() => filterHistory(sessions, { query, platform, time, from, to }), [sessions, query, platform, time, from, to]);
   const groups = useMemo(() => groupHistory(filtered), [filtered]);
@@ -73,6 +74,7 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
   const statusLabel = (status: PlatformSync['status']) => ({
     queued: text('等待同步', 'Queued'), collecting: text('正在读取侧栏', 'Reading sidebar'),
     ready: text('已同步侧栏', 'Sidebar synced'), empty: text('暂无会话', 'No conversations'),
+    incremental: text('增量已同步', 'Up to date'),
     partial: text('已加载部分历史', 'Partial history'), login_required: text('需要登录', 'Sign in required'),
     unavailable: text('未识别到侧栏', 'Sidebar not recognized'), error: text('同步失败', 'Sync failed'),
   }[status]);
@@ -107,9 +109,12 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
           <h2 className="text-lg font-semibold">{text('网页会话', 'Web conversations')}</h2>
           <p className="mt-1 text-xs text-muted-foreground">{text('自动聚合已登录平台的侧栏会话，按平台会话时间排列。', 'Automatically collect signed-in sidebar conversations, ordered by their platform dates.')}</p>
         </div>
-        <button className={cn(buttonClass, 'shrink-0')} type="button" disabled={syncing} onClick={() => void sync()}>
-          <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />{syncing ? text('同步中', 'Syncing') : text('同步会话', 'Sync history')}
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button className={buttonClass} type="button" disabled={syncing} onClick={() => void sync()}>
+            <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />{syncing ? text('同步中', 'Syncing') : text('增量同步', 'Sync changes')}
+          </button>
+          <button className={buttonClass} type="button" disabled={syncing} onClick={() => void sync(true)} title={text('重新扫描全部历史，校准较早会话的改名和删除', 'Rescan all history to reconcile older changes and deletions')}>{text('全量同步', 'Full sync')}</button>
+        </div>
       </header>
 
       <div className="flex flex-wrap gap-2">
@@ -136,7 +141,7 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
 
       {error && <div role="alert" className="rounded-lg bg-red-500/10 p-3 text-xs text-red-500">{error}<button type="button" className="ml-2 underline" onClick={() => void sync()}>{text('重试', 'Retry')}</button></div>}
       <details className="rounded-lg border border-border/40 px-3 py-2 text-xs" open={platforms.some(p => ['error', 'login_required', 'unavailable', 'partial'].includes(p.status)) || undefined}>
-        <summary className="cursor-pointer text-muted-foreground">{text('平台同步状态', 'Platform sync status')} · {platforms.filter(p => ['ready', 'empty'].includes(p.status)).length}/{platforms.length}</summary>
+        <summary className="cursor-pointer text-muted-foreground">{text('平台同步状态', 'Platform sync status')} · {platforms.filter(p => ['ready', 'incremental', 'empty'].includes(p.status)).length}/{platforms.length}</summary>
         <div className="mt-2 max-h-36 space-y-2 overflow-y-auto">
           {!enabledIds.size && <p>{text('请先启用网页 AI 动作，然后在 IOX 中登录。', 'Enable a web AI action and sign in within IOX first.')}</p>}
           {platforms.map(p => <div key={p.actionId} className="flex flex-wrap items-center gap-2">
@@ -168,7 +173,7 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
         </div>)}
       </div>
       <footer className="flex flex-wrap justify-between gap-1 text-[10px] leading-relaxed text-muted-foreground">
-        <span>{text(`显示 ${filtered.length} / ${sessions.length} 条`, `${filtered.length} / ${sessions.length} conversations`)}</span>
+        <span>{text(`显示 ${filtered.length} / ${sessions.length} 条缓存`, `${filtered.length} / ${sessions.length} cached conversations`)}{lastChecked > 0 && ` · ${text('最近检查 ', 'Last checked ')}${new Date(lastChecked * 1000).toLocaleTimeString(resolvedLanguage, {hour: '2-digit', minute: '2-digit'})}`}</span>
         <span>{text('日期范围按重叠筛选；未提供日期的会话仅在“全部时间”显示。', 'Date ranges match by overlap; undated chats appear under All time only.')}</span>
       </footer>
     </section>

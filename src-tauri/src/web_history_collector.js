@@ -1,7 +1,10 @@
 // Executed only in an IOX-owned background WebView. No network calls or privileged IPC.
 (() => {
   try {
-    const state = window.__ioxHistoryCollector ||= { entries: new Map(), ticks: 0, stable: 0, lastSize: 0 };
+    const state = window.__ioxHistoryCollector ||= {
+      entries: new Map(), ticks: 0, stable: 0, lastSize: 0, scrollPasses: 0,
+      known: new Map((window.__ioxHistoryCache || []).map(row => [row.url, row])),
+    };
     state.ticks++;
     const visible = el => {
       if (!(el instanceof HTMLElement) || !el.getClientRects().length) return false;
@@ -142,7 +145,9 @@
         const previous = state.entries.get(url);
         const stableDate = date.precision === 'unknown' && previous && previous.precision !== 'unknown'
           ? { dateStart: previous.dateStart, dateEnd: previous.dateEnd, precision: previous.precision, dateLabel: previous.dateLabel } : date;
-        state.entries.set(url, { url, title, ...stableDate, sourceOrder: previous?.sourceOrder ?? state.entries.size });
+        const pin = el.querySelector('[title="置顶"],[aria-label="置顶"],[title="Pinned"],[aria-label="Pinned"],use[href*="pin-fill"]');
+        const pinned = el.getAttribute('data-pinned') === 'true' || !!pin?.getClientRects().length;
+        state.entries.set(url, { url, title, ...stableDate, pinned, sourceOrder: previous?.sourceOrder ?? state.entries.size });
       }
     }
 
@@ -182,10 +187,22 @@
       if (more) { more.click(); scrolling = true; }
     }
     const size = state.entries.size;
+    if (scrolling) state.scrollPasses++;
     state.stable = size === state.lastSize && !scrolling && !loading ? state.stable + 1 : 0;
     state.lastSize = size;
     if (size >= 2000 || state.ticks >= 60) return result(size ? 'partial' : 'unavailable');
     if (size && state.stable >= 3 && explicitEnd) return result('ready');
+    if (state.known.size && !loading && state.ticks >= 3 && (state.scrollPasses >= 2 || state.stable >= 2)) {
+      let unchangedTail = 0;
+      for (const row of [...state.entries.values()].reverse()) {
+        const cached = state.known.get(row.url);
+        if (!cached || row.pinned || cached.title !== row.title
+          || (row.precision !== 'unknown' && (cached.precision !== row.precision || cached.dateStart !== row.dateStart || cached.dateEnd !== row.dateEnd))) break;
+        unchangedTail++;
+      }
+      // Require a substantial read window and overlap band; never stop on an isolated pinned row.
+      if (size >= Math.min(40, state.known.size) && unchangedTail >= Math.min(10, state.known.size)) return result('incremental');
+    }
     // A quiet viewport alone cannot prove that the remote history is complete.
     if (size && state.stable >= 15) return result('partial');
     if (!size && state.ticks >= 25 && !loading && document.readyState !== 'loading') {

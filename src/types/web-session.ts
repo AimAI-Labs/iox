@@ -14,7 +14,7 @@ export interface WebSession {
 export interface PlatformSync {
   actionId: string;
   platform: string;
-  status: 'queued' | 'collecting' | 'ready' | 'empty' | 'partial' | 'login_required' | 'unavailable' | 'error';
+  status: 'queued' | 'collecting' | 'ready' | 'incremental' | 'empty' | 'partial' | 'login_required' | 'unavailable' | 'error';
   count: number;
   syncedAt: number | null;
   error: string | null;

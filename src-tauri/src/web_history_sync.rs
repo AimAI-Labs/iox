@@ -1,6 +1,6 @@
 use crate::{
     config::ActionConfig,
-    web_sessions::{self, PlatformSync, SidebarEntry},
+    web_sessions::{self, PlatformSync, SidebarEntry, WebSession},
     AppState,
 };
 use serde::Deserialize;
@@ -13,6 +13,37 @@ use tauri::{AppHandle, Manager, Webview, WebviewUrl, WebviewWindow, WebviewWindo
 
 static SYNC_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 const COLLECTOR: &str = include_str!("web_history_collector.js");
+const CACHE_FRESH_SECONDS: u64 = 180;
+
+fn recent_success(status: Option<&PlatformSync>, timestamp: u64) -> bool {
+    status.is_some_and(|status| {
+        matches!(
+            status.status.as_str(),
+            "ready" | "empty" | "partial" | "incremental"
+        ) && status
+            .synced_at
+            .is_some_and(|at| timestamp >= at && timestamp - at < CACHE_FRESH_SECONDS)
+    })
+}
+
+fn cache_seed(origin: &str, cached: &[WebSession], full_sync: bool) -> Result<String, String> {
+    let rows: Vec<_> = cached
+        .iter()
+        .take(if full_sync { 0 } else { 2000 })
+        .map(|row| {
+            serde_json::json!({
+                "url": row.url, "title": row.title, "dateStart": row.date_start,
+                "dateEnd": row.date_end, "precision": row.precision,
+            })
+        })
+        .collect();
+    // Initialization scripts also run after authentication redirects; never expose history there.
+    Ok(format!(
+        "if (location.origin === {}) {{ window.__ioxHistoryCache = {}; }}",
+        serde_json::to_string(origin).map_err(|e| e.to_string())?,
+        serde_json::to_string(&rows).map_err(|e| e.to_string())?,
+    ))
+}
 
 #[derive(Deserialize)]
 struct Snapshot {
@@ -82,6 +113,8 @@ async fn sync_platform(
     app: &AppHandle,
     action: &ActionConfig,
     platform: &str,
+    cached: &[WebSession],
+    full_sync: bool,
 ) -> Result<(), String> {
     let url = web_sessions::action_url(action)?;
     let initial_origin = url.origin().ascii_serialization();
@@ -115,6 +148,7 @@ async fn sync_platform(
             .focused(false)
             .skip_taskbar(true)
             .inner_size(1200.0, 900.0)
+            .initialization_script(cache_seed(&initial_origin, cached, full_sync)?)
             .on_navigation(move |target| {
                 matches!(target.scheme(), "http" | "https")
                     && crate::ai::web_action::is_allowed_internal_navigation(&origin, target)
@@ -192,7 +226,11 @@ async fn sync_platform(
                     error: read_error,
                 },
                 &snapshot.origin,
-                snapshot.entries,
+                if done || cached.is_empty() {
+                    snapshot.entries
+                } else {
+                    vec![]
+                },
             )?;
             previous = raw;
         }
@@ -205,7 +243,12 @@ async fn sync_platform(
         PlatformSync {
             action_id: action.id.clone(),
             platform: platform.into(),
-            status: "partial".into(),
+            status: if last_count > 0 {
+                "partial"
+            } else {
+                "unavailable"
+            }
+            .into(),
             count: last_count,
             synced_at: Some(now()),
             error: Some("History loading reached the time limit".into()),
@@ -216,7 +259,11 @@ async fn sync_platform(
 }
 
 #[tauri::command]
-pub async fn sync_web_sessions(app: AppHandle) -> Result<(), String> {
+pub async fn sync_web_sessions(
+    app: AppHandle,
+    full_sync: Option<bool>,
+    skip_fresh: Option<bool>,
+) -> Result<(), String> {
     let Ok(guard) = SYNC_LOCK.try_lock() else {
         return Ok(());
     };
@@ -226,6 +273,9 @@ pub async fn sync_web_sessions(app: AppHandle) -> Result<(), String> {
         .lock()
         .map_err(|e| e.to_string())?
         .clone();
+    let cached = web_sessions::list_web_sessions()?;
+    let full_sync = full_sync.unwrap_or(false);
+    let skip_fresh = skip_fresh.unwrap_or(false) && !full_sync;
     let mut origins = HashSet::new();
     let mut active_sources = HashSet::new();
     let mut jobs = vec![];
@@ -259,6 +309,29 @@ pub async fn sync_web_sessions(app: AppHandle) -> Result<(), String> {
         }
         active_sources.insert(action.id.clone());
         let platform = platform_name(&action, url.host_str().unwrap_or(""));
+        let previous = cached
+            .platforms
+            .iter()
+            .find(|p| p.action_id == action.id && p.platform == platform);
+        let source_rows: Vec<_> = cached
+            .sessions
+            .iter()
+            .filter(|row| {
+                row.action_id == action.id
+                    && tauri::Url::parse(&row.url).is_ok_and(|target| {
+                        web_sessions::same_platform_origin(
+                            &url.origin().ascii_serialization(),
+                            &target.origin().ascii_serialization(),
+                        )
+                    })
+            })
+            .cloned()
+            .collect();
+        let changed_origin =
+            source_rows.is_empty() && cached.sessions.iter().any(|row| row.action_id == action.id);
+        if skip_fresh && !changed_origin && recent_success(previous, now()) {
+            continue;
+        }
         web_sessions::update_cache(
             &app,
             PlatformSync {
@@ -272,13 +345,13 @@ pub async fn sync_web_sessions(app: AppHandle) -> Result<(), String> {
             &url.origin().ascii_serialization(),
             vec![],
         )?;
-        jobs.push((action, platform));
+        jobs.push((action, platform, source_rows));
     }
     web_sessions::retain_sources(&app, &active_sources)?;
     tauri::async_runtime::spawn(async move {
         let _guard = guard;
-        for (action, platform) in jobs {
-            if let Err(error) = sync_platform(&app, &action, &platform).await {
+        for (action, platform, rows) in jobs {
+            if let Err(error) = sync_platform(&app, &action, &platform, &rows, full_sync).await {
                 let status = PlatformSync {
                     action_id: action.id,
                     platform,
@@ -294,4 +367,48 @@ pub async fn sync_web_sessions(app: AppHandle) -> Result<(), String> {
         }
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn cache_seed_is_origin_scoped_and_contains_only_comparison_fields() {
+        let row = WebSession {
+            id: "private-id".into(),
+            action_id: "private-action".into(),
+            platform: "private-platform".into(),
+            title: "Cached title".into(),
+            url: "https://chatgpt.com/c/1".into(),
+            date_start: Some(1000),
+            date_end: Some(1000),
+            precision: "exact".into(),
+            date_label: "private-label".into(),
+            source_order: 99,
+        };
+        let seed = cache_seed("https://chatgpt.com", &[row.clone()], false).unwrap();
+        assert!(seed.starts_with("if (location.origin === \"https://chatgpt.com\") {"));
+        assert!(seed.contains("Cached title"));
+        assert!(seed.contains("\"dateStart\":1000"));
+        assert!(!seed.contains("private-"));
+        let full = cache_seed("https://chatgpt.com", &[row], true).unwrap();
+        assert!(full.contains("window.__ioxHistoryCache = [];"));
+    }
+    #[test]
+    fn recent_success_uses_ttl_and_never_hides_failures_or_clock_changes() {
+        let mut status = PlatformSync {
+            action_id: "a".into(),
+            platform: "AI".into(),
+            status: "incremental".into(),
+            count: 5,
+            synced_at: Some(1000),
+            error: None,
+        };
+        assert!(recent_success(Some(&status), 1100));
+        assert!(!recent_success(Some(&status), 1180));
+        assert!(!recent_success(Some(&status), 999));
+        status.status = "error".into();
+        assert!(!recent_success(Some(&status), 1100));
+        assert!(!recent_success(None, 1100));
+    }
 }
