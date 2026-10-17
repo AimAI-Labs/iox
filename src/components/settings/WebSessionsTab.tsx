@@ -345,55 +345,64 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
             <p className="text-sm">{syncing ? text('正在读取各平台的历史会话…', 'Reading platform history…') : sessions.length ? text('没有符合筛选条件的会话', 'No conversations match your filters') : text('尚未同步到侧栏会话', 'No sidebar conversations synced yet')}</p>
             <p className="mt-2 text-xs">{text('请在 IOX 内登录平台。读取失败时可打开平台检查侧栏，再重新同步。', 'Sign in within IOX. If reading fails, open the platform, check its sidebar and sync again.')}</p>
           </div>
-        ) : groups.map(group => <div key={group.key}>
-          <h3 className="sticky top-0 z-10 border-b border-border/30 bg-background/95 px-4 py-2 text-[11px] font-medium text-muted-foreground backdrop-blur-sm">{groupLabel(group.key, group.sessions[0])}<span className="ml-2 opacity-60">{group.sessions.length}</span></h3>
-          {group.sessions.map(session => {
-            const action = actionMap.get(session.actionId);
-            const iconName = action?.icon || session.platform;
+        ) : groups.map(group => (
+          <div key={group.key} className="pb-2.5">
+            <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-1.5 backdrop-blur-xs">
+              <h3 className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/95 dark:bg-zinc-800/90 px-2.5 py-0.5 text-[11px] font-medium text-foreground/85 shadow-2xs">
+                <span>{groupLabel(group.key, group.sessions[0])}</span><span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/10 px-1 text-[10px] font-semibold text-primary">{group.sessions.length}</span>
+              </h3>
+              <div className="h-px flex-1 bg-border/30" />
+            </div>
+            <div className="space-y-0.5 px-1.5">
+              {group.sessions.map(session => {
+                const action = actionMap.get(session.actionId);
+                const iconName = action?.icon || session.platform;
 
-            return (
-              <div key={session.id} className="group flex items-center gap-1 border-b border-border/20 pr-3 hover:bg-primary/5">
-                <button
-                  type="button"
-                  className="flex min-w-0 flex-1 items-center gap-3 px-4 py-2.5 text-left outline-none focus-visible:bg-primary/10"
-                  disabled={!!opening}
-                  title={session.url}
-                  onClick={() => void open(session, false)}
-                >
-                  <div
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-black/5 dark:bg-white/5 text-muted-foreground transition-all group-hover:border-primary/30 group-hover:bg-primary/10"
-                    title={session.platform}
-                    data-platform={session.platform}
-                  >
-                    <DynamicIcon name={iconName} size={15} />
-                    <span className="sr-only">{session.platform}</span>
+                return (
+                  <div key={session.id} className="group flex items-center gap-1 rounded-lg pr-2 hover:bg-primary/5 transition-colors">
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left outline-none focus-visible:bg-primary/10 rounded-lg"
+                      disabled={!!opening}
+                      title={session.url}
+                      onClick={() => void open(session, false)}
+                    >
+                      <div
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-black/5 dark:bg-white/5 text-muted-foreground transition-all group-hover:border-primary/30 group-hover:bg-primary/10"
+                        title={session.platform}
+                        data-platform={session.platform}
+                      >
+                        <DynamicIcon name={iconName} size={15} />
+                        <span className="sr-only">{session.platform}</span>
+                      </div>
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground/90">{session.title}</span>
+                      {opening === session.id ? (
+                        <LoaderCircle size={13} className="shrink-0 animate-spin text-muted-foreground" />
+                      ) : (
+                        <span className="shrink-0 text-[10px] text-muted-foreground font-mono">
+                          {session.precision === 'exact' && session.dateEnd
+                            ? new Date(session.dateEnd * 1000).toLocaleTimeString(resolvedLanguage, { hour: '2-digit', minute: '2-digit' })
+                            : session.precision === 'range'
+                            ? text('范围', 'Range')
+                            : ''}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!!opening}
+                      className="rounded-md p-1.5 text-muted-foreground/70 hover:bg-primary/10 hover:text-primary transition-colors"
+                      aria-label={`${text('在浏览器打开', 'Open in browser')}: ${session.title}`}
+                      onClick={() => void open(session, true)}
+                    >
+                      <ExternalLink size={13} />
+                    </button>
                   </div>
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground/90">{session.title}</span>
-                  {opening === session.id ? (
-                    <LoaderCircle size={13} className="shrink-0 animate-spin text-muted-foreground" />
-                  ) : (
-                    <span className="shrink-0 text-[10px] text-muted-foreground font-mono">
-                      {session.precision === 'exact' && session.dateEnd
-                        ? new Date(session.dateEnd * 1000).toLocaleTimeString(resolvedLanguage, { hour: '2-digit', minute: '2-digit' })
-                        : session.precision === 'range'
-                        ? text('范围', 'Range')
-                        : ''}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  disabled={!!opening}
-                  className="rounded-md p-1.5 text-muted-foreground/70 hover:bg-primary/10 hover:text-primary transition-colors"
-                  aria-label={`${text('在浏览器打开', 'Open in browser')}: ${session.title}`}
-                  onClick={() => void open(session, true)}
-                >
-                  <ExternalLink size={13} />
-                </button>
-              </div>
-            );
-          })}
-        </div>)}
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
       <footer className="flex flex-wrap justify-between gap-1 text-[10px] leading-relaxed text-muted-foreground">
         <span>{text(`显示 ${filtered.length} / ${sessions.length} 条缓存`, `${filtered.length} / ${sessions.length} cached conversations`)}{lastChecked > 0 && ` · ${text('最近检查 ', 'Last checked ')}${new Date(lastChecked * 1000).toLocaleTimeString(resolvedLanguage, {hour: '2-digit', minute: '2-digit'})}`}</span>
