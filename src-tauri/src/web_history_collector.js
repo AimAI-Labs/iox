@@ -3,8 +3,13 @@
   try {
     const state = window.__ioxHistoryCollector ||= { entries: new Map(), ticks: 0, stable: 0, lastSize: 0 };
     state.ticks++;
-    const visible = el => el instanceof HTMLElement && el.getClientRects().length > 0;
-    const rowSelector = 'a,li,[role="listitem"],[data-conversation-id],[data-session-id],[data-href],[data-url],[class~="chat-item"],[class~="conversation-item"],[data-testid="chat_list_item"]';
+    const visible = el => {
+      if (!(el instanceof HTMLElement) || !el.getClientRects().length) return false;
+      const style = getComputedStyle(el);
+      return style.visibility !== 'hidden' && style.display !== 'none' && !el.closest('[aria-hidden="true"]');
+    };
+    const rowSelector = 'a,li,[role="listitem"],[data-conversation-id],[data-session-id],[data-href],[data-url],[data-track-name$="_list"][data-track-id],[class~="chat-item"],[class~="conversation-item"],[data-testid="chat_list_item"]';
+    const messageSelector = 'article,[data-message-id],[data-testid*="message"],[data-role="assistant"],[data-role="user"],[class*="markdown"],[class*="message-content"],[class*="chat-message"]';
     const text = el => (el?.innerText || el?.textContent || '').trim();
     const day = value => { const d = new Date(value); d.setHours(0, 0, 0, 0); return d; };
     const bounds = (from, to, precision, label) => ({ dateStart: Math.floor(from.getTime() / 1000), dateEnd: Math.floor(to.getTime() / 1000), precision, dateLabel: label });
@@ -49,7 +54,8 @@
         const url = new URL(raw, location.href);
         if (url.origin !== location.origin || !/^https?:$/.test(url.protocol)) return null;
         const path = url.hash.startsWith('#/') ? url.hash.slice(1).split('?')[0] : url.pathname;
-        const match = path.match(/\/(?:a\/chat\/s|c|chat|conversation|conversations|session|app)\/([^/?#]+)\/?$/);
+        const kinds = location.hostname === 'aistudio.xiaomimimo.com' ? 'a/chat/s|c|chat|conversation|conversations|session|app|ultra|voice' : 'a/chat/s|c|chat|conversation|conversations|session|app';
+        const match = path.match(new RegExp(`/(?:${kinds})/([^/?#]+)/?$`));
         const queryId = ['conversation_id', 'conversationId', 'sessionId', 'chatId'].find(key => url.searchParams.get(key));
         if (!match && !queryId) return null;
         if (match && /^(new|create|history|login|settings|all)$/i.test(match[1])) return null;
@@ -59,26 +65,57 @@
       } catch { return null; }
     };
     const rowUrl = el => {
+      if (el.getAttribute('data-session-switch-target') === 'session-tools') return null;
       const explicit = el.getAttribute('href') || el.getAttribute('data-href') || el.getAttribute('data-url');
       if (explicit) return canonical(explicit);
+      if (location.hostname === 'aistudio.xiaomimimo.com') {
+        const name = el.getAttribute('data-track-name') || '';
+        const tracking = el.getAttribute('data-track-id') || '';
+        const prefix = `${name}_`;
+        if (name.endsWith('_list') && tracking.startsWith(prefix)) {
+          const id = tracking.slice(prefix.length);
+          if (/^[\w-]+$/.test(id) && !/claw/i.test(name)) {
+            const mode = /ultra/i.test(name) ? 'ultra' : /voice/i.test(name) ? 'voice' : 'chat';
+            return canonical(`${location.origin}/#/${mode}/${encodeURIComponent(id)}`);
+          }
+        }
+      }
       const id = el.getAttribute('data-conversation-id') || el.getAttribute('data-session-id');
       if (!id || /^(new|create)$/i.test(id)) return null;
       const routes = {
         'chat.deepseek.com': '/a/chat/s/', 'chatgpt.com': '/c/', 'chat.openai.com': '/c/',
         'claude.ai': '/chat/', 'kimi.com': '/chat/', 'www.kimi.com': '/chat/',
         'www.doubao.com': '/chat/', 'doubao.com': '/chat/', 'chat.qwen.ai': '/c/',
+        'www.qianwen.com': '/chat/', 'qianwen.com': '/chat/',
       };
       return routes[location.hostname] ? canonical(routes[location.hostname] + encodeURIComponent(id)) : null;
     };
 
     const roots = [...document.querySelectorAll('aside, nav, [role="navigation"], [data-testid*="sidebar"], [class*="sidebar"], [class*="Sidebar"], [class*="sider"], [class*="conversation-list"], [class*="chat-list"], [class*="chat-history"], [class*="history-list"]')]
-      .filter(el => visible(el) && !el.closest('main, [role="main"]'));
-    const containers = roots.filter(root => !roots.some(other => other !== root && other.contains(root)));
+      .filter(el => visible(el) && !el.closest(messageSelector));
+    // Some platform layouts use only hashed class names, or nest the sidebar in main.
+    // Infer a narrow left-hand list from actual conversation links/IDs, never from prose.
+    const candidates = [...document.querySelectorAll('a[href],[data-session-id],[data-conversation-id],[data-track-name$="_list"][data-track-id]')]
+      .filter(el => visible(el) && !el.closest(messageSelector) && rowUrl(el));
+    for (const row of candidates) {
+      for (let el = row.parentElement; el && el !== document.body; el = el.parentElement) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width >= 140 && rect.width <= Math.min(480, innerWidth * 0.5)
+          && rect.left < 80 && rect.right <= innerWidth * 0.55 && rect.height >= 180
+          && !el.querySelector('textarea,[contenteditable="true"],[role="textbox"]')
+          && !el.closest(messageSelector)) {
+          roots.push(el);
+          break;
+        }
+      }
+    }
+    const uniqueRoots = [...new Set(roots)];
+    const containers = uniqueRoots.filter(root => !uniqueRoots.some(other => other !== root && other.contains(root)));
     for (const root of containers) {
       let groupDate = null;
       // Traversal in DOM order preserves the platform's order within imprecise date groups.
-      for (const el of root.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"],div,span,p,li,a,[data-conversation-id],[data-session-id],[data-href],[data-url]')) {
-        if (!visible(el)) continue;
+      for (const el of root.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"],div,span,p,li,a,[data-conversation-id],[data-session-id],[data-href],[data-url],[data-track-name$="_list"][data-track-id]')) {
+        if (!visible(el) || el.closest(messageSelector)) continue;
         const label = text(el);
         // A title named "Today" is not a group heading.
         if (!el.closest(rowSelector) && !el.querySelector(rowSelector) && label.length < 45) {
@@ -90,12 +127,13 @@
             groupDate = { dateStart: null, dateEnd: null, precision: 'unknown', dateLabel: label };
           }
         }
-        if (el.tagName !== 'A' && !el.matches('[data-conversation-id],[data-session-id],[data-href],[data-url]')) continue;
+        if (el.tagName !== 'A' && !el.matches('[data-conversation-id],[data-session-id],[data-href],[data-url],[data-track-name$="_list"][data-track-id]')) continue;
         if (el.tagName !== 'A' && el.querySelector('a')) continue;
         const url = rowUrl(el);
         if (!url) continue;
         const row = el.closest('li,[role="listitem"],[data-testid*="history-item"]') || el;
-        const title = (el.getAttribute('title') || el.getAttribute('aria-label') || text(el)).trim().slice(0, 300);
+        const titleNode = el.querySelector('[class*="text-ellipsis"],[class*="truncate"],[title]');
+        const title = (el.getAttribute('title') || el.getAttribute('aria-label') || titleNode?.getAttribute('title') || text(titleNode) || text(el)).trim().slice(0, 300);
         if (!title) continue;
         const time = row.querySelector('time[datetime]');
         const rawDate = row.getAttribute('data-updated-at') || el.getAttribute('data-updated-at')
@@ -110,7 +148,8 @@
 
     const login = [...document.querySelectorAll('a,button')].some(el => visible(el) && /^(log in|sign in|登录|登入|立即登录)$/i.test(text(el)))
       || /\/(?:login|sign_in|signin)(?:\/|$)/.test(location.pathname);
-    const result = status => ({ origin: location.origin, status, entries: [...state.entries.values()] });
+    const result = status => ({ origin: location.origin, status, entries: [...state.entries.values()],
+      diagnostics: { containers: containers.length, candidates: candidates.length, pageState: document.readyState } });
     if (login && !state.entries.size && state.ticks > 3) return result('login_required');
 
     // Only controls in a hidden, dedicated history page are touched.
@@ -123,7 +162,7 @@
     let loading = false;
     let explicitEnd = false;
     for (const root of containers) {
-      loading ||= [...root.querySelectorAll('[aria-busy="true"],[role="progressbar"],[data-loading="true"]')].some(visible);
+      loading ||= [...root.querySelectorAll('[aria-busy="true"],[role="progressbar"],[data-loading="true"],[class*="skeleton"],[class*="Skeleton"]')].some(visible);
       explicitEnd ||= root.getAttribute('data-has-more') === 'false'
         || [...root.querySelectorAll('[data-has-more="false"]')].some(el => visible(el) && !el.closest(rowSelector))
         || [...root.querySelectorAll('p,span,div,footer,[role="status"]')].some(el => visible(el)
@@ -149,7 +188,7 @@
     if (size && state.stable >= 3 && explicitEnd) return result('ready');
     // A quiet viewport alone cannot prove that the remote history is complete.
     if (size && state.stable >= 15) return result('partial');
-    if (!size && state.ticks >= 12) {
+    if (!size && state.ticks >= 25 && !loading && document.readyState !== 'loading') {
       const empty = containers.some(el => /暂无(?:历史|会话|聊天)|no (?:conversations|chat history)|your chats will appear/i.test(text(el)));
       return result(empty ? 'empty' : 'unavailable');
     }

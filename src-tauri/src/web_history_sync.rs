@@ -20,6 +20,15 @@ struct Snapshot {
     status: String,
     entries: Vec<SidebarEntry>,
     error: Option<String>,
+    diagnostics: Option<SidebarDiagnostics>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SidebarDiagnostics {
+    containers: usize,
+    candidates: usize,
+    page_state: String,
 }
 
 struct BackgroundWindow(WebviewWindow);
@@ -155,6 +164,21 @@ async fn sync_platform(
                 .unwrap_or_else(|| "Cannot inspect sidebar".into()));
         }
         let done = snapshot.status != "collecting";
+        let read_error = if snapshot.status == "unavailable" {
+            if let Some(diagnostics) = &snapshot.diagnostics {
+                eprintln!("History sidebar scan: platform={platform}, containers={}, candidates={}, page_state={}",
+                    diagnostics.containers, diagnostics.candidates, diagnostics.page_state);
+                Some(if diagnostics.containers == 0 {
+                    "未找到历史列表，请打开平台确认侧栏已展开 / History list not found; check the platform sidebar".to_string()
+                } else {
+                    "已找到侧栏，但没有可读取的会话；请确认登录状态 / Sidebar found, but no readable conversations; check sign-in".to_string()
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         last_count = snapshot.entries.len();
         if raw != previous {
             web_sessions::update_cache(
@@ -165,7 +189,7 @@ async fn sync_platform(
                     status: snapshot.status,
                     count: last_count,
                     synced_at: if done { Some(now()) } else { None },
-                    error: None,
+                    error: read_error,
                 },
                 &snapshot.origin,
                 snapshot.entries,

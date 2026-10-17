@@ -20,6 +20,33 @@ async function main() {
     const page = await browser.newPage();
     await page.route('https://history.test/**', route => route.fulfill({ contentType: 'text/html', body: '<body></body>' }));
     await page.goto('https://history.test/');
+
+    // Public Qianwen sidebar uses non-anchor session rows plus nested tool buttons.
+    await page.route('https://www.qianwen.com/**', route => route.fulfill({ contentType: 'text/html', body: '<body></body>' }));
+    await page.goto('https://www.qianwen.com/');
+    await page.setContent('<aside><div role="list" class="sider-scrollbar"><div data-session-id="q-1" data-session-switch-target="normal"><div class="text-ellipsis">千问真实标题</div><button data-session-id="q-1" data-session-switch-target="session-tools">更多</button></div></div></aside>');
+    const qwenRows = (await page.evaluate(collector)).entries;
+    assert.equal(qwenRows.length, 1, 'Qianwen session rows must be recognized');
+    assert.equal(qwenRows[0].url, 'https://www.qianwen.com/chat/q-1');
+    assert.equal(qwenRows[0].title, '千问真实标题');
+
+    // MiMo's sidebar uses tracked div rows, and a hash router.
+    await page.route('https://aistudio.xiaomimimo.com/**', route => route.fulfill({ contentType: 'text/html', body: '<body></body>' }));
+    await page.goto('https://aistudio.xiaomimimo.com/#/c');
+    await page.setContent('<div style="display:flex"><div style="width:260px;height:700px"><div data-track-name="chat_history_list" data-track-id="chat_history_list_m-1"><span title="MiMo真实标题">MiMo真实标题</span></div></div><main style="width:800px"><article><a href="#/chat/message-link">正文链接</a></article></main></div>');
+    const mimoRows = (await page.evaluate(collector)).entries;
+    assert.equal(mimoRows.length, 1, 'MiMo tracked history rows must be recognized');
+    assert.equal(mimoRows[0].url, 'https://aistudio.xiaomimimo.com/#/chat/m-1');
+    await page.goto('https://history.test/');
+
+    // The application layout may itself be a main element; its left sidebar is still history.
+    await page.setContent('<main style="display:flex"><div class="f83a4" style="width:260px;height:700px"><a href="/a/chat/s/ds-1">DeepSeek标题</a><a href="/a/chat/s/ds-2">另一个会话</a></div><section style="width:800px"><article><a href="/a/chat/s/not-history">正文中的引用</a></article><textarea></textarea></section></main>');
+    assert.equal((await page.evaluate(collector)).entries.length, 2, 'Hashed sidebar containers inside app main must be discovered');
+    await page.evaluate(() => { delete window.__ioxHistoryCollector; });
+    await page.setContent('<aside><div aria-busy="true" class="skeleton">Loading</div></aside>');
+    for (let i = 0; i < 14; i++) await page.evaluate(collector);
+    assert.equal((await page.evaluate(collector)).status, 'collecting', 'Slow loading must not become an unrecognized-sidebar failure');
+    await page.goto('https://history.test/');
     await page.setContent(`<aside>
       <h3>今天</h3><a href="/c/a">Today chat</a><a href="/c/a?utm_source=other">Duplicate</a>
       <h3>昨天</h3><a href="/c/b">Yesterday chat</a>
