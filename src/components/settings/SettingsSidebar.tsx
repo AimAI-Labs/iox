@@ -19,13 +19,14 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   onTabChange,
   onSave,
 }) => {
-  const { t } = useTranslation();
+  const { t, resolvedLanguage } = useTranslation();
 
   const navItems: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
     { id: "providers", label: t('settings.sidebar.providers'), icon: Cpu },
     { id: "actions", label: t('settings.sidebar.actions'), icon: Zap },
     { id: "api_card", label: t('settings.sidebar.apiCard'), icon: Layers },
     { id: "sessions", label: t('settings.sidebar.sessions'), icon: MessageSquare },
+    { id: "web_sessions", label: resolvedLanguage === 'zh' ? '网页会话' : 'Web conversations', icon: Globe },
     { id: "web", label: t('settings.sidebar.web'), icon: Globe },
     { id: "general", label: t('settings.sidebar.general'), icon: Sliders },
     { id: "blacklist", label: t('settings.sidebar.blacklist'), icon: Shield },

@@ -9,6 +9,7 @@ import { ProvidersTab } from "@/components/settings/ProvidersTab";
 import { ActionsTab } from "@/components/settings/actions";
 import { ApiCardTab } from "@/components/settings/ApiCardTab";
 import { SessionsTab } from "@/components/settings/SessionsTab";
+import { WebSessionsTab } from "@/components/settings/WebSessionsTab";
 import { WebviewTab } from "@/components/settings/WebviewTab";
 import { GeneralTab } from "@/components/settings/GeneralTab";
 import { BlacklistTab } from "@/components/settings/BlacklistTab";
@@ -37,7 +38,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     listen<string>("open_settings_tab", (event) => {
       if (
         event.payload &&
-        ["providers", "actions", "api_card", "sessions", "web", "general", "blacklist"].includes(event.payload)
+        ["providers", "actions", "api_card", "sessions", "web_sessions", "web", "general", "blacklist"].includes(event.payload)
       ) {
         setActiveTab(event.payload as SettingsTab);
       }
@@ -277,6 +278,12 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
             {activeTab === "sessions" && (
               <div className="flex-1 h-full overflow-hidden p-5 flex flex-col">
                 <SessionsTab />
+              </div>
+            )}
+
+            {activeTab === "web_sessions" && (
+              <div className="flex-1 min-h-0 overflow-hidden p-5">
+                <WebSessionsTab actions={config.actions} />
               </div>
             )}
 

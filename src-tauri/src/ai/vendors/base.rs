@@ -49,6 +49,7 @@ pub fn build_standard_injection_script(
     const inputSel = {input_sel_json};
     const submitSel = {submit_sel_json};
     const autoSubmit = {auto_submit_js};
+    const injectionEpoch = window.__iox_injection_epoch || 0;
 
     if (!targetText) return;
 
@@ -109,6 +110,7 @@ pub fn build_standard_injection_script(
     }}
 
     function doInject() {{
+        if ((window.__iox_injection_epoch || 0) !== injectionEpoch) return;
         if (window.__iox_completed_task === taskId) {{
             return;
         }}
@@ -323,6 +325,7 @@ pub const STANDARD_SUBMIT_LOGIC: &str = r#"
     const maxSubmitAttempts = 35; // 35 * 100ms = 3.5s
 
     function trySubmit() {
+        if ((window.__iox_injection_epoch || 0) !== injectionEpoch) return;
         if (window.__iox_completed_task === taskId) return;
 
         let clicked = false;

@@ -9,6 +9,50 @@ use tauri::webview::WebviewBuilder;
 use tauri::window::WindowBuilder;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl};
 
+fn cancel_injection(app: &AppHandle, label: &str) {
+    if let Ok(mut tasks) = app.state::<AppState>().web_injections.lock() {
+        if let Some(token) = tasks.remove(label) {
+            token.cancel();
+        }
+        if let Some(webview) = app.get_webview(label) {
+            // Also invalidate JavaScript timers for same-document/hash navigation.
+            let _ = webview.eval("window.__iox_injection_epoch = (window.__iox_injection_epoch || 0) + 1;");
+        }
+    }
+}
+
+fn schedule_injection(webview: &tauri::Webview, script: &str, delays: &[u64]) {
+    let app = webview.app_handle().clone();
+    let label = webview.label().to_string();
+    let token = tokio_util::sync::CancellationToken::new();
+    if let Ok(mut tasks) = app.state::<AppState>().web_injections.lock() {
+        if let Some(old) = tasks.insert(label, token.clone()) {
+            old.cancel();
+        }
+    } else {
+        return;
+    }
+    let webview = webview.clone();
+    let script = script.to_string();
+    let delays = delays.to_vec();
+    tauri::async_runtime::spawn(async move {
+        for delay in delays {
+            tokio::select! {
+                biased;
+                _ = token.cancelled() => return,
+                _ = tokio::time::sleep(std::time::Duration::from_millis(delay)) => {}
+            }
+            // Serialize the final check/enqueue with cancel + navigation.
+            if let Ok(_tasks) = app.state::<AppState>().web_injections.lock() {
+                if token.is_cancelled() {
+                    return;
+                }
+                let _ = webview.eval(&script);
+            }
+        }
+    });
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WebHubTab {
@@ -27,7 +71,9 @@ pub struct WebHubState {
 
 impl WebHubState {
     pub fn add_or_activate(&mut self, tab: WebHubTab) {
-        if !self.tabs.iter().any(|t| t.action_id == tab.action_id) {
+        if let Some(existing) = self.tabs.iter_mut().find(|t| t.action_id == tab.action_id) {
+            *existing = tab.clone();
+        } else {
             self.tabs.push(tab.clone());
         }
         self.active_tab_id = Some(tab.action_id);
@@ -242,6 +288,22 @@ pub fn execute_web_action(
     }
 }
 
+/// 恢复原始会话，不触发输入注入或自动提交。
+pub fn resume_web_session(
+    app: &AppHandle,
+    config: &AppConfig,
+    action: &ActionConfig,
+    url: &str,
+) -> Result<(), String> {
+    let target_url = tauri::Url::parse(url).map_err(|e| e.to_string())?;
+    // Exact saved conversation URL: never normalize to a homepage or inject a prompt.
+    if config.general.web_window_mode == "tabbed" {
+        execute_tabbed_hub_action(app, config, action, target_url, url, None)
+    } else {
+        execute_multi_window_action(app, config, action, target_url, url, None)
+    }
+}
+
 /// 独立多窗口模式调度 (`multi_window`)
 fn execute_multi_window_action(
     app: &AppHandle,
@@ -259,22 +321,15 @@ fn execute_multi_window_action(
     let label = format!("web_win_{}", sanitized_id);
     let content_label = format!("{}_web", label);
     let bar_label = format!("{}_bar", label);
+    cancel_injection(app, &content_label);
 
     // 复用已存在的独立窗口
     if let Some(window) = app.get_window(&label) {
         if let Some(content_wv) = app.get_webview(&content_label) {
             if let Some(ref script) = injection_script {
-                let wv_clone = content_wv.clone();
-                let script_clone = script.clone();
-                tauri::async_runtime::spawn(async move {
-                    let delays = [30, 300, 1000];
-                    for delay in delays {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-                        let _ = wv_clone.eval(&script_clone);
-                    }
-                });
+                schedule_injection(&content_wv, script, &[30, 300, 1000]);
             } else {
-                let _ = content_wv.navigate(target_url);
+                content_wv.navigate(target_url).map_err(|e| e.to_string())?;
             }
         }
         let _ = window.set_title(&action.name);
@@ -355,14 +410,7 @@ fn execute_multi_window_action(
     }
 
     if let Some(script) = injection_script {
-        let wv_clone = content_wv.clone();
-        tauri::async_runtime::spawn(async move {
-            let delays = [800, 1800, 3500, 6000];
-            for delay in delays {
-                tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-                let _ = wv_clone.eval(&script);
-            }
-        });
+        schedule_injection(&content_wv, &script, &[800, 1800, 3500, 6000]);
     }
 
     let titlebar_clone = titlebar_wv.clone();
@@ -447,6 +495,7 @@ fn execute_tabbed_hub_action(
         .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
         .collect();
     let tab_content_label = format!("web_hub_tab_{}", sanitized_id);
+    cancel_injection(app, &tab_content_label);
 
     let tab_info = WebHubTab {
         action_id: action.id.clone(),
@@ -475,17 +524,9 @@ fn execute_tabbed_hub_action(
         // 检查该 Tab 的 child webview 是否已挂载
         if let Some(content_wv) = app.get_webview(&tab_content_label) {
             if let Some(ref script) = injection_script {
-                let wv_clone = content_wv.clone();
-                let script_clone = script.clone();
-                tauri::async_runtime::spawn(async move {
-                    let delays = [30, 300, 1000];
-                    for delay in delays {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-                        let _ = wv_clone.eval(&script_clone);
-                    }
-                });
+                schedule_injection(&content_wv, script, &[30, 300, 1000]);
             } else {
-                let _ = content_wv.navigate(target_url);
+                content_wv.navigate(target_url).map_err(|e| e.to_string())?;
             }
         } else {
             // 动态挂载新的 Tab Child Webview
@@ -515,15 +556,7 @@ fn execute_tabbed_hub_action(
                 .map_err(|e| format!("Failed to create tab content webview: {}", e))?;
 
             if let Some(ref script) = injection_script {
-                let wv_clone = new_wv.clone();
-                let script_clone = script.clone();
-                tauri::async_runtime::spawn(async move {
-                    let delays = [800, 1800, 3500, 6000];
-                    for delay in delays {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-                        let _ = wv_clone.eval(&script_clone);
-                    }
-                });
+                schedule_injection(&new_wv, script, &[800, 1800, 3500, 6000]);
             }
         }
 
@@ -603,14 +636,7 @@ fn execute_tabbed_hub_action(
     }
 
     if let Some(script) = injection_script {
-        let wv_clone = content_wv.clone();
-        tauri::async_runtime::spawn(async move {
-            let delays = [800, 1800, 3500, 6000];
-            for delay in delays {
-                tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-                let _ = wv_clone.eval(&script);
-            }
-        });
+        schedule_injection(&content_wv, &script, &[800, 1800, 3500, 6000]);
     }
 
     // 记录 AppState 状态
@@ -830,10 +856,11 @@ mod tests {
             action_id: "act_deepseek".into(),
             name: "DeepSeek".into(),
             icon: "bot".into(),
-            url: "https://chat.deepseek.com".into(),
+            url: "https://chat.deepseek.com/a/chat/s/restored".into(),
         };
         state.add_or_activate(tab_ds2);
         assert_eq!(state.tabs.len(), 2, "Duplicate tab should not increase count");
+        assert_eq!(state.tabs[0].url, "https://chat.deepseek.com/a/chat/s/restored");
         assert_eq!(state.active_tab_id.as_deref(), Some("act_deepseek"));
 
         // 4. 关闭当前激活的 DeepSeek Tab，自动流转到 Kimi

@@ -1,5 +1,7 @@
 pub mod ai;
 pub mod chat_store;
+pub mod web_sessions;
+pub mod web_history_sync;
 pub mod config;
 pub mod overlay_state;
 pub mod picker;
@@ -17,6 +19,7 @@ pub struct AppState {
     pub config: Mutex<AppConfig>,
     pub ai_manager: AiManager,
     pub web_hub_state: Mutex<ai::WebHubState>,
+    pub web_injections: Mutex<std::collections::HashMap<String, tokio_util::sync::CancellationToken>>,
 }
 
 #[tauri::command]
@@ -540,6 +543,7 @@ pub fn run() {
         config: Mutex::new(initial_config.clone()),
         ai_manager: AiManager::new(),
         web_hub_state: Mutex::new(ai::WebHubState::default()),
+        web_injections: Mutex::new(std::collections::HashMap::new()),
     };
 
     tauri::Builder::default()
@@ -615,6 +619,9 @@ pub fn run() {
             get_current_selection,
             set_floating_ball_expanded,
             chat_store::list_chat_sessions,
+            web_sessions::list_web_sessions,
+            web_history_sync::sync_web_sessions,
+            web_sessions::open_web_session,
             chat_store::get_all_full_chat_sessions,
             chat_store::get_chat_session,
             chat_store::save_chat_session,

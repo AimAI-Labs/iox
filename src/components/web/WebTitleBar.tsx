@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { MacTitleBar } from '@/components/MacTitleBar';
-import { RotateCw, ExternalLink, Settings } from 'lucide-react';
+import { RotateCw, ExternalLink, Settings, MessagesSquare } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { HubTabBar } from './HubTabBar';
 
@@ -116,6 +116,12 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = ({
           onMaximize={handleMaximize}
           tools={
             <div className="flex items-center gap-1">
+              <button type="button" title="网页会话 / Web conversations"
+                className="inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10"
+                onMouseDown={e => e.stopPropagation()}
+                onClick={() => invoke('show_main_window', { targetTab: 'web_sessions' }).catch(console.error)}>
+                <MessagesSquare size={12} />
+              </button>
               <button
                 type="button"
                 onClick={handleReload}

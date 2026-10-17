@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body><div id="root"></div>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { mockIPC } from '@tauri-apps/api/mocks';
+import { emit } from '@tauri-apps/api/event';
+import { Toaster } from 'sonner';
+import { WebSessionsTab } from '/src/components/settings/WebSessionsTab';
+import { I18nProvider } from '/src/hooks/useTranslation';
+import '/src/App.css';
+const now = Math.floor(Date.now() / 1000);
+const day = new Date(); day.setHours(0,0,0,0);
+const start = day.getTime() / 1000;
+const actions = [{id:'gpt',name:'ChatGPT',actionType:'web',enabled:true},{id:'claude',name:'Claude',actionType:'web',enabled:true}];
+const row = (id, actionId, title, date, precision='exact') => ({id,actionId,platform:actionId==='gpt'?'ChatGPT':'Claude',title,url:`https://example.test/chat/${id}`,dateStart:date,dateEnd:date,precision,dateLabel:'',sourceOrder:0});
+window.testHistory = {version:1, sessions:[row('a','gpt','今天的项目讨论',now-10),row('b','claude','更近的代码审阅',now),row('c','gpt','昨天的会话',start-3600),row('u','claude','没有日期的会话',null,'unknown')],platforms:actions.map(a=>({actionId:a.id,platform:a.name,status:'ready',count:2,syncedAt:now,error:null}))};
+window.calls = [];
+window.refreshSessions = () => emit('web_sessions_changed');
+mockIPC((command,args) => {
+  window.calls.push({command,args});
+  if(command==='get_config') return {general:{language:'zh'}};
+  if(command==='list_web_sessions') {
+    if(window.failList) throw new Error('History unavailable');
+    return structuredClone(window.testHistory);
+  }
+}, {shouldMockEvents:true});
+createRoot(document.getElementById('root')).render(React.createElement(I18nProvider,{languageSetting:'zh'},React.createElement('div',{className:'h-screen bg-background text-foreground p-5'},React.createElement(WebSessionsTab,{actions}),React.createElement(Toaster))));
+</script></body></html>

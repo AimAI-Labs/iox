@@ -1,0 +1,49 @@
+// Start Vite first. HISTORY_TEST_URL may override the local test fixture URL.
+const assert = require('node:assert/strict');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+(async () => {
+  const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 900, height: 640 } });
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(process.env.HISTORY_TEST_URL || 'http://127.0.0.1:1422/tests/fixtures/web-history.html');
+    await page.waitForLoadState('networkidle');
+    assert.equal(await page.getByRole('button', { name: '添加会话', exact: true }).count(), 0);
+    assert.deepEqual(await page.locator('h3').allTextContents(), ['今天2','昨天1','平台未提供日期1']);
+    const rows = page.locator('button[title^="https://example.test/chat/"]');
+    assert.ok((await rows.first().innerText()).startsWith('Claude'));
+    assert.ok((await rows.first().innerText()).includes('更近的代码审阅'));
+    assert.ok(await page.evaluate(() => window.calls.some(c => c.command === 'sync_web_sessions')));
+    await rows.first().click();
+    assert.deepEqual(await page.evaluate(() => window.calls.find(c=>c.command==='open_web_session').args), {id:'b',external:false});
+    await page.getByRole('combobox',{name:'筛选平台'}).selectOption('gpt');
+    assert.equal(await rows.count(),2);
+    await page.getByRole('combobox',{name:'筛选时间'}).selectOption('today');
+    assert.equal(await rows.count(),1);
+    await page.getByRole('textbox',{name:'搜索会话'}).fill('不存在');
+    assert.equal(await rows.count(),0);
+    await page.getByRole('textbox',{name:'搜索会话'}).fill('');
+    await page.getByRole('combobox',{name:'筛选时间'}).selectOption('custom');
+    await page.getByLabel('开始日期').fill('2026-10-20');
+    await page.getByLabel('结束日期').fill('2026-10-10');
+    await page.getByRole('alert').waitFor();
+    assert.equal(await rows.count(),0);
+    await page.getByRole('combobox',{name:'筛选时间'}).selectOption('all');
+    await page.getByRole('combobox',{name:'筛选平台'}).selectOption('');
+    await page.evaluate(async()=>{ window.testHistory.platforms[0].status='login_required'; await window.refreshSessions(); });
+    await page.getByText('需要登录',{exact:true}).waitFor();
+    await page.evaluate(async()=>{ window.failList=true; await window.refreshSessions(); });
+    await page.getByRole('alert').waitFor();
+    await page.evaluate(()=>{ window.failList=false; });
+    await page.getByRole('button',{name:'重试',exact:true}).click();
+    await page.getByRole('alert').waitFor({state:'detached'});
+    await page.evaluate(()=>document.documentElement.classList.add('dark'));
+    await page.waitForTimeout(200);
+    if(process.env.HISTORY_SCREENSHOT) await page.screenshot({path:process.env.HISTORY_SCREENSHOT});
+    await page.setViewportSize({width:680,height:500});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    assert.deepEqual(errors,[]);
+    console.log('PASS: automatic sync, date-descending groups, leading platform labels, platform/time/search filters, custom date validation, resume payload, login/error/retry states, dark and narrow layout.');
+  } finally { await browser.close(); }
+})().catch(error=>{console.error(error);process.exitCode=1;});

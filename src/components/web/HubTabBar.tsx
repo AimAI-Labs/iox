@@ -10,6 +10,7 @@ import {
   RotateCw,
   ExternalLink,
   Settings,
+  MessagesSquare,
   Plus,
   X,
   PanelLeftClose,
@@ -384,7 +385,7 @@ export const HubTabBar: React.FC = () => {
                 ) : (
                   <button
                     type="button"
-                    onClick={handleOpenSettings}
+              onClick={handleOpenSettings}
                     className="flex items-center gap-1 px-2 h-[22px] rounded-md text-[11px] text-blue-500 hover:bg-blue-500/15 transition-all cursor-pointer"
                     title="前往动作设置"
                   >
@@ -450,6 +451,12 @@ export const HubTabBar: React.FC = () => {
             title="打开 Web 浮窗设置"
           >
             <Settings size={12} />
+          </button>
+          <button type="button" title="网页会话 / Web conversations"
+            className="inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/10"
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => invoke('show_main_window', { targetTab: 'web_sessions' }).catch(console.error)}>
+            <MessagesSquare size={12} />
           </button>
         </div>
       </header>
