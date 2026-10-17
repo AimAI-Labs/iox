@@ -11,6 +11,7 @@ interface SelectionEventPayload {
 interface UseSelectionEventsProps {
   isPinned: boolean;
   onSelectionTriggered: (text: string) => void;
+  onFilesSelected: (files: string[]) => void;
   onRequestHide: () => void;
   cancelCloseTimer: () => void;
   updateWindowSize: (mode: OverlayMode, allowFocus?: boolean) => Promise<void>;
@@ -19,6 +20,7 @@ interface UseSelectionEventsProps {
 export function useSelectionEvents({
   isPinned,
   onSelectionTriggered,
+  onFilesSelected,
   onRequestHide,
   cancelCloseTimer,
   updateWindowSize,
@@ -39,10 +41,18 @@ export function useSelectionEvents({
       onRequestHide();
     });
 
+    const unlistenFiles = listen<{ files: string[] }>('files-selected', (event) => {
+      if (!event.payload.files.length) return;
+      cancelCloseTimer();
+      onFilesSelected(event.payload.files);
+      // Native selection already sizes and places the menu without taking focus.
+    });
+
     return () => {
       unlistenSelection.then((fn) => fn());
       unlistenRequestHide.then((fn) => fn());
+      unlistenFiles.then((fn) => fn());
     };
-  }, [onSelectionTriggered, onRequestHide, cancelCloseTimer, updateWindowSize]);
+  }, [onSelectionTriggered, onFilesSelected, onRequestHide, cancelCloseTimer, updateWindowSize]);
 }
 

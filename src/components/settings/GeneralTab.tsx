@@ -95,6 +95,26 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 
           <Separator />
 
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label className="text-xs text-foreground font-medium">
+                <span id="file-selection-label">{isZh ? '选中文件' : 'File selection'}</span>
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                {isZh
+                  ? '在桌面或资源管理器选中文件后，弹出菜单发送到 AI 官网，支持多选'
+                  : 'Show an AI website menu when selecting files on the desktop or in Explorer, including multiple files'}
+              </p>
+            </div>
+            <Switch
+              aria-labelledby="file-selection-label"
+              checked={general.autoPopupOnFileSelection ?? false}
+              onCheckedChange={(checked) => onUpdateGeneral({ autoPopupOnFileSelection: checked })}
+            />
+          </div>
+
+          <Separator />
+
           {/* 3. Trigger Modifier */}
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">

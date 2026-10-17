@@ -6,6 +6,7 @@ import { useTheme, broadcastThemeChange } from '@/hooks/useTheme';
 import { useOverlayState } from '@/hooks/useOverlayState';
 import { I18nProvider } from '@/hooks/useTranslation';
 import { BubbleBar, ResultCard, FloatingBall } from '@/components/overlay';
+import { FileSelectionMenu } from '@/components/overlay/FileSelectionMenu';
 import { Toaster } from 'sonner';
 import './App.css';
 
@@ -152,6 +153,14 @@ export function App() {
       <I18nProvider languageSetting={config.general.language}>
         <div className="overlay-root">
           {overlayState.mode === 'bubble' ? (
+            overlayState.selectedFiles.length ? <FileSelectionMenu
+              key={overlayState.animKey}
+              files={overlayState.selectedFiles}
+              actions={config.actions}
+              isClosing={overlayState.isClosing}
+              onClose={overlayState.handleClose}
+              onOpenSettings={() => handleOpenSettings('actions')}
+            /> :
             <BubbleBar
               key={overlayState.animKey}
               actions={config.actions}

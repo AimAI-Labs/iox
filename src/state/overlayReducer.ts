@@ -6,6 +6,7 @@ export interface OverlayState {
   mode: OverlayMode;
   visible: boolean;
   selectedText: string;
+  selectedFiles: string[];
   activeAction: ActionConfig | null;
   selectedModel: string;
   streamText: string;
@@ -33,6 +34,7 @@ export const initialOverlayState: OverlayState = {
   mode: 'bubble',
   visible: false,
   selectedText: '',
+  selectedFiles: [],
   activeAction: null,
   selectedModel: '',
   streamText: '',
@@ -48,6 +50,7 @@ export const initialOverlayState: OverlayState = {
 
 export type OverlayAction =
   | { type: 'SELECTION_TRIGGERED'; text: string }
+  | { type: 'FILES_SELECTED'; files: string[] }
   | { type: 'SET_MODE'; mode: OverlayMode }
   | { type: 'START_ACTION'; action: ActionConfig; model?: string }
   | { type: 'START_EMPTY_CARD_ACTION'; action: ActionConfig; model?: string }
@@ -76,6 +79,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         ...state,
         visible: true,
         selectedText: action.text,
+        selectedFiles: [],
         mode: 'bubble',
         streamText: '',
         error: null,
@@ -83,6 +87,15 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         isPinned: state.isPinned, // 记忆并保留钉住偏好（气泡态允许新划词刷新）
         isClosing: false,
         initialInput: '',
+        animKey: state.animKey + 1,
+      };
+
+    case 'FILES_SELECTED':
+      return {
+        ...initialOverlayState,
+        visible: true,
+        selectedFiles: action.files,
+        isPinned: state.isPinned,
         animKey: state.animKey + 1,
       };
 
@@ -217,6 +230,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
     case 'HIDE_COMPLETE':
       return {
         ...state,
+        selectedFiles: [],
         visible: false,
         isClosing: false,
         activeAction: null,
@@ -233,6 +247,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
     case 'NEW_CHAT':
       return {
         ...state,
+        selectedFiles: [],
         streamText: '',
         selectedText: '',
         error: null,

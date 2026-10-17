@@ -17,6 +17,10 @@ static HIDE_SEQ: AtomicU64 = AtomicU64::new(0);
 static CLIPBOARD_LOCK: Mutex<()> = Mutex::new(());
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
+pub fn cancel_pending_hide() {
+    HIDE_SEQ.fetch_add(1, Ordering::SeqCst);
+}
+
 pub fn set_app_handle(handle: AppHandle) {
     let _ = APP_HANDLE.set(handle);
 }
@@ -359,6 +363,9 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
             let app_handle = APP_HANDLE.get().cloned();
 
             if msg == WM_LBUTTONDOWN {
+                let inside_overlay = app_handle.as_ref().is_some_and(|app| is_point_inside_overlay(app, x, y));
+                SELECTION_SEQ.fetch_add(1, Ordering::SeqCst);
+                crate::file_selection::mouse_down((x, y), inside_overlay);
                 let mut is_potential_dbl_click = false;
                 let dbl_click_time_ms = GetDoubleClickTime() as u128;
                 let now = Instant::now();
@@ -393,6 +400,8 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                 || msg == WM_XBUTTONDOWN
                 || msg == WM_NCXBUTTONDOWN
             {
+                SELECTION_SEQ.fetch_add(1, Ordering::SeqCst);
+                crate::file_selection::cancel_pending();
                 // 右键、中键、滚轮滚动或鼠标侧键点击时平滑请求隐藏
                 if let Some(ref handle) = app_handle {
                     if is_overlay_visible(handle) {
@@ -457,6 +466,12 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                     }
                 }
 
+                if let Some(ref handle) = app_handle {
+                    if !is_dragging_overlay() && crate::file_selection::mouse_up(handle, (x, y), is_double_or_triple, is_drag) {
+                        return;
+                    }
+                }
+
                 if (is_drag || is_double_or_triple) && !is_dragging_overlay() {
                     // 若按下或抬起落在悬浮窗内部，属于悬浮窗内部文本选择/交互，不触发全局选词取词
                     let inside_overlay = if let Some(ref handle) = app_handle {
@@ -499,6 +514,8 @@ unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_par
             let msg = w_param as u32;
 
             if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
+                SELECTION_SEQ.fetch_add(1, Ordering::SeqCst);
+                crate::file_selection::cancel_pending();
                 let should_hide = if is_overlay_bubble_mode() {
                     // Bubble 模式下，任意按键都触发隐藏
                     true

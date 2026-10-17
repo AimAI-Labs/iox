@@ -282,9 +282,182 @@ pub fn execute_web_action(
     let mode = config.general.web_window_mode.as_str();
 
     if mode == "tabbed" {
-        execute_tabbed_hub_action(app, config, action, target_url, &target_url_str, injection_script)
+        execute_tabbed_hub_action(app, config, action, target_url, &target_url_str, injection_script, None)
     } else {
-        execute_multi_window_action(app, config, action, target_url, &target_url_str, injection_script)
+        execute_multi_window_action(app, config, action, target_url, &target_url_str, injection_script, None)
+    }
+}
+
+const ATTACHMENT_ORIGIN_NOTICE: &str = "(()=>{if(window.top!==window)return;const p=document.createElement('div');p.style.cssText='position:fixed;z-index:2147483647;bottom:20px;right:20px;padding:16px;background:#18212f;color:white';p.textContent='IOX：页面来源已改变或需要登录，本次附件已停止。请登录并返回官网后重新选择文件。';p.onclick=()=>p.remove();document.body?.appendChild(p)})();";
+
+fn eval_attachment(webview: &tauri::Webview, script: &str, origin: &str) {
+    // Native guard prevents even passing file bytes to a login/foreign document.
+    if webview
+        .url()
+        .map(|url| super::file_upload::is_attachment_destination(&url, origin))
+        .unwrap_or(false)
+    {
+        let _ = webview.eval(script);
+    } else {
+        let _ = webview.eval(ATTACHMENT_ORIGIN_NOTICE);
+    }
+}
+
+fn site_view_readiness() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static READY: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    READY.get_or_init(Default::default)
+}
+
+fn site_view_is_ready(label: &str) -> bool {
+    site_view_readiness()
+        .lock()
+        .map(|ready| ready.contains(label))
+        .unwrap_or(false)
+}
+
+/// Track every site document, including views first opened through a text action.
+fn attachment_on_page_load(
+    app: &AppHandle,
+    builder: WebviewBuilder<tauri::Wry>,
+    label: &str,
+    script: Option<String>,
+    origin: Option<String>,
+) -> WebviewBuilder<tauri::Wry> {
+    if let Ok(mut ready) = site_view_readiness().lock() {
+        ready.remove(label);
+    }
+    let has_attachment = script.is_some() && origin.is_some();
+    let cancellation = tokio_util::sync::CancellationToken::new();
+    if has_attachment {
+        if let Ok(mut tasks) = app.state::<AppState>().web_injections.lock() {
+            if let Some(old) = tasks.insert(label.to_string(), cancellation.clone()) {
+                old.cancel();
+            }
+        } else {
+            cancellation.cancel();
+        }
+    }
+    let pending = std::sync::Arc::new(std::sync::Mutex::new(script.zip(origin)));
+    if has_attachment {
+        let expires = pending.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+            if let Ok(mut pending) = expires.lock() {
+                *pending = None;
+            };
+        });
+    }
+    builder.on_page_load(move |webview, payload| {
+        let finished = payload.event() == tauri::webview::PageLoadEvent::Finished
+            && matches!(payload.url().scheme(), "http" | "https");
+        if let Ok(mut ready) = site_view_readiness().lock() {
+            if finished {
+                ready.insert(webview.label().to_string());
+            } else {
+                ready.remove(webview.label());
+            }
+        }
+        if !finished {
+            return;
+        }
+        // Consume on the first completed document, including login redirects. No replay later.
+        let attachment = pending.lock().ok().and_then(|mut pending| pending.take());
+        if let Some((script, origin)) = attachment {
+            let state = webview.state::<AppState>();
+            let Ok(_tasks) = state.web_injections.lock() else {
+                return;
+            };
+            // Serialize the final check/enqueue with cancel + session navigation.
+            if cancellation.is_cancelled() {
+                return;
+            }
+            if super::file_upload::is_attachment_destination(payload.url(), &origin) {
+                eval_attachment(&webview, &script, &origin);
+            } else {
+                let _ = webview.eval(ATTACHMENT_ORIGIN_NOTICE);
+            }
+        }
+    })
+}
+
+fn schedule_action_injection(
+    webview: &tauri::Webview,
+    script: &str,
+    delays: &[u64],
+    attachment_origin: Option<&str>,
+) {
+    if let Some(origin) = attachment_origin {
+        // Reused documents already exist; JS owns retries and cancels on navigation.
+        eval_attachment(webview, script, origin);
+    } else {
+        schedule_injection(webview, script, delays);
+    }
+}
+
+pub fn execute_web_file_action(
+    app: &AppHandle,
+    config: &AppConfig,
+    action_id: &str,
+    files: &[String],
+) -> Result<(), String> {
+    let action = super::file_upload::enabled_web_action(config, action_id)?;
+    let template = normalize_web_action_url(action.url_template.as_deref().unwrap_or_default());
+    let target_url_str = render_url_template(&template, "");
+    let target_url: tauri::Url = target_url_str
+        .parse()
+        .map_err(|_| "官网地址无效".to_string())?;
+    if !matches!(target_url.scheme(), "https" | "http") || target_url.host_str().is_none() {
+        return Err("官网地址必须为 HTTP 或 HTTPS".into());
+    }
+    let origin = target_url.origin().ascii_serialization();
+    let sanitized_id: String = action
+        .id
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let content_label = if config.general.web_window_mode == "tabbed" {
+        format!("web_hub_tab_{}", sanitized_id)
+    } else {
+        format!("web_win_{}_web", sanitized_id)
+    };
+    // Reject before reading bytes; evaluating into a loading document could discard the payload.
+    if app.get_webview(&content_label).is_some() && !site_view_is_ready(&content_label) {
+        return Err("官网正在加载，请稍后重试".into());
+    }
+    let attachments = super::file_upload::read_attachments(files)?;
+    static NEXT_REQUEST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let request_id = format!(
+        "file-{}",
+        NEXT_REQUEST.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    );
+    let script = super::file_upload::build_attachment_script(&origin, &attachments, &request_id);
+    if config.general.web_window_mode == "tabbed" {
+        execute_tabbed_hub_action(
+            app,
+            config,
+            action,
+            target_url,
+            &target_url_str,
+            Some(script),
+            Some(origin),
+        )
+    } else {
+        execute_multi_window_action(
+            app,
+            config,
+            action,
+            target_url,
+            &target_url_str,
+            Some(script),
+            Some(origin),
+        )
     }
 }
 
@@ -298,9 +471,9 @@ pub fn resume_web_session(
     let target_url = tauri::Url::parse(url).map_err(|e| e.to_string())?;
     // Exact saved conversation URL: never normalize to a homepage or inject a prompt.
     if config.general.web_window_mode == "tabbed" {
-        execute_tabbed_hub_action(app, config, action, target_url, url, None)
+        execute_tabbed_hub_action(app, config, action, target_url, url, None, None)
     } else {
-        execute_multi_window_action(app, config, action, target_url, url, None)
+        execute_multi_window_action(app, config, action, target_url, url, None, None)
     }
 }
 
@@ -312,6 +485,7 @@ fn execute_multi_window_action(
     target_url: tauri::Url,
     target_url_str: &str,
     injection_script: Option<String>,
+    attachment_origin: Option<String>,
 ) -> Result<(), String> {
     let sanitized_id: String = action
         .id
@@ -327,7 +501,7 @@ fn execute_multi_window_action(
     if let Some(window) = app.get_window(&label) {
         if let Some(content_wv) = app.get_webview(&content_label) {
             if let Some(ref script) = injection_script {
-                schedule_injection(&content_wv, script, &[30, 300, 1000]);
+                schedule_action_injection(&content_wv, script, &[30, 300, 1000], attachment_origin.as_deref());
             } else {
                 content_wv.navigate(target_url).map_err(|e| e.to_string())?;
             }
@@ -394,6 +568,13 @@ fn execute_multi_window_action(
             }
         })
         .initialization_script(&init_script);
+    let content_builder = attachment_on_page_load(
+        app,
+        content_builder,
+        &content_label,
+        injection_script.clone(),
+        attachment_origin.clone(),
+    );
 
     let content_wv = window
         .add_child(
@@ -409,8 +590,10 @@ fn execute_multi_window_action(
         crate::window_manager::apply_content_webview_bottom_round(hwnd.0 as _, radius);
     }
 
-    if let Some(script) = injection_script {
-        schedule_injection(&content_wv, &script, &[800, 1800, 3500, 6000]);
+    if attachment_origin.is_none() {
+        if let Some(script) = injection_script {
+            schedule_injection(&content_wv, &script, &[800, 1800, 3500, 6000]);
+        }
     }
 
     let titlebar_clone = titlebar_wv.clone();
@@ -486,6 +669,7 @@ fn execute_tabbed_hub_action(
     target_url: tauri::Url,
     target_url_str: &str,
     injection_script: Option<String>,
+    attachment_origin: Option<String>,
 ) -> Result<(), String> {
     let window_label = "web_hub";
     let bar_label = "web_hub_bar";
@@ -524,7 +708,7 @@ fn execute_tabbed_hub_action(
         // 检查该 Tab 的 child webview 是否已挂载
         if let Some(content_wv) = app.get_webview(&tab_content_label) {
             if let Some(ref script) = injection_script {
-                schedule_injection(&content_wv, script, &[30, 300, 1000]);
+                schedule_action_injection(&content_wv, script, &[30, 300, 1000], attachment_origin.as_deref());
             } else {
                 content_wv.navigate(target_url).map_err(|e| e.to_string())?;
             }
@@ -543,6 +727,13 @@ fn execute_tabbed_hub_action(
                     }
                 })
                 .initialization_script(&init_script);
+            let content_builder = attachment_on_page_load(
+                app,
+                content_builder,
+                &tab_content_label,
+                injection_script.clone(),
+                attachment_origin.clone(),
+            );
 
             let new_wv = window
                 .add_child(
@@ -555,8 +746,10 @@ fn execute_tabbed_hub_action(
                 )
                 .map_err(|e| format!("Failed to create tab content webview: {}", e))?;
 
-            if let Some(ref script) = injection_script {
-                schedule_injection(&new_wv, script, &[800, 1800, 3500, 6000]);
+            if attachment_origin.is_none() {
+                if let Some(ref script) = injection_script {
+                    schedule_injection(&new_wv, script, &[800, 1800, 3500, 6000]);
+                }
             }
         }
 
@@ -620,6 +813,13 @@ fn execute_tabbed_hub_action(
             }
         })
         .initialization_script(&init_script);
+    let content_builder = attachment_on_page_load(
+        app,
+        content_builder,
+        &tab_content_label,
+        injection_script.clone(),
+        attachment_origin.clone(),
+    );
 
     let content_wv = window
         .add_child(
@@ -635,8 +835,10 @@ fn execute_tabbed_hub_action(
         crate::window_manager::apply_content_webview_bottom_round(hwnd.0 as _, radius);
     }
 
-    if let Some(script) = injection_script {
-        schedule_injection(&content_wv, &script, &[800, 1800, 3500, 6000]);
+    if attachment_origin.is_none() {
+        if let Some(script) = injection_script {
+            schedule_injection(&content_wv, &script, &[800, 1800, 3500, 6000]);
+        }
     }
 
     // 记录 AppState 状态

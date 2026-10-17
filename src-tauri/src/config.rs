@@ -88,6 +88,8 @@ pub fn resolve_language(configured: &str) -> &'static str {
 #[serde(rename_all = "camelCase")]
 pub struct GeneralConfig {
     pub auto_popup_on_selection: bool,
+    #[serde(default)]
+    pub auto_popup_on_file_selection: bool,
     pub min_selection_length: usize,
     pub trigger_modifier: String, // "None" | "Ctrl" | "Alt" | "Shift"
     pub global_hotkey: String,    // e.g. "Alt+Space"
@@ -119,6 +121,7 @@ impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             auto_popup_on_selection: true,
+            auto_popup_on_file_selection: false,
             min_selection_length: 1,
             trigger_modifier: "None".to_string(),
             global_hotkey: "Alt+Space".to_string(),
@@ -650,6 +653,11 @@ impl AppConfig {
         Self::config_dir().join("config.json")
     }
 
+    /// 获取 sessions.jsonl 完整路径，与 config.json 位于同一目录下
+    pub fn sessions_path() -> PathBuf {
+        Self::config_dir().join("sessions.jsonl")
+    }
+
     pub fn load() -> Self {
         let path = Self::config_path();
         if path.exists() {
@@ -1044,6 +1052,23 @@ mod tests {
     }
 
     #[test]
+    fn test_sessions_path_matches_config_dir() {
+        let config_path = AppConfig::config_path();
+        let sessions_path = AppConfig::sessions_path();
+
+        assert_eq!(
+            config_path.parent(),
+            sessions_path.parent(),
+            "sessions.jsonl 必须与 config.json 处于同一目录下"
+        );
+        assert_eq!(
+            sessions_path.file_name().and_then(|n| n.to_str()),
+            Some("sessions.jsonl"),
+            "文件名必须为 sessions.jsonl"
+        );
+    }
+
+    #[test]
     fn test_language_config_defaults_and_backward_compatibility() {
         let default_config = AppConfig::default();
         assert_eq!(default_config.general.language, "auto");
@@ -1126,3 +1151,15 @@ mod tests {
 }
 
 
+
+#[cfg(test)]
+mod file_selection_config_tests {
+    #[test]
+    fn file_selection_is_opt_in_for_new_and_legacy_configs() {
+        let mut json = serde_json::to_value(super::AppConfig::default()).unwrap();
+        assert_eq!(json["general"]["autoPopupOnFileSelection"], false);
+        json["general"].as_object_mut().unwrap().remove("autoPopupOnFileSelection");
+        let legacy: super::AppConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(serde_json::to_value(legacy).unwrap()["general"]["autoPopupOnFileSelection"], false);
+    }
+}

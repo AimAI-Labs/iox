@@ -1936,6 +1936,7 @@ name = "iox"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "base64 0.22.1",
  "eventsource-stream",
  "futures-util",
  "open",
@@ -1949,6 +1950,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "urlencoding",
+ "windows",
  "windows-sys 0.59.0",
 ]
 

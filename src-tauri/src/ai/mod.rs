@@ -1,3 +1,4 @@
+pub mod file_upload;
 pub mod models;
 pub mod scripts;
 pub mod stream;

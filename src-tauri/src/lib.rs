@@ -3,6 +3,7 @@ pub mod chat_store;
 pub mod web_sessions;
 pub mod web_history_sync;
 pub mod config;
+pub mod file_selection;
 pub mod overlay_state;
 pub mod picker;
 pub mod selection;
@@ -74,6 +75,27 @@ async fn trigger_web_action(
         copy_to_clipboard,
         auto_submit_override,
     )
+}
+
+/// Ok means the attachment attempt was scheduled; acceptance is shown by the website.
+#[tauri::command]
+async fn trigger_web_file_action(
+    app: AppHandle,
+    webview: tauri::Webview,
+    state: State<'_, AppState>,
+    action_id: String,
+    files: Vec<String>,
+) -> Result<(), String> {
+    if webview.label() != "overlay" {
+        return Err("文件动作仅允许从文件选择菜单触发".into());
+    }
+    file_selection::validate_selected_files(&files)?;
+    let config = state
+        .config
+        .lock()
+        .map_err(|_| "配置不可用".to_string())?
+        .clone();
+    ai::web_action::execute_web_file_action(&app, &config, &action_id, &files)
 }
 
 #[tauri::command]
@@ -587,6 +609,7 @@ pub fn run() {
             save_api_card_size,
             trigger_api_action,
             trigger_web_action,
+            trigger_web_file_action,
             cancel_action,
             resize_overlay,
             toggle_maximize_overlay,

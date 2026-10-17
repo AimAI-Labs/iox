@@ -47,6 +47,7 @@ Whether you are in a browser, code editor, PDF viewer, or office suite, simply s
 ### 🖱️ 1. Global Non-Intrusive Text Selection & Bubble Bar
 * **Instant Selection Response**: Utilizes a native Windows low-level mouse hook (`WH_MOUSE_LL`) to detect text selection and release events with zero lag, popping up a sleek capsule bubble bar right beside your cursor.
 * **Icon-Only Minimalist Mode**: Supports switching to an ultra-clean icon-only mode to minimize visual distraction.
+* **Send Selected Files to AI Websites**: Enable **File selection** in **Settings → General** (off by default) to show a floating website menu when selecting files on the desktop or in Explorer. Ctrl/Shift multi-selection is supported, up to 10 files and 20 MiB total; folders are excluded. Confirm the website's upload result, write your question, and send manually. On-page notices guide you when sign-in or an attachment button is needed.
 * **Smart Boundary Avoidance & Drag Awareness**: Automatically adjusts positioning based on cursor coordinates, screen edges, and HiDPI scaling factors to never obscure selected text.
 
 ### 🛡️ 2. Zero Focus Stealing & Native Anti-Mistouch

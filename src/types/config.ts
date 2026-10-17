@@ -3,6 +3,7 @@ export type LanguageSetting = 'auto' | 'zh' | 'en';
 
 export interface GeneralConfig {
   autoPopupOnSelection: boolean;
+  autoPopupOnFileSelection?: boolean;
   minSelectionLength: number;
   triggerModifier: 'None' | 'Ctrl' | 'Alt' | 'Shift';
   globalHotkey: string;

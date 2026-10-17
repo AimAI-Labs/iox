@@ -36,6 +36,7 @@ export function useOverlayLifecycle({
   const apiCardRef = useRef<ApiCardConfig | undefined>(apiCard);
   apiCardRef.current = apiCard;
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeGenerationRef = useRef(0);
 
   // 调整窗口尺寸并同步模式到 Rust 端
   const updateWindowSize = useCallback(
@@ -89,9 +90,10 @@ export function useOverlayLifecycle({
       if (closeTimerRef.current) {
         clearTimeout(closeTimerRef.current);
       }
+      const generation = ++closeGenerationRef.current;
       closeTimerRef.current = setTimeout(async () => {
         await invoke('hide_overlay');
-        onHideComplete();
+        if (closeGenerationRef.current === generation) onHideComplete();
       }, 100);
     },
     [setIsClosing, onHideComplete]
@@ -99,6 +101,7 @@ export function useOverlayLifecycle({
 
   // 取消退场定时器（当新划词触发时调用）
   const cancelCloseTimer = useCallback(() => {
+    closeGenerationRef.current += 1;
     if (closeTimerRef.current) {
       clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
