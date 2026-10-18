@@ -19,6 +19,8 @@ export interface GeneralConfig {
   iconOnlyBubble?: boolean;
   enableFloatingBall?: boolean;
   floatingBallAutoHide?: boolean;
+  floatingBallHideDelayMs?: number;
+  floatingBallHoverDelayMs?: number;
   floatingBallPos?: [number, number];
 }
 

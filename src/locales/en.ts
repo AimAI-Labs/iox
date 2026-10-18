@@ -151,7 +151,11 @@ export const en: TranslationTree = {
       floatingBall: 'Desktop Floating Ball',
       floatingBallDesc: 'Show persistent draggable ball on desktop for quick access',
       floatingBallAutoHide: 'Auto Snap & Hide on Screen Edge',
-      floatingBallAutoHideDesc: 'Minimize into a translucent edge bar after 2.5s idle',
+      floatingBallAutoHideDesc: 'Partially hide the idle ball at the screen edge and reduce its opacity',
+      floatingBallHideDelay: 'Edge hide delay',
+      floatingBallHideDelayDesc: 'Wait before partially hiding the ball after the pointer leaves',
+      floatingBallHoverDelay: 'Menu hover delay',
+      floatingBallHoverDelayDesc: 'Wait before expanding the quick menu while hovering over the ball',
     },
     providers: {
       title: 'Model Providers Configuration',

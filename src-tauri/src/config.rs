@@ -113,6 +113,10 @@ pub struct GeneralConfig {
     pub enable_floating_ball: bool,
     #[serde(default = "default_true")]
     pub floating_ball_auto_hide: bool,
+    #[serde(default = "default_floating_ball_hide_delay_ms")]
+    pub floating_ball_hide_delay_ms: u64,
+    #[serde(default = "default_floating_ball_hover_delay_ms")]
+    pub floating_ball_hover_delay_ms: u64,
     #[serde(default = "default_floating_ball_pos")]
     pub floating_ball_pos: (i32, i32),
     #[serde(default = "default_language")]
@@ -122,6 +126,9 @@ pub struct GeneralConfig {
 fn default_file_drag_hover_delay_ms() -> u64 {
     1000
 }
+
+fn default_floating_ball_hide_delay_ms() -> u64 { 2500 }
+fn default_floating_ball_hover_delay_ms() -> u64 { 220 }
 
 impl Default for GeneralConfig {
     fn default() -> Self {
@@ -142,6 +149,8 @@ impl Default for GeneralConfig {
             icon_only_bubble: false,
             enable_floating_ball: true,
             floating_ball_auto_hide: true,
+            floating_ball_hide_delay_ms: default_floating_ball_hide_delay_ms(),
+            floating_ball_hover_delay_ms: default_floating_ball_hover_delay_ms(),
             floating_ball_pos: (0, 0),
             language: "auto".to_string(),
         }
@@ -1161,6 +1170,23 @@ mod tests {
 
 #[cfg(test)]
 mod file_selection_config_tests {
+    #[test]
+    fn floating_ball_delays_support_legacy_configs_and_round_trip() {
+        let mut json = serde_json::to_value(super::AppConfig::default()).unwrap();
+        json["general"].as_object_mut().unwrap().remove("floatingBallHideDelayMs");
+        json["general"].as_object_mut().unwrap().remove("floatingBallHoverDelayMs");
+        let legacy: super::AppConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(legacy.general.floating_ball_hide_delay_ms, 2500);
+        assert_eq!(legacy.general.floating_ball_hover_delay_ms, 220);
+        let mut json = serde_json::to_value(legacy).unwrap();
+        json["general"]["floatingBallHideDelayMs"] = serde_json::json!(4200);
+        json["general"]["floatingBallHoverDelayMs"] = serde_json::json!(800);
+        let custom: super::AppConfig = serde_json::from_value(json).unwrap();
+        let saved = serde_json::to_value(custom).unwrap();
+        assert_eq!(saved["general"]["floatingBallHideDelayMs"], 4200);
+        assert_eq!(saved["general"]["floatingBallHoverDelayMs"], 800);
+    }
+
     #[test]
     fn file_drag_hover_delay_defaults_for_legacy_configs_and_round_trips() {
         let mut json = serde_json::to_value(super::AppConfig::default()).unwrap();

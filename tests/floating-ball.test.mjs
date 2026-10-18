@@ -179,6 +179,42 @@ test('passing over the ball cancels the pending hover without copying', async (t
   assert.equal(ball.calls.includes('get_current_selection'), false);
 });
 
+test('custom hover delay controls menu expansion and updates while waiting', async (t) => {
+  const ball = mountBall(t);
+  ball.config.general.floatingBallHoverDelayMs = 800;
+  await ball.render();
+  ball.tree.props.onMouseEnter();
+  await ball.advance(799);
+  assert.equal(ball.find('menu'), undefined);
+  ball.config.general.floatingBallHoverDelayMs = 400;
+  await ball.render();
+  await ball.advance(399);
+  assert.equal(ball.find('menu'), undefined);
+  await ball.advance(1);
+  assert.ok(ball.find('menu'));
+  assert.equal(ball.calls.filter((call) => call === 'init_floating_ball').length, 1);
+});
+
+test('custom idle delay controls edge hiding and cancels on pointer entry', async (t) => {
+  const ball = mountBall(t);
+  ball.config.general.floatingBallHideDelayMs = 1200;
+  await ball.render();
+  await ball.advance(1199);
+  assert.doesNotMatch(ball.find('floating-ball-trigger').props.className, /is-idle/);
+  await ball.advance(1);
+  assert.match(ball.find('floating-ball-trigger').props.className, /is-idle/);
+  ball.tree.props.onMouseEnter();
+  await ball.render();
+  assert.doesNotMatch(ball.find('floating-ball-trigger').props.className, /is-idle/);
+  ball.tree.props.onMouseLeave();
+  ball.config.general.floatingBallHideDelayMs = 700;
+  await ball.render();
+  await ball.advance(699);
+  assert.doesNotMatch(ball.find('floating-ball-trigger').props.className, /is-idle/);
+  await ball.advance(1);
+  assert.match(ball.find('floating-ball-trigger').props.className, /is-idle/);
+});
+
 test('leaving closes after a grace period and reentering cancels dismissal', async (t) => {
   const ball = mountBall(t);
   await ball.render();

@@ -149,7 +149,11 @@ export const zh = {
       floatingBall: '常驻桌面悬浮球',
       floatingBallDesc: '在桌面显示常驻可拖拽悬浮球，支持快速唤起与划词响应',
       floatingBallAutoHide: '悬浮球贴边自动半隐藏',
-      floatingBallAutoHideDesc: '悬浮球吸附在屏幕边缘闲置 2.5 秒后自动向边缘缩进 50% 并半透明化',
+      floatingBallAutoHideDesc: '悬浮球闲置后自动向屏幕边缘缩进并半透明化',
+      floatingBallHideDelay: '侧边隐藏延迟',
+      floatingBallHideDelayDesc: '鼠标移出后，等待多久自动半隐藏悬浮球',
+      floatingBallHoverDelay: '悬停展开延迟',
+      floatingBallHoverDelayDesc: '鼠标停留在悬浮球上多久后展开快捷菜单',
     },
     providers: {
       title: '模型服务商配置',

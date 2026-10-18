@@ -28,6 +28,12 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
   const fileDragHoverDelayMs = Math.min(3000, Math.max(200, general.fileDragHoverDelayMs ?? 1000));
+  const floatingBallDelays = [
+    { key: 'floatingBallHideDelayMs', label: 'floatingBallHideDelay', min: 500, max: 10000, step: 100, fallback: 2500, precision: 1,
+      visible: general.floatingBallAutoHide ?? true },
+    { key: 'floatingBallHoverDelayMs', label: 'floatingBallHoverDelay', min: 100, max: 3000, step: 20, fallback: 220, precision: 2,
+      visible: true },
+  ] as const;
 
   return (
     <div className="space-y-4">
@@ -403,6 +409,36 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                   }
                 />
               </div>
+              {floatingBallDelays.filter((delay) => delay.visible).map((delay) => {
+                const value = Math.min(delay.max, Math.max(delay.min, general[delay.key] ?? delay.fallback));
+                const seconds = (value / 1000).toFixed(delay.precision);
+                return (
+                  <div key={delay.key} className="space-y-2 rounded-lg border border-border/50 bg-muted/30 p-3 animate-in fade-in slide-in-from-top-1 duration-150 motion-reduce:animate-none">
+                    <div className="flex items-center justify-between gap-4">
+                      <Label htmlFor={delay.key} className="text-xs font-medium">
+                        {t(`settings.general.${delay.label}`)}
+                      </Label>
+                      <span className="text-xs font-mono tabular-nums text-primary" aria-live="polite">
+                        {seconds} {isZh ? '秒' : 's'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{t(`settings.general.${delay.label}Desc`)}</p>
+                    <Slider
+                      id={delay.key}
+                      min={delay.min}
+                      max={delay.max}
+                      step={delay.step}
+                      value={value}
+                      onChange={(next) => onUpdateGeneral({ [delay.key]: next })}
+                      aria-valuetext={`${seconds} ${isZh ? '秒' : 'seconds'}`}
+                    />
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>{delay.min / 1000} {isZh ? '秒' : 's'}</span>
+                      <span>{delay.max / 1000} {isZh ? '秒' : 's'}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </>
           )}
 

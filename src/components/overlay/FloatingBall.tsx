@@ -49,14 +49,16 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
   const dragStart = useRef({ x: 0, y: 0 });
   const generation = useRef(0);
   const nativeQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const hideDelayMs = Math.min(10000, Math.max(500, config?.general.floatingBallHideDelayMs ?? 2500));
+  const hoverDelayMs = Math.min(3000, Math.max(100, config?.general.floatingBallHoverDelayMs ?? 220));
 
   const resetIdleTimer = useCallback(() => {
     cancelTimer(idleTimer);
     setIsIdle(false);
-    if (config?.general.floatingBallAutoHide && !expanded.current && !opening.current && !dragging.current && !inside.current) {
-      idleTimer.current = setTimeout(() => setIsIdle(true), 2500);
+    if ((config?.general.floatingBallAutoHide ?? true) && !expanded.current && !opening.current && !dragging.current && !inside.current) {
+      idleTimer.current = setTimeout(() => setIsIdle(true), hideDelayMs);
     }
-  }, [config?.general.floatingBallAutoHide]);
+  }, [config?.general.floatingBallAutoHide, hideDelayMs]);
 
   const commitPlacement = useCallback((next: FloatingMenuCorner) => {
     flushSync(() => {
@@ -163,9 +165,14 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
   const scheduleHover = useCallback(() => {
     cancelTimer(hoverTimer);
     if (!closing.current && !expanded.current && !opening.current && !dragging.current && !mouseDown.current) {
-      hoverTimer.current = setTimeout(() => { void openMenu(); }, 220);
+      hoverTimer.current = setTimeout(() => { void openMenu(); }, hoverDelayMs);
     }
-  }, [openMenu]);
+  }, [openMenu, hoverDelayMs]);
+
+  useEffect(() => {
+    if (inside.current) scheduleHover();
+    return () => cancelTimer(hoverTimer);
+  }, [scheduleHover]);
 
   const closeMenu = useCallback((options: CloseOptions = {}): Promise<boolean> => {
     cancelTimer(hoverTimer);
