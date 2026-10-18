@@ -38,7 +38,7 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
     }
   }, [config?.general?.floatingBallAutoHide, isExpanded, isDragging]);
 
-  // 初始化悬浮球位置与边缘状态
+  // 初始化只跟随启用状态；展开/拖拽不能重新初始化原生窗口。
   useEffect(() => {
     if (config?.general?.enableFloatingBall === false) {
       return;
@@ -52,7 +52,6 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
       } catch (e) {
         console.error('Failed to init floating ball:', e);
       }
-      resetIdleTimer();
     };
     init();
 
@@ -60,7 +59,14 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
     };
-  }, [config?.general?.enableFloatingBall, resetIdleTimer]);
+  }, [config?.general?.enableFloatingBall]);
+
+  useEffect(() => {
+    resetIdleTimer();
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [resetIdleTimer]);
 
   // 当展开/收起状态改变时，原子性动态调整窗口尺寸与屏幕贴边坐标
   useEffect(() => {
@@ -79,15 +85,13 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
         }
         if (isExpanded) {
           setIsIdle(false);
-        } else {
-          resetIdleTimer();
         }
       } catch (e) {
         console.error('Failed to adjust floating ball window size:', e);
       }
     };
     adjustWindowSize();
-  }, [isExpanded, config?.general?.enableFloatingBall, resetIdleTimer]);
+  }, [isExpanded, config?.general?.enableFloatingBall]);
 
   // 处理鼠标按下 (准备拖拽或点击判定)
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -237,11 +241,7 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
           onMouseUp={handleMouseUp}
           className={cn(
             'floating-ball w-12 h-12 rounded-full aspect-square flex-shrink-0 cursor-grab active:cursor-grabbing',
-            'flex items-center justify-center transition-all duration-300',
-            'bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl',
-            'border border-black/10 dark:border-white/15',
-            'shadow-[0_4px_16px_rgba(0,0,0,0.12)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.18)]',
-            'active:scale-95',
+            'flex items-center justify-center',
             edge === 'left' ? 'is-docked-left' : 'is-docked-right',
             isIdle && 'is-idle'
           )}

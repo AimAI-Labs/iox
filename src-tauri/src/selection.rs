@@ -243,9 +243,34 @@ pub fn get_foreground_process_name() -> Option<String> {
     }
 }
 
-/// 模拟按下与释放 Ctrl+C
-pub fn simulate_ctrl_c() {
+/// 终端中的 Ctrl+C 可能给整个开发进程树发送中断，不能用来探测选区。
+fn can_simulate_copy(window_class: &str, process_name: &str) -> bool {
+    if window_class.is_empty() && process_name.is_empty() {
+        return false;
+    }
+    !matches!(window_class, "ConsoleWindowClass" | "CASCADIA_HOSTING_WINDOW_CLASS" | "mintty")
+        && !matches!(process_name.to_ascii_lowercase().as_str(),
+            "windowsterminal.exe" | "openconsole.exe" | "conhost.exe" |
+            "pwsh.exe" | "powershell.exe" | "cmd.exe" | "mintty.exe")
+}
+
+/// 模拟按下与释放 Ctrl+C；在注入前检查当前前台，终端或未知目标直接跳过。
+pub fn simulate_ctrl_c() -> bool {
+    // SAFETY: 前台 HWND 仅用于查询；类名缓冲区有效且长度明确。
+    // 只有确认目标不是终端后才注入，INPUT 数组在 SendInput 返回前保持有效。
     unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_null() {
+            return false;
+        }
+        let mut class_buffer = [0u16; 256];
+        let class_len = GetClassNameW(hwnd, class_buffer.as_mut_ptr(), class_buffer.len() as i32);
+        let window_class = String::from_utf16_lossy(&class_buffer[..class_len.max(0) as usize]);
+        let process_name = get_foreground_process_name().unwrap_or_default();
+        if !can_simulate_copy(&window_class, &process_name) {
+            return false;
+        }
+
         let mut inputs = [
             INPUT {
                 r#type: INPUT_KEYBOARD,
@@ -301,7 +326,7 @@ pub fn simulate_ctrl_c() {
             inputs.len() as u32,
             inputs.as_mut_ptr(),
             std::mem::size_of::<INPUT>() as i32,
-        );
+        ) == inputs.len() as u32
     }
 }
 
@@ -317,7 +342,9 @@ pub fn extract_selected_text_safely() -> Option<String> {
     let seq_before = unsafe { GetClipboardSequenceNumber() };
 
     // 3. 模拟 Ctrl+C
-    simulate_ctrl_c();
+    if !simulate_ctrl_c() {
+        return None;
+    }
 
     // 4. 轮询等待剪贴板序列号发生更新（最大等待 80ms，每 8ms 检测一次）
     let start = Instant::now();
@@ -689,6 +716,24 @@ pub fn start_mouse_hook(handle: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_windows_must_not_receive_synthetic_copy() {
+        for class in ["ConsoleWindowClass", "CASCADIA_HOSTING_WINDOW_CLASS", "mintty"] {
+            assert!(!can_simulate_copy(class, ""), "{class}");
+        }
+        for process in ["WindowsTerminal.exe", "OpenConsole.exe", "conhost.exe", "pwsh.exe", "powershell.exe", "cmd.exe", "mintty.exe"] {
+            assert!(!can_simulate_copy("unknown", process), "{process}");
+        }
+        assert!(!can_simulate_copy("unknown", "WINDOWSTERMINAL.EXE"));
+    }
+
+    #[test]
+    fn ordinary_editors_can_still_receive_synthetic_copy() {
+        assert!(can_simulate_copy("Notepad", "notepad.exe"));
+        assert!(can_simulate_copy("Chrome_WidgetWin_1", "chrome.exe"));
+        assert!(!can_simulate_copy("", ""));
+    }
 
     #[test]
     fn test_drag_distance() {

@@ -544,9 +544,10 @@ fn toggle_floating_ball(app: AppHandle, state: State<AppState>, visible: bool) -
 }
 
 #[tauri::command]
-fn get_current_selection() -> Result<Option<String>, String> {
-    let text = selection::extract_selected_text_safely();
-    Ok(text)
+async fn get_current_selection() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(selection::extract_selected_text_safely)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

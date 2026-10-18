@@ -452,20 +452,58 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
   overflow: visible;
   background: transparent;
-  padding: 0;
   margin: 0;
 }
 
 .floating-ball {
+  position: relative;
+  isolation: isolate;
   user-select: none;
   touch-action: none;
   border-radius: 9999px !important;
   box-sizing: border-box;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, box-shadow 0.25s ease;
-  will-change: transform, opacity;
+  border: 1px solid rgba(126, 143, 166, 0.42);
+  background:
+    radial-gradient(ellipse at 30% 12%, rgba(255, 255, 255, 0.98), transparent 65%),
+    linear-gradient(145deg, rgba(247, 250, 255, 0.94), rgba(218, 226, 238, 0.87));
+  backdrop-filter: blur(18px) saturate(135%);
+  box-shadow: 0 3px 6px rgba(25, 40, 65, 0.18),
+    inset 0 1px 1px rgba(255, 255, 255, 1),
+    inset 0 -2px 4px rgba(82, 105, 140, 0.16);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 220ms ease, box-shadow 180ms ease;
+}
+
+.floating-ball::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  pointer-events: none;
+}
+
+.dark .floating-ball {
+  border-color: rgba(185, 204, 231, 0.3);
+  background:
+    radial-gradient(ellipse at 30% 12%, rgba(164, 184, 214, 0.25), transparent 65%),
+    linear-gradient(145deg, rgba(56, 66, 84, 0.96), rgba(25, 31, 43, 0.94));
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.32),
+    inset 0 1px 1px rgba(221, 233, 255, 0.3),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.35);
+}
+
+.dark .floating-ball::before {
+  border-color: rgba(211, 225, 248, 0.12);
+}
+
+.floating-ball:hover {
+  transform: translateY(-1px);
+}
+
+.floating-ball:active {
+  transform: scale(0.96);
 }
 
 /* 停靠左边缘闲置折叠 */
@@ -485,18 +523,27 @@
   opacity: 1;
 }
 
-/* 悬浮球内部图标顺时针 360° 旋转，移出逆时针 360° 回正 */
 .floating-ball-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  transform: rotate(0deg);
-  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-  will-change: transform;
+  filter: drop-shadow(0 1px 1px rgba(38, 65, 110, 0.16));
+  transition: transform 180ms ease;
 }
 
 .floating-ball:hover .floating-ball-icon {
-  transform: rotate(360deg);
+  transform: scale(1.06);
+}
+
+.dark .floating-ball-icon {
+  filter: brightness(0) invert(1) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-ball,
+  .floating-ball-icon {
+    transition: none;
+  }
 }
 
 /* ==========================================================================
