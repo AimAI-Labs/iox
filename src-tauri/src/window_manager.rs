@@ -205,6 +205,25 @@ pub fn calculate_overlay_position(
     }
 }
 
+/// Fit the entire file menu inside the cursor monitor's work area, preserving its shape.
+pub fn fit_overlay_size(app: &AppHandle, x: i32, y: i32, width: f64, height: f64) -> (i32, i32) {
+    let scale = app.get_webview_window("overlay")
+        .and_then(|window| window.scale_factor().ok()).unwrap_or(1.0);
+    // SAFETY: MONITORINFO contains only integers/RECTs; zero is a valid initial value.
+    let mut info: MONITORINFO = unsafe { std::mem::zeroed() };
+    info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+    // SAFETY: the nearest monitor is only queried; info is valid writable storage.
+    let available = unsafe {
+        let monitor = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
+        if GetMonitorInfoW(monitor, &mut info) != 0 {
+            ((info.rcWork.right - info.rcWork.left - 16) as f64 / scale,
+             (info.rcWork.bottom - info.rcWork.top - 24) as f64 / scale)
+        } else { (1920.0 / scale, 1040.0 / scale) }
+    };
+    let factor = (available.0 / width).min(available.1 / height).min(1.0);
+    ((width * factor).ceil().max(160.0) as i32, (height * factor).ceil() as i32)
+}
+
 /// 显示并在指定坐标定位 Overlay 窗口
 pub fn show_overlay_at(
     app: &AppHandle,

@@ -157,10 +157,10 @@ export function App() {
               key={overlayState.animKey}
               files={overlayState.selectedFiles}
               dragId={overlayState.fileDragId!}
+              layout={overlayState.fileMenuLayout!}
               actions={config.actions}
               isClosing={overlayState.isClosing}
               onClose={overlayState.handleClose}
-              onOpenSettings={() => handleOpenSettings('actions')}
             /> :
             <BubbleBar
               key={overlayState.animKey}

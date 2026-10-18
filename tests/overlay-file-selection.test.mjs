@@ -24,10 +24,12 @@ test('native file drops reach the overlay through Webview events with Tauri unst
 });
 
 test('file selection opens the bubble and replaces previous text and errors', () => {
+  const layout = { width: 548, height: 232, buttons: [{ x: 12, y: 140 }] };
   const result = overlayReducer({ ...initialOverlayState, selectedText: 'old', error: 'old error' }, {
-    type: 'FILES_SELECTED', dragId: 42, files: ['C:\\文档\\报告.pdf', 'C:\\image.png'],
+    type: 'FILES_SELECTED', dragId: 42, files: ['C:\\文档\\报告.pdf', 'C:\\image.png'], layout,
   });
   assert.equal(result.fileDragId, 42);
+  assert.deepEqual(result.fileMenuLayout, layout);
   assert.equal(result.visible, true);
   assert.equal(result.mode, 'bubble');
   assert.deepEqual(result.selectedFiles, ['C:\\文档\\报告.pdf', 'C:\\image.png']);
@@ -36,13 +38,18 @@ test('file selection opens the bubble and replaces previous text and errors', ()
 });
 
 test('text selection and completed hiding clear previous files', () => {
-  const state = overlayReducer(initialOverlayState, { type: 'FILES_SELECTED', dragId: 42, files: ['C:\\report.pdf'] });
+  const state = overlayReducer(initialOverlayState, {
+    type: 'FILES_SELECTED', dragId: 42, files: ['C:\\report.pdf'],
+    layout: { width: 104, height: 104, buttons: [{ x: 12, y: 12 }] },
+  });
   const text = overlayReducer(state, { type: 'SELECTION_TRIGGERED', text: 'hello' });
   assert.deepEqual(text.selectedFiles, []);
   assert.equal(text.fileDragId, null);
+  assert.equal(text.fileMenuLayout, null);
   assert.equal(text.selectedText, 'hello');
   const hidden = overlayReducer(state, { type: 'HIDE_COMPLETE' });
   assert.deepEqual(hidden.selectedFiles, []);
   assert.equal(hidden.fileDragId, null);
+  assert.equal(hidden.fileMenuLayout, null);
   assert.equal(hidden.visible, false);
 });

@@ -1,5 +1,5 @@
 //! Read actual Explorer/desktop selection through Shell COM, without clipboard access.
-use crate::file_drag::{DragDwell, FileDragSession};
+use crate::file_drag::{DragDwell, FileDragSession, FileMenuLayout};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -87,6 +87,7 @@ fn enabled(app: &AppHandle) -> bool {
     app.try_state::<crate::AppState>().is_some_and(|state| {
         state.config.try_lock().is_ok_and(|config| {
             config.general.auto_popup_on_file_selection
+                && config.actions.iter().any(|action| action.enabled && action.action_type == "web")
                 && crate::selection::is_modifier_satisfied(&config.general.trigger_modifier)
                 && !config
                     .blacklist
@@ -208,16 +209,24 @@ pub fn mouse_down(app: &AppHandle, point: (i32, i32), inside_overlay: bool) {
                     }
                     crate::selection::cancel_pending_hide();
                     crate::overlay_state::set_overlay_bubble_mode(true);
+                    let count = main_app.state::<crate::AppState>().config.lock()
+                        .map(|config| config.actions.iter().filter(|a| a.enabled && a.action_type == "web").count())
+                        .unwrap_or(0);
+                    let layout = FileMenuLayout::new(count);
+                    let (width, height) = crate::window_manager::fit_overlay_size(
+                        &main_app, position.0, position.1, layout.width, layout.height,
+                    );
                     let _ = main_app.emit_to(
                         "overlay",
                         "files-selected",
                         FilesPayload {
                             files,
                             drag_id: generation,
+                            layout,
                         },
                     );
                     crate::window_manager::show_overlay_at(
-                        &main_app, position.0, position.1, 360, 194,
+                        &main_app, position.0, position.1, width, height,
                     );
                 });
                 return;
@@ -386,6 +395,7 @@ fn point_on_item(point: (i32, i32)) -> bool {
 struct FilesPayload {
     files: Vec<String>,
     drag_id: u64,
+    layout: FileMenuLayout,
 }
 
 struct Apartment;

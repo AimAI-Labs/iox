@@ -4,7 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 const source = readFileSync(new URL('../src/lib/file-drop.ts', import.meta.url), 'utf8');
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } });
-const { findFileDropTarget, fileDragScrollDirection } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const { findFileDropTarget } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 const targets = [
   { id: 'first', left: 10, top: 50, right: 80, bottom: 90, disabled: false },
   { id: 'second', left: 90, top: 50, right: 160, bottom: 90, disabled: false },
@@ -21,14 +21,4 @@ test('blank areas, button gaps, disabled targets and invalid scale cannot receiv
     assert.equal(findFileDropTarget(point, 1, targets), null);
   }
   assert.equal(findFileDropTarget({ x: 20, y: 60 }, 0, targets), null);
-});
-
-test('holding a drag at either menu edge scrolls to hidden AI targets', () => {
-  const bounds = { left: 12, right: 348, top: 45, bottom: 82 };
-  assert.equal(fileDragScrollDirection({ x: 14, y: 60 }, 1, bounds), -1);
-  assert.equal(fileDragScrollDirection({ x: 346, y: 60 }, 1, bounds), 1);
-  assert.equal(fileDragScrollDirection({ x: 346 * 2, y: 60 * 2 }, 2, bounds), 1);
-  assert.equal(fileDragScrollDirection({ x: 150, y: 60 }, 1, bounds), 0);
-  assert.equal(fileDragScrollDirection({ x: 346, y: 20 }, 1, bounds), 0);
-  assert.equal(fileDragScrollDirection({ x: 350, y: 60 }, 1, bounds), 0);
 });

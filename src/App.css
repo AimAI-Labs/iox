@@ -166,6 +166,25 @@
   height: 0 !important;
 }
 
+/* Lift the visible card while keeping its drop target stationary. */
+.file-ai-card-surface {
+  transform: translateY(0);
+  box-shadow: 0 3px 10px rgb(0 0 0 / 16%);
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms ease-out, background-color 160ms ease-out, border-color 160ms ease-out;
+}
+
+[data-file-action-id][data-drag-hovered="true"] > .file-ai-card-surface {
+  transform: translateY(-6px);
+  box-shadow: 0 8px 16px rgb(0 0 0 / 20%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-ai-card-surface {
+    transition: none;
+  }
+}
+
 /* 覆盖层容器 */
 .overlay-root {
   width: 100vw;

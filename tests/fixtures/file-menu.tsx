@@ -38,7 +38,15 @@ let nextId = 0;
   },
 };
 if (params.has('dark')) document.documentElement.classList.add('dark');
-document.body.style.cssText = 'margin:0;width:360px;height:194px;background:transparent;';
+document.body.style.cssText = 'margin:0;width:373px;height:120px;background:transparent;';
+const layout = {
+  width: 373, height: 120,
+  buttons: [
+    { x: 18.34, y: 21.34, rotation: -10 }, { x: 82.34, y: 15.34, rotation: -5 },
+    { x: 146.34, y: 13.34, rotation: 0 }, { x: 210.34, y: 15.34, rotation: 5 },
+    { x: 274.34, y: 21.34, rotation: 10 },
+  ],
+};
 const actions = [
   { id: 'copy', name: '复制', icon: 'copy', actionType: 'copy' as const, enabled: true },
   ...['豆包', '千问', 'ChatGPT', 'Kimi', 'DeepSeek'].map((name, index) => ({
@@ -49,9 +57,8 @@ createRoot(document.getElementById('root')!).render(
   <I18nProvider languageSetting={language}>
     <div className="overlay-root">
       <FileSelectionMenu files={['C:\\文档\\项目需求与进度报告.pdf', 'C:\\图片\\设计稿.png']}
-        dragId={42} actions={params.has('empty') ? [] : actions} isClosing={false}
-        onClose={() => { document.body.dataset.closed = 'true'; }}
-        onOpenSettings={() => { document.body.dataset.settings = 'true'; }} />
+        dragId={42} layout={layout} actions={params.has('empty') ? [] : actions} isClosing={false}
+        onClose={() => { document.body.dataset.closed = 'true'; }} />
     </div>
   </I18nProvider>,
 );

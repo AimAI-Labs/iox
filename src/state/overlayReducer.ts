@@ -1,4 +1,5 @@
 import { ActionConfig } from '@/types/config';
+import type { FileMenuLayout } from '@/lib/file-drop';
 
 export type OverlayMode = 'bubble' | 'card';
 
@@ -8,6 +9,7 @@ export interface OverlayState {
   selectedText: string;
   selectedFiles: string[];
   fileDragId: number | null;
+  fileMenuLayout: FileMenuLayout | null;
   activeAction: ActionConfig | null;
   selectedModel: string;
   streamText: string;
@@ -37,6 +39,7 @@ export const initialOverlayState: OverlayState = {
   selectedText: '',
   selectedFiles: [],
   fileDragId: null,
+  fileMenuLayout: null,
   activeAction: null,
   selectedModel: '',
   streamText: '',
@@ -52,7 +55,7 @@ export const initialOverlayState: OverlayState = {
 
 export type OverlayAction =
   | { type: 'SELECTION_TRIGGERED'; text: string }
-  | { type: 'FILES_SELECTED'; files: string[]; dragId: number }
+  | { type: 'FILES_SELECTED'; files: string[]; dragId: number; layout: FileMenuLayout }
   | { type: 'SET_MODE'; mode: OverlayMode }
   | { type: 'START_ACTION'; action: ActionConfig; model?: string }
   | { type: 'START_EMPTY_CARD_ACTION'; action: ActionConfig; model?: string }
@@ -83,6 +86,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         selectedText: action.text,
         selectedFiles: [],
         fileDragId: null,
+        fileMenuLayout: null,
         mode: 'bubble',
         streamText: '',
         error: null,
@@ -99,6 +103,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         visible: true,
         selectedFiles: action.files,
         fileDragId: action.dragId,
+        fileMenuLayout: action.layout,
         isPinned: state.isPinned,
         animKey: state.animKey + 1,
       };
@@ -236,6 +241,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         ...state,
         selectedFiles: [],
         fileDragId: null,
+        fileMenuLayout: null,
         visible: false,
         isClosing: false,
         activeAction: null,
@@ -254,6 +260,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         ...state,
         selectedFiles: [],
         fileDragId: null,
+        fileMenuLayout: null,
         streamText: '',
         selectedText: '',
         error: null,

@@ -1,3 +1,70 @@
+#[derive(Clone, serde::Serialize)]
+pub struct FileMenuButton {
+    pub x: f64,
+    pub y: f64,
+    pub rotation: f64,
+}
+
+/// Shared geometry for the native window and its frontend drop targets.
+#[derive(Clone, serde::Serialize)]
+pub struct FileMenuLayout {
+    pub width: f64,
+    pub height: f64,
+    pub buttons: Vec<FileMenuButton>,
+}
+
+impl FileMenuLayout {
+    pub fn new(count: usize) -> Self {
+        let mut buttons = Vec::with_capacity(count);
+        let columns = count.min(7);
+        for row_start in (0..count).step_by(7) {
+            let row_count = (count - row_start).min(7);
+            for index in 0..row_count {
+                let offset = index as f64 - (row_count - 1) as f64 / 2.0;
+                buttons.push(FileMenuButton {
+                    x: (index * 64 + (columns - row_count) * 32) as f64,
+                    y: (row_start / 7 * 116) as f64 + offset * offset * 2.0,
+                    rotation: offset * 5.0,
+                });
+            }
+        }
+        // Include the rotated corners so shadows and raised cards remain inside the window.
+        let extent = |b: &FileMenuButton| {
+            let angle = b.rotation.to_radians();
+            40.0 * (angle.cos().abs() + angle.sin().abs())
+        };
+        let min_x = buttons
+            .iter()
+            .map(|b| b.x + 40.0 - extent(b))
+            .reduce(f64::min)
+            .unwrap_or(0.0);
+        let max_x = buttons
+            .iter()
+            .map(|b| b.x + 40.0 + extent(b))
+            .reduce(f64::max)
+            .unwrap_or(80.0);
+        let min_y = buttons
+            .iter()
+            .map(|b| b.y + 40.0 - extent(b))
+            .reduce(f64::min)
+            .unwrap_or(0.0);
+        let max_y = buttons
+            .iter()
+            .map(|b| b.y + 40.0 + extent(b))
+            .reduce(f64::max)
+            .unwrap_or(80.0);
+        for button in &mut buttons {
+            button.x += 12.0 - min_x;
+            button.y += 12.0 - min_y;
+        }
+        Self {
+            width: (max_x - min_x + 24.0).ceil(),
+            height: (max_y - min_y + 24.0).ceil(),
+            buttons,
+        }
+    }
+}
+
 /// One gesture: move beyond the system drag threshold, then dwell for one second.
 pub struct DragDwell {
     start: (i32, i32),
@@ -101,6 +168,48 @@ impl FileDragSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stacked_menu_keeps_every_card_center_exposed_and_corners_inside() {
+        for count in 1..=40 {
+            let layout = FileMenuLayout::new(count);
+            assert_eq!(layout.buttons.len(), count);
+            for (index, button) in layout.buttons.iter().enumerate() {
+                let angle = button.rotation.to_radians();
+                let extent = 40.0 * (angle.cos().abs() + angle.sin().abs());
+                assert!(button.x + 40.0 - extent >= 8.0);
+                assert!(button.y + 40.0 - extent >= 8.0);
+                assert!(button.x + 40.0 + extent <= layout.width);
+                assert!(button.y + 40.0 + extent <= layout.height);
+                for other in &layout.buttons[index + 1..] {
+                    let angle = other.rotation.to_radians();
+                    let dx = button.x - other.x;
+                    let dy = button.y - other.y;
+                    assert!(
+                        (dx * angle.cos() + dy * angle.sin()).abs() > 40.0
+                            || (-dx * angle.sin() + dy * angle.cos()).abs() > 40.0,
+                        "Covered card center for {count} actions"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn five_ai_buttons_form_an_upward_arc() {
+        let layout = FileMenuLayout::new(5);
+        assert!(
+            layout.width < 400.0 && layout.height < 150.0,
+            "The card fan should be compact"
+        );
+        assert!(
+            layout.buttons[1].x - layout.buttons[0].x < 80.0,
+            "Neighboring cards should overlap"
+        );
+        assert!(layout.buttons[2].y < layout.buttons[0].y);
+        assert!((layout.buttons[0].y - layout.buttons[4].y).abs() < 0.01);
+        assert!(layout.buttons.windows(2).all(|pair| pair[0].x < pair[1].x));
+    }
 
     #[test]
     fn click_and_stationary_hold_do_not_start_a_drag() {

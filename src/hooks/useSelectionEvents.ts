@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { OverlayMode } from '@/state/overlayReducer';
+import type { FileMenuLayout } from '@/lib/file-drop';
 
 interface SelectionEventPayload {
   text: string;
@@ -11,7 +12,7 @@ interface SelectionEventPayload {
 interface UseSelectionEventsProps {
   isPinned: boolean;
   onSelectionTriggered: (text: string) => void;
-  onFilesSelected: (files: string[], dragId: number) => void;
+  onFilesSelected: (files: string[], dragId: number, layout: FileMenuLayout) => void;
   onRequestHide: () => void;
   cancelCloseTimer: () => void;
   updateWindowSize: (mode: OverlayMode, allowFocus?: boolean) => Promise<void>;
@@ -41,10 +42,10 @@ export function useSelectionEvents({
       onRequestHide();
     });
 
-    const unlistenFiles = listen<{ files: string[]; dragId: number }>('files-selected', (event) => {
+    const unlistenFiles = listen<{ files: string[]; dragId: number; layout: FileMenuLayout }>('files-selected', (event) => {
       if (!event.payload.files.length) return;
       cancelCloseTimer();
-      onFilesSelected(event.payload.files, event.payload.dragId);
+      onFilesSelected(event.payload.files, event.payload.dragId, event.payload.layout);
       // Native selection already sizes and places the menu without taking focus.
     });
 
