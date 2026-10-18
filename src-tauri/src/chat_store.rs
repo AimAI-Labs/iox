@@ -38,25 +38,13 @@ pub struct SessionMeta {
     pub updated_at: u64,
 }
 
-/// 获取应用安装/运行目录下的 sessions.jsonl 路径
+/// 获取与 config.json 同目录的 sessions.jsonl 路径
 fn get_sessions_file_path() -> PathBuf {
-    let data_dir = if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            // 如果在 target/debug 等临时开发目录下，尽量放在工作目录下的 data/
-            let path = parent.join("data");
-            if fs::create_dir_all(&path).is_ok() {
-                path
-            } else {
-                PathBuf::from("data")
-            }
-        } else {
-            PathBuf::from("data")
-        }
-    } else {
-        PathBuf::from("data")
-    };
-    let _ = fs::create_dir_all(&data_dir);
-    data_dir.join("sessions.jsonl")
+    let path = crate::config::AppConfig::sessions_path();
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    path
 }
 
 fn current_timestamp() -> u64 {

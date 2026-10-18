@@ -1,5 +1,7 @@
 import React from "react";
-import { Cpu, Zap, Layers, MessageSquare, Globe, Sliders, Shield, Save } from "lucide-react";
+import { Cpu, Zap, Layers, MessageSquare, Globe, Sliders, Shield, Save, Code } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import { Button } from "@/components/ui";
 import { IOXLogo } from "@/components/common";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -84,7 +86,22 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
       </div>
 
       {/* Save Button in Footer */}
-      <div className="pt-3 border-t border-border/30">
+      <div className="pt-3 border-t border-border/30 space-y-2">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={async () => {
+            try {
+              await invoke("open_settings_devtools");
+            } catch (error) {
+              toast.error(t('settings.sidebar.devtoolsFailed'), { description: String(error) });
+            }
+          }}
+          className="w-full h-8 justify-start gap-2.5 px-2.5 text-xs text-muted-foreground"
+        >
+          <Code size={14} />
+          <span>{t('settings.sidebar.devtools')}</span>
+        </Button>
         <Button
           onClick={onSave}
           title={`${t('common.save')} (Ctrl + S)`}

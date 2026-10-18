@@ -103,6 +103,8 @@ export const zh = {
       sessions: '历史会话',
       web: '网页聚合',
       blacklist: '应用黑名单',
+      devtools: '开发者工具',
+      devtoolsFailed: '无法打开开发者工具',
     },
     general: {
       title: '划词触发与常规设置',

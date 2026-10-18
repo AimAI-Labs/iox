@@ -25,6 +25,15 @@ pub struct AppState {
 }
 
 #[tauri::command]
+fn open_settings_devtools(webview: tauri::Webview) -> Result<(), String> {
+    if webview.label() != "main" {
+        return Err("Developer tools can only be opened from settings".into());
+    }
+    webview.open_devtools();
+    Ok(())
+}
+
+#[tauri::command]
 fn get_config(state: State<AppState>) -> AppConfig {
     let config = state.config.lock().unwrap();
     config.clone()
@@ -619,6 +628,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            open_settings_devtools,
             get_config,
             save_config,
             save_api_card_size,

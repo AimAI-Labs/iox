@@ -29,6 +29,12 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   const formDataRef = useRef<AppConfig>(formData);
 
   useEffect(() => {
+    const preventContextMenu = (event: MouseEvent) => event.preventDefault();
+    document.addEventListener("contextmenu", preventContextMenu, true);
+    return () => document.removeEventListener("contextmenu", preventContextMenu, true);
+  }, []);
+
+  useEffect(() => {
     formDataRef.current = formData;
   }, [formData]);
 

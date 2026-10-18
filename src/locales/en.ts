@@ -105,6 +105,8 @@ export const en: TranslationTree = {
       sessions: 'Sessions',
       web: 'Web Hub',
       blacklist: 'Blacklist',
+      devtools: 'Developer Tools',
+      devtoolsFailed: 'Failed to open developer tools',
     },
     general: {
       title: 'Selection & General Settings',
