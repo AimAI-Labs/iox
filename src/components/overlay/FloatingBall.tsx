@@ -1,257 +1,369 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { ActionConfig, AppConfig } from '@/types/config';
 import { IOXLogo } from '@/components/common';
-import { FloatingMenu } from './FloatingMenu';
+import { FloatingMenu, type FloatingMenuCorner } from './FloatingMenu';
 import { cn } from '@/lib/utils';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from '@/hooks/useTranslation';
 
 export interface FloatingBallProps {
   config: AppConfig | null;
 }
 
+type Timer = ReturnType<typeof setTimeout>;
+interface CloseOptions { immediate?: boolean; reversible?: boolean }
+interface ClosingTransition {
+  promise: Promise<boolean>;
+  resolve: (closed: boolean) => void;
+  reversible: boolean;
+  committing: boolean;
+  finish: () => Promise<void>;
+}
+function cancelTimer(ref: { current: Timer | null }) {
+  if (ref.current !== null) clearTimeout(ref.current);
+  ref.current = null;
+}
+
 export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
   const { t } = useTranslation();
   const [edge, setEdge] = useState<'left' | 'right'>('right');
+  const [corner, setCorner] = useState<FloatingMenuCorner>('top-right');
   const [isIdle, setIsIdle] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isRevealed, setIsRevealed] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [capturedText, setCapturedText] = useState('');
+  const idleTimer = useRef<Timer | null>(null);
+  const hoverTimer = useRef<Timer | null>(null);
+  const leaveTimer = useRef<Timer | null>(null);
+  const closeTimer = useRef<Timer | null>(null);
+  const closing = useRef<ClosingTransition | null>(null);
+  const inside = useRef(false);
+  const expanded = useRef(false);
+  const opening = useRef(false);
+  const inputFocused = useRef(false);
+  const dragging = useRef(false);
+  const mouseDown = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const generation = useRef(0);
+  const nativeQueue = useRef<Promise<unknown>>(Promise.resolve());
 
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragStartPosRef = useRef<{ x: number; y: number } | null>(null);
-  const isMouseDownRef = useRef(false);
-
-  // 启动/重置闲置半隐藏计时器 (2.5s)
   const resetIdleTimer = useCallback(() => {
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
+    cancelTimer(idleTimer);
     setIsIdle(false);
-
-    if (config?.general?.floatingBallAutoHide && !isExpanded && !isDragging) {
-      idleTimerRef.current = setTimeout(() => {
-        setIsIdle(true);
-      }, 2500);
+    if (config?.general.floatingBallAutoHide && !expanded.current && !opening.current && !dragging.current && !inside.current) {
+      idleTimer.current = setTimeout(() => setIsIdle(true), 2500);
     }
-  }, [config?.general?.floatingBallAutoHide, isExpanded, isDragging]);
+  }, [config?.general.floatingBallAutoHide]);
 
-  // 初始化只跟随启用状态；展开/拖拽不能重新初始化原生窗口。
+  const commitPlacement = useCallback((next: FloatingMenuCorner) => {
+    flushSync(() => {
+      setCorner(next);
+      setEdge(next.endsWith('left') ? 'left' : 'right');
+    });
+  }, []);
+
   useEffect(() => {
-    if (config?.general?.enableFloatingBall === false) {
-      return;
-    }
-    const init = async () => {
-      try {
-        const res = await invoke<[number, number, string]>('init_floating_ball');
-        if (res && res[2]) {
-          setEdge(res[2] as 'left' | 'right');
-        }
-      } catch (e) {
-        console.error('Failed to init floating ball:', e);
-      }
-    };
-    init();
-
+    if (config?.general.enableFloatingBall === false) return;
+    nativeQueue.current = invoke<[number, number, FloatingMenuCorner]>('init_floating_ball')
+      .then(async (result) => {
+        commitPlacement(result[2]);
+        await invoke('set_floating_ball_expanded', { expanded: false });
+      })
+      .catch((error) => console.error('Failed to init floating ball:', error));
     return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+      generation.current++;
+      cancelTimer(idleTimer);
+      cancelTimer(hoverTimer);
+      cancelTimer(leaveTimer);
+      cancelTimer(closeTimer);
+      closing.current?.resolve(false);
+      closing.current = null;
     };
-  }, [config?.general?.enableFloatingBall]);
+  }, [config?.general.enableFloatingBall, commitPlacement]);
 
   useEffect(() => {
     resetIdleTimer();
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    };
+    return () => cancelTimer(idleTimer);
   }, [resetIdleTimer]);
 
-  // 当展开/收起状态改变时，原子性动态调整窗口尺寸与屏幕贴边坐标
   useEffect(() => {
-    if (config?.general?.enableFloatingBall === false) {
-      return;
-    }
-    const adjustWindowSize = async () => {
-      try {
-        const res = await invoke<[number, number, string]>('set_floating_ball_expanded', {
-          expanded: isExpanded,
-          width: 290,
-          height: 260,
-        });
-        if (res && res[2]) {
-          setEdge(res[2] as 'left' | 'right');
-        }
-        if (isExpanded) {
-          setIsIdle(false);
-        }
-      } catch (e) {
-        console.error('Failed to adjust floating ball window size:', e);
-      }
+    if (!isExpanded || isClosing) return;
+    const request = generation.current;
+    let secondFrame = 0;
+    // Paint the anchored circle before changing the transition's target.
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        if (request === generation.current) setIsRevealed(true);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
     };
-    adjustWindowSize();
-  }, [isExpanded, config?.general?.enableFloatingBall]);
+  }, [isExpanded, isClosing]);
 
-  // 处理鼠标按下 (准备拖拽或点击判定)
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return; // 仅左键
-    isMouseDownRef.current = true;
-    dragStartPosRef.current = { x: e.screenX, y: e.screenY };
+  useEffect(() => {
+    const release = () => { mouseDown.current = false; };
+    window.addEventListener('mouseup', release);
+    window.addEventListener('blur', release);
+    return () => {
+      window.removeEventListener('mouseup', release);
+      window.removeEventListener('blur', release);
+    };
+  }, []);
+
+  // Serialize input-region changes so a late expansion cannot undo a close.
+  const setMenuRegion = useCallback((open: boolean) => {
+    const task = nativeQueue.current.then(async () => {
+      if (!open) {
+        // The canvas stays full-size; remove the glass after its exit animation
+        // before restricting native input to the ball.
+        flushSync(() => {
+          setIsExpanded(false);
+          setIsRevealed(false);
+          setIsClosing(false);
+        });
+      }
+      const result = await invoke<[number, number, FloatingMenuCorner]>('set_floating_ball_expanded', {
+        expanded: open,
+      });
+      return result;
+    });
+    nativeQueue.current = task.catch(() => undefined);
+    return task;
+  }, []);
+
+  const openMenu = useCallback(async () => {
+    if (closing.current || expanded.current || opening.current || dragging.current || mouseDown.current) return;
+    const request = ++generation.current;
+    opening.current = true;
     setIsIdle(false);
-  };
-
-  // 处理鼠标移动 (超过 5px 触发拖拽)
-  const handleMouseMove = async (e: React.MouseEvent) => {
-    if (!isMouseDownRef.current || !dragStartPosRef.current || isDragging || isExpanded) return;
-
-    const dx = Math.abs(e.screenX - dragStartPosRef.current.x);
-    const dy = Math.abs(e.screenY - dragStartPosRef.current.y);
-
-    if (dx > 5 || dy > 5) {
-      setIsDragging(true);
-      isMouseDownRef.current = false;
-      if (clickTimerRef.current) {
-        clearTimeout(clickTimerRef.current);
-        clickTimerRef.current = null;
-      }
-
-      try {
-        const res = await invoke<[number, number, string]>('start_floating_ball_dragging');
-        if (res && res[2]) {
-          setEdge(res[2] as 'left' | 'right');
-        }
-      } catch (err) {
-        console.error('Dragging error:', err);
-      } finally {
-        setIsDragging(false);
-        resetIdleTimer();
-      }
+    try {
+      const result = await setMenuRegion(true);
+      if (request !== generation.current) return;
+      opening.current = false;
+      expanded.current = true;
+      setCorner(result[2]);
+      setIsExpanded(true);
+      setIsClosing(false);
+      setIsRevealed(window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      // Display immediately; clipboard polling must not delay hover feedback.
+      void invoke<string | null>('get_current_selection').then((selected) => {
+        if (request === generation.current && expanded.current) setCapturedText(selected?.trim() || '');
+      }).catch((error) => console.error('Failed to capture selection:', error));
+    } catch (error) {
+      if (request === generation.current) opening.current = false;
+      console.error('Failed to expand floating menu:', error);
     }
-  };
+  }, [setMenuRegion]);
 
-  // 处理鼠标抬起 (未拖拽时区分单击与双击)
-  const handleMouseUp = async (e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    if (!isMouseDownRef.current) return;
-    isMouseDownRef.current = false;
-
-    if (isDragging) return;
-
-    // 检查是否在双击等待窗口内
-    if (clickTimerRef.current) {
-      // 触发双击：打开主设置面板
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-      setIsExpanded(false);
-      try {
-        await invoke('show_main_window');
-      } catch (err) {
-        console.error('Failed to show main window:', err);
-      }
-      return;
+  const scheduleHover = useCallback(() => {
+    cancelTimer(hoverTimer);
+    if (!closing.current && !expanded.current && !opening.current && !dragging.current && !mouseDown.current) {
+      hoverTimer.current = setTimeout(() => { void openMenu(); }, 220);
     }
+  }, [openMenu]);
 
-    // 启动 220ms 单击防抖计时器
-    clickTimerRef.current = setTimeout(async () => {
-      clickTimerRef.current = null;
-      // 单击触发：检测选词并切换展开状态
-      if (isExpanded) {
-        setIsExpanded(false);
-      } else {
+  const closeMenu = useCallback((options: CloseOptions = {}): Promise<boolean> => {
+    cancelTimer(hoverTimer);
+    cancelTimer(leaveTimer);
+    const pending = closing.current;
+    if (pending) {
+      if (!options.reversible) pending.reversible = false;
+      if (options.immediate && !pending.committing) {
+        cancelTimer(closeTimer);
+        void pending.finish();
+      }
+      return pending.promise;
+    }
+    if (!expanded.current && !opening.current) return Promise.resolve(true);
+
+    const request = ++generation.current;
+    let resolve!: (closed: boolean) => void;
+    const promise = new Promise<boolean>((done) => { resolve = done; });
+    const transition: ClosingTransition = {
+      promise, resolve, reversible: Boolean(options.reversible), committing: false,
+      finish: async () => {
+        transition.committing = true;
+        expanded.current = false;
+        opening.current = false;
+        inputFocused.current = false;
         try {
-          const selected = await invoke<string | null>('get_current_selection');
-          setCapturedText(selected?.trim() || '');
-        } catch {
-          setCapturedText('');
+          await setMenuRegion(false);
+          if (request === generation.current) {
+            setIsExpanded(false);
+            setIsRevealed(false);
+            setIsClosing(false);
+            setCapturedText('');
+          }
+          resolve(true);
+        } catch (error) {
+          if (request === generation.current) {
+            expanded.current = true;
+            setIsExpanded(true);
+            setIsClosing(false);
+            setIsRevealed(true);
+          }
+          console.error('Failed to collapse floating menu:', error);
+          resolve(false);
+        } finally {
+          if (closing.current === transition) closing.current = null;
+          if (request === generation.current) {
+            resetIdleTimer();
+            if (transition.reversible && inside.current) scheduleHover();
+          }
         }
-        setIsExpanded(true);
-      }
-    }, 220);
+      },
+    };
+    closing.current = transition;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (options.immediate || reduceMotion || !expanded.current) {
+      void transition.finish();
+    } else {
+      setIsClosing(true);
+      setIsRevealed(false);
+      // Keep the native canvas until the 180ms visual return has finished.
+      closeTimer.current = setTimeout(() => { void transition.finish(); }, 200);
+    }
+    return promise;
+  }, [setMenuRegion, resetIdleTimer, scheduleHover]);
+
+  useEffect(() => {
+    const unsubscribe = listen('floating-ball-dismiss', () => { void closeMenu({ immediate: true }); });
+    return () => { void unsubscribe.then((dispose) => dispose()); };
+  }, [closeMenu]);
+
+  const scheduleClose = () => {
+    cancelTimer(leaveTimer);
+    if (!inputFocused.current) leaveTimer.current = setTimeout(() => { void closeMenu({ reversible: true }); }, 300);
   };
 
   const handleMouseEnter = () => {
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
+    inside.current = true;
+    cancelTimer(idleTimer);
+    cancelTimer(leaveTimer);
     setIsIdle(false);
+    const pending = closing.current;
+    if (pending?.reversible && !pending.committing) {
+      cancelTimer(closeTimer);
+      generation.current++;
+      closing.current = null;
+      pending.resolve(false);
+      setIsClosing(false);
+      setIsRevealed(true);
+      return;
+    }
+    scheduleHover();
   };
 
   const handleMouseLeave = () => {
-    if (!isExpanded && !isDragging) {
+    inside.current = false;
+    cancelTimer(hoverTimer);
+    if (opening.current || expanded.current) scheduleClose();
+    else resetIdleTimer();
+  };
+
+  const handleMouseDown = (event: React.MouseEvent) => {
+    if (event.button !== 0) return;
+    mouseDown.current = true;
+    dragStart.current = { x: event.screenX, y: event.screenY };
+    cancelTimer(hoverTimer);
+    cancelTimer(leaveTimer);
+    setIsIdle(false);
+  };
+
+  const handleMouseMove = async (event: React.MouseEvent) => {
+    if (!mouseDown.current || dragging.current) return;
+    if (Math.hypot(event.screenX - dragStart.current.x, event.screenY - dragStart.current.y) <= 5) return;
+    dragging.current = true;
+    mouseDown.current = false;
+    inside.current = false;
+    try {
+      if (!await closeMenu({ immediate: true })) return;
+      const result = await invoke<[number, number, FloatingMenuCorner]>('start_floating_ball_dragging');
+      commitPlacement(result[2]);
+      await invoke('set_floating_ball_expanded', { expanded: false });
+    } catch (error) {
+      console.error('Floating ball drag failed:', error);
+    } finally {
+      dragging.current = false;
       resetIdleTimer();
     }
   };
 
-  const handleTriggerAction = async (action: ActionConfig, customPrompt?: string) => {
-    setIsExpanded(false);
-    try {
-      if (action.actionType === 'api') {
-        await invoke('trigger_api_action', {
-          actionId: action.id,
-          text: customPrompt || capturedText,
-        });
-      } else {
-        await invoke('trigger_web_action', {
-          actionId: action.id,
-          text: customPrompt || capturedText,
-        });
-      }
-    } catch (e) {
-      console.error('Failed to trigger action from floating ball:', e);
-    }
+  const handleMouseUp = (event: React.MouseEvent) => {
+    if (event.button !== 0) return;
+    mouseDown.current = false;
+    if (inside.current && !dragging.current) scheduleHover();
   };
 
   const handleOpenSettings = async () => {
-    setIsExpanded(false);
+    if (!await closeMenu({ immediate: true })) return;
     try {
       await invoke('show_main_window');
-    } catch (e) {
-      console.error('Failed to open settings:', e);
+    } catch (error) {
+      console.error('Failed to open settings:', error);
     }
+  };
+
+  const handleTriggerAction = async (action: ActionConfig, customPrompt?: string) => {
+    const text = customPrompt || capturedText;
+    if (!await closeMenu()) return;
+    try {
+      await invoke(action.actionType === 'api' ? 'trigger_api_action' : 'trigger_web_action', {
+        actionId: action.id, text,
+      });
+    } catch (error) {
+      console.error('Failed to trigger floating ball action:', error);
+    }
+  };
+
+  const handleInputFocusChange = (focused: boolean) => {
+    inputFocused.current = focused;
+    cancelTimer(leaveTimer);
+    if (!focused && !inside.current && expanded.current && !closing.current) scheduleClose();
   };
 
   if (!config) return null;
 
   return (
     <div
-      className={cn(
-        'floating-ball-container select-none w-full h-full',
-        isExpanded
-          ? edge === 'left' ? 'items-start justify-start p-0' : 'items-end justify-start p-0'
-          : 'flex items-center justify-center p-1.5 overflow-visible'
-      )}
+      className={cn('floating-ball-container floating-launcher select-none',
+        isExpanded && 'is-expanded', isRevealed && 'is-revealed', isClosing && 'is-closing')}
+      data-corner={corner}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {isExpanded ? (
+      {isExpanded && (
         <FloatingMenu
           config={config}
           selectedText={capturedText}
-          edge={edge}
-          onClose={() => setIsExpanded(false)}
+          corner={corner}
+          isClosing={isClosing}
+          onClose={() => { void closeMenu(); }}
           onTriggerAction={handleTriggerAction}
           onOpenSettings={handleOpenSettings}
+          onInputFocusChange={handleInputFocusChange}
         />
-      ) : (
-        <div
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          className={cn(
-            'floating-ball w-12 h-12 rounded-full aspect-square flex-shrink-0 cursor-grab active:cursor-grabbing',
-            'flex items-center justify-center',
-            edge === 'left' ? 'is-docked-left' : 'is-docked-right',
-            isIdle && 'is-idle'
-          )}
-          title={t('bubble.floatingBallTip')}
-        >
-          <div className="floating-ball-icon pointer-events-none flex items-center justify-center">
-            <IOXLogo size={24} />
-          </div>
-        </div>
       )}
+      <button
+        type="button"
+        data-testid="floating-ball-trigger"
+        className={cn('floating-ball floating-launcher-ball',
+          edge === 'left' ? 'is-docked-left' : 'is-docked-right', !isExpanded && isIdle && 'is-idle')}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onDoubleClick={handleOpenSettings}
+        aria-label={t('bubble.floatingBallTip')}
+        aria-expanded={isExpanded}
+        aria-controls={isExpanded ? 'floating-action-menu' : undefined}
+      >
+        <span className="floating-ball-icon pointer-events-none"><IOXLogo size={24} /></span>
+      </button>
     </div>
   );
 };

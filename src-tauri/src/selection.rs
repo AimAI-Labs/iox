@@ -55,7 +55,8 @@ pub fn is_point_inside_window(app: &AppHandle, label: &str, x: i32, y: i32) -> b
                 if IsWindowVisible(hwnd_raw) != 0 {
                     let mut rect: RECT = std::mem::zeroed();
                     if GetWindowRect(hwnd_raw, &mut rect) != 0 {
-                        return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+                        return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom
+                            && crate::window_manager::window_region_contains(hwnd_raw, x - rect.left, y - rect.top);
                     }
                 }
             }
@@ -545,6 +546,12 @@ unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_par
             if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
                 SELECTION_SEQ.fetch_add(1, Ordering::SeqCst);
                 crate::file_selection::cancel_pending();
+                if vk == VK_ESCAPE {
+                    if let Some(handle) = APP_HANDLE.get() {
+                        // 悬停菜单不激活窗口，Esc 需要由全局钩子转发。
+                        let _ = handle.emit_to("floating_ball", "floating-ball-dismiss", ());
+                    }
+                }
                 let should_hide = if is_overlay_bubble_mode() {
                     // Bubble 模式下，任意按键都触发隐藏
                     true

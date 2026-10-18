@@ -44,8 +44,10 @@
       {
         "label": "floating_ball",
         "title": "IOX Floating Ball",
-        "width": 60,
-        "height": 60,
+        "noRedirectionBitmap": true,
+        "focus": false,
+        "width": 328,
+        "height": 400,
         "minWidth": 60,
         "minHeight": 60,
         "resizable": false,

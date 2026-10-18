@@ -475,7 +475,7 @@ fn snap_floating_ball(
             let _ = window.hide();
             return Ok((x, y, "right".to_string()));
         }
-        let (logical_x, logical_y, edge) = window_manager::snap_floating_ball(&window, x, y, 60);
+        let (logical_x, logical_y, edge) = window_manager::snap_floating_ball(&window, x, y);
         if let Ok(mut config) = state.config.lock() {
             config.general.floating_ball_pos = (logical_x, logical_y);
             let _ = config.save();
@@ -511,7 +511,7 @@ async fn start_floating_ball_dragging(
     .map_err(|e| e.to_string())?;
 
     if let Some(win) = app.get_webview_window("floating_ball") {
-        let (logical_x, logical_y, edge) = window_manager::snap_floating_ball(&win, drag_x, drag_y, 60);
+        let (logical_x, logical_y, edge) = window_manager::snap_floating_ball(&win, drag_x, drag_y);
         if let Ok(mut config) = state.config.lock() {
             config.general.floating_ball_pos = (logical_x, logical_y);
             let _ = config.save();
@@ -555,8 +555,6 @@ fn set_floating_ball_expanded(
     app: AppHandle,
     state: State<AppState>,
     expanded: bool,
-    width: i32,
-    height: i32,
 ) -> Result<(i32, i32, String), String> {
     if let Some(window) = app.get_webview_window("floating_ball") {
         let enabled = {
@@ -567,11 +565,22 @@ fn set_floating_ball_expanded(
             let _ = window.hide();
             return Ok((0, 0, "right".to_string()));
         }
-        let res = window_manager::set_floating_ball_expanded(&window, expanded, width, height);
-        Ok(res)
+        window_manager::set_floating_ball_expanded(&window, expanded)
     } else {
         Err("Floating ball window not found".to_string())
     }
+}
+
+#[tauri::command]
+fn focus_floating_ball_input(app: AppHandle) -> Result<(), String> {
+    let window = app.get_webview_window("floating_ball")
+        .ok_or_else(|| "Floating ball window not found".to_string())?;
+    if !window_manager::floating_menu_is_expanded() {
+        return Err("Floating menu is closed".to_string());
+    }
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+    window_manager::remove_no_activate_style(hwnd.0 as _);
+    window.set_focus().map_err(|error| error.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -667,6 +676,7 @@ pub fn run() {
             toggle_floating_ball,
             get_current_selection,
             set_floating_ball_expanded,
+            focus_floating_ball_input,
             chat_store::list_chat_sessions,
             web_sessions::list_web_sessions,
             web_history_sync::sync_web_sessions,

@@ -1,3 +1,4 @@
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, WebviewWindow};
@@ -375,45 +376,16 @@ pub fn get_screen_work_area(x: i32, y: i32) -> (i32, i32, i32, i32) {
     }
 }
 
-/// 将悬浮球平滑吸附到最近的屏幕边缘并返回其逻辑坐标与边缘位置
+/// 停靠后重建固定画布布局，返回球体逻辑坐标及卡片角落。
 pub fn snap_floating_ball(
     window: &WebviewWindow,
     current_x: i32,
     current_y: i32,
-    ball_size: i32,
 ) -> (i32, i32, String) {
-    let scale_factor = window.scale_factor().unwrap_or(1.0);
-    let phys_size = (ball_size as f64 * scale_factor).round() as i32;
-    let phys_x = (current_x as f64 * scale_factor).round() as i32;
-    let phys_y = (current_y as f64 * scale_factor).round() as i32;
-
-    let work_area = get_screen_work_area(phys_x, phys_y);
-    let (target_phys_x, target_phys_y, edge) =
-        calculate_floating_ball_snap(phys_x, phys_y, phys_size, work_area);
-
-    if let Ok(hwnd) = window.hwnd() {
-        let hwnd_raw = hwnd.0 as HWND;
-        apply_no_activate_style(hwnd_raw);
-        unsafe {
-            SetWindowPos(
-                hwnd_raw,
-                HWND_TOPMOST,
-                target_phys_x,
-                target_phys_y,
-                phys_size,
-                phys_size,
-                SWP_NOACTIVATE | SWP_SHOWWINDOW,
-            );
-        }
-    }
-
-    let logical_x = (target_phys_x as f64 / scale_factor).round() as i32;
-    let logical_y = (target_phys_y as f64 / scale_factor).round() as i32;
-
-    (logical_x, logical_y, edge.to_string())
+    init_floating_ball(window, (current_x, current_y))
 }
 
-/// 初始化常驻悬浮球（注入样式、定位并显示）
+/// 初始化固定画布；前端提交角落定位后才显示，保存坐标仍表示 60px 球体。
 pub fn init_floating_ball(window: &WebviewWindow, saved_pos: (i32, i32)) -> (i32, i32, String) {
     let scale_factor = window.scale_factor().unwrap_or(1.0);
     let phys_size = (60.0 * scale_factor).round() as i32;
@@ -429,116 +401,143 @@ pub fn init_floating_ball(window: &WebviewWindow, saved_pos: (i32, i32)) -> (i32
     };
 
     let work_area = get_screen_work_area(phys_x, phys_y);
-    let (target_phys_x, target_phys_y, edge) =
+    let (target_phys_x, target_phys_y, _edge) =
         calculate_floating_ball_snap(phys_x, phys_y, phys_size, work_area);
 
+    let layout = calculate_floating_menu_placement(
+        (target_phys_x, target_phys_y, target_phys_x + phys_size, target_phys_y + phys_size),
+        (328.0 * scale_factor).round() as i32,
+        (400.0 * scale_factor).round() as i32, work_area);
     if let Ok(hwnd) = window.hwnd() {
         let hwnd_raw = hwnd.0 as HWND;
-        apply_no_activate_style(hwnd_raw);
+        // SAFETY: Live owned window. Only initialization/docking changes geometry,
+        // while hidden; hover transitions only change its region.
         unsafe {
-            SetWindowPos(
-                hwnd_raw,
-                HWND_TOPMOST,
-                target_phys_x,
-                target_phys_y,
-                phys_size,
-                phys_size,
-                SWP_NOACTIVATE | SWP_SHOWWINDOW,
-            );
-            ShowWindow(hwnd_raw, SW_SHOWNOACTIVATE);
+            ShowWindow(hwnd_raw, SW_HIDE);
+            apply_no_activate_style(hwnd_raw);
+            SetWindowPos(hwnd_raw, HWND_TOPMOST, layout.x, layout.y, layout.width, layout.height,
+                SWP_NOACTIVATE);
         }
+        let _ = set_floating_canvas_region(hwnd_raw, false, layout.corner, phys_size);
+        *FLOATING_CANVAS.lock().unwrap() = FloatingCanvas { corner: layout.corner, expanded: false };
     }
-    let _ = window.show();
-
-    let logical_x = (target_phys_x as f64 / scale_factor).round() as i32;
-    let logical_y = (target_phys_y as f64 / scale_factor).round() as i32;
-    (logical_x, logical_y, edge.to_string())
+    // The frontend commits this corner before set_floating_ball_expanded shows it.
+    ((target_phys_x as f64 / scale_factor).round() as i32,
+     (target_phys_y as f64 / scale_factor).round() as i32, layout.corner.to_string())
 }
 
-/// 切换悬浮球展开菜单/收起球形态（原子性同步计算位置与大小，并按需切换焦点能力）
+struct FloatingMenuPlacement {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    corner: &'static str,
+}
+
+/// 坐标均为物理像素。保留球体所在角，在空间更多的一侧延展。
+fn calculate_floating_menu_placement(
+    ball: (i32, i32, i32, i32),
+    width: i32,
+    height: i32,
+    area: (i32, i32, i32, i32),
+) -> FloatingMenuPlacement {
+    let left = (ball.0 - area.0).abs() < (area.2 - ball.2).abs();
+    let top = area.3 - ball.1 >= ball.3 - area.1;
+    let available_width = if left { area.2 - ball.0 } else { ball.2 - area.0 };
+    let available_height = if top { area.3 - ball.1 } else { ball.3 - area.1 };
+    let width = width.min(available_width).max(1);
+    let height = height.min(available_height).max(1);
+    FloatingMenuPlacement {
+        x: if left { ball.0 } else { ball.2 - width },
+        y: if top { ball.1 } else { ball.3 - height },
+        width,
+        height,
+        corner: match (top, left) {
+            (true, true) => "top-left",
+            (true, false) => "top-right",
+            (false, true) => "bottom-left",
+            (false, false) => "bottom-right",
+        },
+    }
+}
+
+fn calculate_collapsed_ball_position(
+    rect: (i32, i32, i32, i32),
+    size: i32,
+    corner: &str,
+) -> (i32, i32) {
+    (
+        if corner.ends_with("left") { rect.0 } else { rect.2 - size },
+        if corner.starts_with("bottom") { rect.3 - size } else { rect.1 },
+    )
+}
+
+struct FloatingCanvas {
+    corner: &'static str,
+    expanded: bool,
+}
+static FLOATING_CANVAS: Mutex<FloatingCanvas> = Mutex::new(FloatingCanvas {
+    corner: "top-right", expanded: false,
+});
+
+pub fn floating_menu_is_expanded() -> bool {
+    FLOATING_CANVAS.lock().unwrap().expanded
+}
+
+/// Local window coordinates; windows without a custom region retain rectangular hit testing.
+pub fn window_region_contains(hwnd: HWND, x: i32, y: i32) -> bool {
+    // SAFETY: The caller supplies a live window. This temporary region is never
+    // transferred to Windows and is always released after querying it.
+    unsafe {
+        let region = CreateRectRgn(0, 0, 0, 0);
+        if region.is_null() { return true; }
+        let has_region = GetWindowRgn(hwnd, region) != 0;
+        let inside = !has_region || PtInRegion(region, x, y) != 0;
+        DeleteObject(region);
+        inside
+    }
+}
+
+/// Keep the WebView surface at its final dimensions. Cropping the native window
+/// also excludes the transparent desktop area from mouse hit testing.
+fn set_floating_canvas_region(hwnd: HWND, expanded: bool, corner: &str, ball_size: i32) -> Result<(), String> {
+    // SAFETY: Caller provides a live HWND. The newly allocated region transfers
+    // to Windows only on success; on failure we retain ownership and delete it.
+    unsafe {
+        let mut rect: RECT = std::mem::zeroed();
+        if GetWindowRect(hwnd, &mut rect) == 0 {
+            return Err("Cannot read floating canvas bounds".into());
+        }
+        let width = rect.right - rect.left;
+        let height = rect.bottom - rect.top;
+        let (x, y, w, h) = if expanded { (0, 0, width, height) } else {
+            let (x, y) = calculate_collapsed_ball_position((0, 0, width, height), ball_size, corner);
+            (x, y, ball_size, ball_size)
+        };
+        let region = CreateRectRgn(x, y, x + w, y + h);
+        if region.is_null() { return Err("Cannot create floating canvas region".into()); }
+        if SetWindowRgn(hwnd, region, 1) == 0 {
+            DeleteObject(region);
+            return Err("Cannot apply floating canvas region".into());
+        }
+        Ok(())
+    }
+}
+
+/// Hover never moves or resizes the HWND or WebView: only the visible/input region changes.
 pub fn set_floating_ball_expanded(
     window: &WebviewWindow,
     expanded: bool,
-    target_width: i32,
-    target_height: i32,
-) -> (i32, i32, String) {
-    let scale_factor = window.scale_factor().unwrap_or(1.0);
-
-    if let Ok(hwnd) = window.hwnd() {
-        let hwnd_raw = hwnd.0 as HWND;
-        unsafe {
-            let mut current_rect: RECT = std::mem::zeroed();
-            GetWindowRect(hwnd_raw, &mut current_rect);
-
-            let work_area = get_screen_work_area(current_rect.left, current_rect.top);
-            let dist_to_left = (current_rect.left - work_area.0).abs();
-            let dist_to_right = (work_area.2 - current_rect.right).abs();
-            let edge = if dist_to_left < dist_to_right {
-                "left"
-            } else {
-                "right"
-            };
-
-            if expanded {
-                let phys_w = (target_width as f64 * scale_factor).round() as i32;
-                let phys_h = (target_height as f64 * scale_factor).round() as i32;
-
-                let target_phys_x = if edge == "left" {
-                    work_area.0 + 8
-                } else {
-                    work_area.2 - phys_w - 8
-                };
-
-                let min_y = work_area.1 + 8;
-                let max_y = (work_area.3 - phys_h - 8).max(min_y);
-                let target_phys_y = current_rect.top.clamp(min_y, max_y);
-
-                remove_no_activate_style(hwnd_raw);
-                SetWindowPos(
-                    hwnd_raw,
-                    HWND_TOPMOST,
-                    target_phys_x,
-                    target_phys_y,
-                    phys_w,
-                    phys_h,
-                    SWP_SHOWWINDOW,
-                );
-                let _ = window.set_focus();
-
-                let logical_x = (target_phys_x as f64 / scale_factor).round() as i32;
-                let logical_y = (target_phys_y as f64 / scale_factor).round() as i32;
-                (logical_x, logical_y, edge.to_string())
-            } else {
-                let phys_size = (60.0 * scale_factor).round() as i32;
-                let target_phys_x = if edge == "left" {
-                    work_area.0
-                } else {
-                    work_area.2 - phys_size
-                };
-
-                let min_y = work_area.1 + 10;
-                let max_y = (work_area.3 - phys_size - 10).max(min_y);
-                let target_phys_y = current_rect.top.clamp(min_y, max_y);
-
-                apply_no_activate_style(hwnd_raw);
-                SetWindowPos(
-                    hwnd_raw,
-                    HWND_TOPMOST,
-                    target_phys_x,
-                    target_phys_y,
-                    phys_size,
-                    phys_size,
-                    SWP_NOACTIVATE | SWP_SHOWWINDOW,
-                );
-
-                let logical_x = (target_phys_x as f64 / scale_factor).round() as i32;
-                let logical_y = (target_phys_y as f64 / scale_factor).round() as i32;
-                (logical_x, logical_y, edge.to_string())
-            }
-        }
-    } else {
-        (0, 0, "right".to_string())
-    }
+) -> Result<(i32, i32, String), String> {
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?.0 as HWND;
+    let corner = FLOATING_CANVAS.lock().unwrap().corner;
+    set_floating_canvas_region(hwnd, expanded, corner, (60.0 * scale).round() as i32)?;
+    FLOATING_CANVAS.lock().unwrap().expanded = expanded;
+    apply_no_activate_style(hwnd);
+    // SAFETY: HWND belongs to the live window; show without activation, without geometry changes.
+    unsafe { ShowWindow(hwnd, SW_SHOWNOACTIVATE); }
+    Ok((0, 0, corner.to_string()))
 }
 
 /// 悬浮球硬件级实时拖拽循环
@@ -574,10 +573,12 @@ pub fn run_floating_ball_drag_loop(window: &WebviewWindow) -> (i32, i32) {
                 let mut final_rect: RECT = std::mem::zeroed();
                 if GetWindowRect(hwnd_raw, &mut final_rect) != 0 {
                     let scale_factor = window.scale_factor().unwrap_or(1.0);
-                    return (
-                        (final_rect.left as f64 / scale_factor).round() as i32,
-                        (final_rect.top as f64 / scale_factor).round() as i32,
-                    );
+                    let corner = FLOATING_CANVAS.lock().unwrap().corner;
+                    let (x, y) = calculate_collapsed_ball_position(
+                        (final_rect.left, final_rect.top, final_rect.right, final_rect.bottom),
+                        (60.0 * scale_factor).round() as i32, corner);
+                    return ((x as f64 / scale_factor).round() as i32,
+                        (y as f64 / scale_factor).round() as i32);
                 }
             }
         }
@@ -858,6 +859,110 @@ mod tests {
         assert_eq!(target_x, 0);
         assert_eq!(target_y, 1080 - 60 - 10);
         assert_eq!(edge, "left");
+    }
+
+    #[test]
+    fn floating_menu_preserves_all_four_corner_anchors_at_multiple_scales() {
+        for scale in [1.0, 1.5, 2.0] {
+            let px = |value: i32| (value as f64 * scale).round() as i32;
+            let work_area = (0, 0, px(1920), px(1080));
+            for (x, y, corner) in [(0, 100, "top-left"), (1860, 100, "top-right"),
+                (0, 900, "bottom-left"), (1860, 900, "bottom-right")] {
+                let ball = (px(x), px(y), px(x + 60), px(y + 60));
+                let layout = calculate_floating_menu_placement(ball, px(328), px(360), work_area);
+                assert_eq!(layout.corner, corner);
+                assert_eq!((layout.width, layout.height), (px(328), px(360)));
+                let rect = (layout.x, layout.y, layout.x + layout.width, layout.y + layout.height);
+                assert_eq!(calculate_collapsed_ball_position(rect, px(60), corner), (px(x), px(y)));
+                assert!(rect.0 >= work_area.0 && rect.1 >= work_area.1);
+                assert!(rect.2 <= work_area.2 && rect.3 <= work_area.3);
+            }
+        }
+    }
+
+    #[test]
+    fn floating_menu_supports_negative_monitor_coordinates_and_small_work_areas() {
+        let area = (-1280, -400, 0, 400);
+        let layout = calculate_floating_menu_placement((-60, 250, 0, 310), 328, 360, area);
+        assert_eq!(layout.corner, "bottom-right");
+        assert_eq!((layout.x, layout.y), (-328, -50));
+        let small = calculate_floating_menu_placement((0, 100, 60, 160), 328, 360, (0, 0, 240, 280));
+        assert_eq!((small.width, small.height), (240, 180));
+        assert_eq!(small.corner, "top-left");
+        assert_eq!(calculate_collapsed_ball_position((small.x, small.y, small.x + small.width,
+            small.y + small.height), 60, small.corner), (0, 100));
+    }
+
+    #[test]
+    fn floating_ball_config_disables_redirection_before_creation() {
+        let config: tauri::Config = serde_json::from_str(include_str!("../tauri.conf.json"))
+            .expect("window configuration must match the installed Tauri version");
+        let ball = config.app.windows.iter().find(|window| window.label == "floating_ball")
+            .expect("floating ball window");
+        assert!(ball.transparent && ball.no_redirection_bitmap);
+        assert!(!ball.focus && !ball.visible && !ball.shadow);
+    }
+
+    #[test]
+    fn floating_canvas_region_changes_never_move_or_resize_the_native_window() {
+        // SAFETY: This test owns a hidden STATIC window and destroys it on this thread.
+        unsafe {
+            let class = [83u16, 84, 65, 84, 73, 67, 0];
+            let hwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, class.as_ptr(), std::ptr::null(), WS_POPUP,
+                100, 200, 656, 800, std::ptr::null_mut(), std::ptr::null_mut(),
+                std::ptr::null_mut(), std::ptr::null());
+            assert!(!hwnd.is_null());
+            for corner in ["top-left", "top-right", "bottom-left", "bottom-right"] {
+                for expanded in [false, true, false, true, false] {
+                    set_floating_canvas_region(hwnd, expanded, corner, 120).unwrap();
+                    let mut rect: RECT = std::mem::zeroed();
+                    assert_ne!(GetWindowRect(hwnd, &mut rect), 0);
+                    assert_eq!((rect.left, rect.top, rect.right, rect.bottom), (100, 200, 756, 1000));
+                    let mut client: RECT = std::mem::zeroed();
+                    assert_ne!(GetClientRect(hwnd, &mut client), 0);
+                    assert_eq!((client.right, client.bottom), (656, 800));
+                    let region = CreateRectRgn(0, 0, 0, 0);
+                    assert_ne!(GetWindowRgn(hwnd, region), 0);
+                    let (x, y) = calculate_collapsed_ball_position((0, 0, 656, 800), 120, corner);
+                    assert_ne!(PtInRegion(region, x + 60, y + 60), 0);
+                    assert_eq!(PtInRegion(region, 328, 400) != 0, expanded);
+                    assert!(window_region_contains(hwnd, x + 60, y + 60));
+                    assert_eq!(window_region_contains(hwnd, 328, 400), expanded);
+                    DeleteObject(region);
+                    assert_eq!(IsWindowVisible(hwnd), 0);
+                }
+            }
+            DestroyWindow(hwnd);
+        }
+    }
+
+    #[test]
+    fn native_composition_survives_input_focus_style_changes() {
+        struct TestWindow(HWND);
+        impl Drop for TestWindow {
+            fn drop(&mut self) {
+                // SAFETY: 测试独占该隐藏窗口，在创建线程销毁。
+                unsafe { DestroyWindow(self.0); }
+            }
+        }
+        // SAFETY: STATIC 是内置窗口类；窗口不显示、不激活，不操作用户窗口。
+        unsafe {
+            let class = [83u16, 84, 65, 84, 73, 67, 0];
+            let hwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, class.as_ptr(), std::ptr::null(), WS_POPUP,
+                0, 0, 60, 60, std::ptr::null_mut(), std::ptr::null_mut(),
+                std::ptr::null_mut(), std::ptr::null());
+            assert!(!hwnd.is_null(), "hidden composition test window");
+            let window = TestWindow(hwnd);
+            apply_no_activate_style(window.0);
+            let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+            assert_ne!(style & WS_EX_NOREDIRECTIONBITMAP, 0);
+            assert_ne!(style & WS_EX_NOACTIVATE, 0);
+            remove_no_activate_style(hwnd);
+            let input_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+            assert_ne!(input_style & WS_EX_NOREDIRECTIONBITMAP, 0);
+            assert_eq!(input_style & WS_EX_NOACTIVATE, 0);
+            assert_eq!(IsWindowVisible(hwnd), 0);
+        }
     }
 }
 
