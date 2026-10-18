@@ -365,7 +365,9 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
             if msg == WM_LBUTTONDOWN {
                 let inside_overlay = app_handle.as_ref().is_some_and(|app| is_point_inside_overlay(app, x, y));
                 SELECTION_SEQ.fetch_add(1, Ordering::SeqCst);
-                crate::file_selection::mouse_down((x, y), inside_overlay);
+                if let Some(ref handle) = app_handle {
+                    crate::file_selection::mouse_down(handle, (x, y), inside_overlay);
+                }
                 let mut is_potential_dbl_click = false;
                 let dbl_click_time_ms = GetDoubleClickTime() as u128;
                 let now = Instant::now();
@@ -467,7 +469,7 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                 }
 
                 if let Some(ref handle) = app_handle {
-                    if !is_dragging_overlay() && crate::file_selection::mouse_up(handle, (x, y), is_double_or_triple, is_drag) {
+                    if !is_dragging_overlay() && crate::file_selection::mouse_up(handle, (x, y)) {
                         return;
                     }
                 }

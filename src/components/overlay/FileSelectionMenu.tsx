@@ -1,24 +1,39 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { FileText, LoaderCircle, Settings, X } from 'lucide-react';
 import { ActionConfig } from '@/types/config';
 import { DynamicIcon } from '@/components/Icons';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
+import { fileDragScrollDirection, findFileDropTarget } from '@/lib/file-drop';
 
 interface FileSelectionMenuProps {
   files: string[];
+  dragId: number;
   actions: ActionConfig[];
   isClosing: boolean;
   onClose: () => void;
   onOpenSettings: () => void;
 }
 
-export function FileSelectionMenu({ files, actions, isClosing, onClose, onOpenSettings }: FileSelectionMenuProps) {
+interface FileDragEvent {
+  dragId: number;
+  x: number;
+  y: number;
+  scaleFactor: number;
+}
+
+export function FileSelectionMenu({ files, dragId, actions, isClosing, onClose, onOpenSettings }: FileSelectionMenuProps) {
   const { resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [hasDropped, setHasDropped] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const droppedRef = useRef(false);
   const activeRef = useRef(true);
   const busyRef = useRef(false);
   useEffect(() => {
@@ -36,7 +51,7 @@ export function FileSelectionMenu({ files, actions, isClosing, onClose, onOpenSe
     setPendingId(action.id);
     setError(null);
     try {
-      await invoke('trigger_web_file_action', { actionId: action.id, files });
+      await invoke('trigger_web_file_action', { actionId: action.id, files, dragId });
       if (activeRef.current) onClose();
     } catch (reason) {
       if (activeRef.current) setError(String(reason));
@@ -46,8 +61,79 @@ export function FileSelectionMenu({ files, actions, isClosing, onClose, onOpenSe
     }
   }
 
+  const handlersRef = useRef({ webActions, sendFiles, onClose });
+  handlersRef.current = { webActions, sendFiles, onClose };
+
+  useEffect(() => {
+    let disposed = false;
+    let hover: FileDragEvent | null = null;
+    let frame: number | null = null;
+    function stopScrolling(): void {
+      hover = null;
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
+    }
+    function targetAt(payload: FileDragEvent): string | null {
+      const { x, y, scaleFactor } = payload;
+      const hit = document.elementFromPoint(x / scaleFactor, y / scaleFactor)
+        ?.closest<HTMLButtonElement>('button[data-file-action-id]');
+      if (!hit || !rootRef.current?.contains(hit)) return null;
+      return findFileDropTarget(payload, scaleFactor, [{
+        ...hit.getBoundingClientRect().toJSON(),
+        id: hit.dataset.fileActionId!,
+        disabled: hit.disabled,
+      }]);
+    }
+    function scrollTargets(): void {
+      frame = null;
+      const row = actionsRef.current;
+      if (!row || !hover || disposed) return;
+      const direction = fileDragScrollDirection(hover, hover.scaleFactor, row.getBoundingClientRect());
+      const before = row.scrollLeft;
+      row.scrollLeft += direction * 4;
+      setHoveredId(targetAt(hover));
+      if (direction && row.scrollLeft !== before) frame = requestAnimationFrame(scrollTargets);
+    }
+    const listeners = [
+      listen<FileDragEvent>('file-drag-over', ({ payload }) => {
+        if (disposed || payload.dragId !== dragId || droppedRef.current) return;
+        hover = payload;
+        setHoveredId(targetAt(payload));
+        if (frame === null) frame = requestAnimationFrame(scrollTargets);
+      }),
+      listen<FileDragEvent>('file-drag-drop', ({ payload }) => {
+        if (disposed || payload.dragId !== dragId || droppedRef.current) return;
+        droppedRef.current = true;
+        stopScrolling();
+        setHasDropped(true);
+        setHoveredId(null);
+        const id = targetAt(payload);
+        const action = handlersRef.current.webActions.find((candidate) => candidate.id === id);
+        if (action) void handlersRef.current.sendFiles(action);
+        else handlersRef.current.onClose();
+      }),
+      listen<number>('file-drag-leave', ({ payload }) => {
+        if (!disposed && payload === dragId) {
+          stopScrolling();
+          setHoveredId(null);
+        }
+      }),
+      listen<number>('file-drag-cancelled', ({ payload }) => {
+        if (!disposed && payload === dragId) {
+          stopScrolling();
+          handlersRef.current.onClose();
+        }
+      }),
+    ];
+    return () => {
+      disposed = true;
+      stopScrolling();
+      listeners.forEach((listener) => { void listener.then((unlisten) => unlisten()); });
+    };
+  }, [dragId]);
+
   return (
-    <div className={cn(
+    <div ref={rootRef} className={cn(
       'capsule-glass flex h-full w-full flex-col gap-2 rounded-xl border border-border/70 p-3 text-foreground',
       isClosing ? 'animate-capsule-out' : 'animate-capsule-in',
     )}>
@@ -62,13 +148,17 @@ export function FileSelectionMenu({ files, actions, isClosing, onClose, onOpenSe
         </button>
       </div>
       {webActions.length ? (
-        <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto pb-1">
+        <div ref={actionsRef} data-file-actions className="flex shrink-0 items-center gap-1.5 overflow-x-auto pb-1">
           {webActions.map((action) => (
-            <button type="button" key={action.id} disabled={pendingId !== null} onClick={() => void sendFiles(action)}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border/60 bg-background/60 px-2.5 text-xs transition-colors hover:border-primary/40 hover:bg-accent disabled:opacity-50"
-              title={isZh ? `发送文件到 ${action.name}` : `Send files to ${action.name}`}>
-              {pendingId === action.id ? <LoaderCircle size={14} className="animate-spin" /> : <DynamicIcon name={action.icon} size={14} />}
-              {action.name}
+            <button type="button" key={action.id} data-file-action-id={action.id}
+              data-drag-hovered={hoveredId === action.id || undefined}
+              disabled={pendingId !== null}
+              onClick={() => { if (hasDropped) void sendFiles(action); }}
+              className={cn('inline-flex h-20 w-20 shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-border/60 bg-background/60 p-2 text-xs transition-colors hover:border-primary/40 hover:bg-accent disabled:opacity-50',
+                hoveredId === action.id && 'border-primary bg-primary/15 ring-1 ring-primary/50')}
+              title={isZh ? `拖入文件到 ${action.name}` : `Drop files onto ${action.name}`}>
+              {pendingId === action.id ? <LoaderCircle size={28} className="shrink-0 animate-spin" /> : <DynamicIcon name={action.icon} size={28} />}
+              <span className="w-full truncate text-center">{action.name}</span>
             </button>
           ))}
         </div>
@@ -80,7 +170,7 @@ export function FileSelectionMenu({ files, actions, isClosing, onClose, onOpenSe
       <p role={error ? 'alert' : 'status'} className={cn('line-clamp-2 text-[10px] leading-4', error ? 'text-destructive' : 'text-muted-foreground')} title={error || undefined}>
         {error || (pendingId
           ? (isZh ? '正在打开官网并准备附件…' : 'Opening website and preparing attachments…')
-          : (isZh ? '选择 AI 官网添加附件，再到官网输入问题并发送' : 'Choose an AI website, then write your question and send there'))}
+          : (isZh ? '拖到 AI 上松手添加附件 · 两侧悬停查看更多 AI' : 'Drop onto an AI to attach files · Hover at either edge for more'))}
       </p>
     </div>
   );

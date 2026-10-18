@@ -7,6 +7,7 @@ export interface OverlayState {
   visible: boolean;
   selectedText: string;
   selectedFiles: string[];
+  fileDragId: number | null;
   activeAction: ActionConfig | null;
   selectedModel: string;
   streamText: string;
@@ -35,6 +36,7 @@ export const initialOverlayState: OverlayState = {
   visible: false,
   selectedText: '',
   selectedFiles: [],
+  fileDragId: null,
   activeAction: null,
   selectedModel: '',
   streamText: '',
@@ -50,7 +52,7 @@ export const initialOverlayState: OverlayState = {
 
 export type OverlayAction =
   | { type: 'SELECTION_TRIGGERED'; text: string }
-  | { type: 'FILES_SELECTED'; files: string[] }
+  | { type: 'FILES_SELECTED'; files: string[]; dragId: number }
   | { type: 'SET_MODE'; mode: OverlayMode }
   | { type: 'START_ACTION'; action: ActionConfig; model?: string }
   | { type: 'START_EMPTY_CARD_ACTION'; action: ActionConfig; model?: string }
@@ -80,6 +82,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         visible: true,
         selectedText: action.text,
         selectedFiles: [],
+        fileDragId: null,
         mode: 'bubble',
         streamText: '',
         error: null,
@@ -95,6 +98,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         ...initialOverlayState,
         visible: true,
         selectedFiles: action.files,
+        fileDragId: action.dragId,
         isPinned: state.isPinned,
         animKey: state.animKey + 1,
       };
@@ -231,6 +235,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
       return {
         ...state,
         selectedFiles: [],
+        fileDragId: null,
         visible: false,
         isClosing: false,
         activeAction: null,
@@ -248,6 +253,7 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
       return {
         ...state,
         selectedFiles: [],
+        fileDragId: null,
         streamText: '',
         selectedText: '',
         error: null,

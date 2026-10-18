@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test:files": "node --test tests/overlay-file-selection.test.mjs",
+    "test:files": "node --test tests/overlay-file-selection.test.mjs tests/file-drop.test.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

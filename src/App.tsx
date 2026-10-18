@@ -156,6 +156,7 @@ export function App() {
             overlayState.selectedFiles.length ? <FileSelectionMenu
               key={overlayState.animKey}
               files={overlayState.selectedFiles}
+              dragId={overlayState.fileDragId!}
               actions={config.actions}
               isClosing={overlayState.isClosing}
               onClose={overlayState.handleClose}

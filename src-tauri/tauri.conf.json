@@ -25,7 +25,7 @@
         "skipTaskbar": true,
         "visible": false,
         "shadow": false,
-        "dragDropEnabled": false
+        "dragDropEnabled": true
       },
       {
         "label": "main",

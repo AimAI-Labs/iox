@@ -40,7 +40,7 @@ export function useOverlayState(config: AppConfig | null) {
   useSelectionEvents({
     isPinned: state.isPinned,
     onSelectionTriggered: (text) => dispatch({ type: 'SELECTION_TRIGGERED', text }),
-    onFilesSelected: (files) => dispatch({ type: 'FILES_SELECTED', files }),
+    onFilesSelected: (files, dragId) => dispatch({ type: 'FILES_SELECTED', files, dragId }),
     onRequestHide: executeGracefulHide,
     cancelCloseTimer,
     updateWindowSize,
@@ -97,6 +97,7 @@ export function useOverlayState(config: AppConfig | null) {
     isClosing: state.isClosing,
     selectedText: state.selectedText,
     selectedFiles: state.selectedFiles,
+    fileDragId: state.fileDragId,
     activeAction: state.activeAction,
     selectedModel: state.selectedModel,
     streamText: state.streamText,

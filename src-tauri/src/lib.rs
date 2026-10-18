@@ -4,6 +4,7 @@ pub mod web_sessions;
 pub mod web_history_sync;
 pub mod config;
 pub mod file_selection;
+mod file_drag;
 pub mod overlay_state;
 pub mod picker;
 pub mod selection;
@@ -85,17 +86,21 @@ async fn trigger_web_file_action(
     state: State<'_, AppState>,
     action_id: String,
     files: Vec<String>,
+    drag_id: u64,
 ) -> Result<(), String> {
     if webview.label() != "overlay" {
         return Err("文件动作仅允许从文件选择菜单触发".into());
     }
-    file_selection::validate_selected_files(&files)?;
-    let config = state
-        .config
-        .lock()
-        .map_err(|_| "配置不可用".to_string())?
-        .clone();
-    ai::web_action::execute_web_file_action(&app, &config, &action_id, &files)
+    file_selection::claim_dropped_files(drag_id, &files)?;
+    let result = (|| {
+        let config = state.config.lock().map_err(|_| "配置不可用".to_string())?.clone();
+        if !config.general.auto_popup_on_file_selection {
+            return Err("文件拖放功能已关闭".into());
+        }
+        ai::web_action::execute_web_file_action(&app, &config, &action_id, &files)
+    })();
+    if result.is_err() { file_selection::allow_retry(drag_id); }
+    result
 }
 
 #[tauri::command]
@@ -254,6 +259,7 @@ fn toggle_maximize_main_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn hide_overlay(app: AppHandle) -> Result<(), String> {
+    file_selection::cancel_pending();
     overlay_state::set_overlay_bubble_mode(true);
     // 刻意不复位 Pin 状态：钉住是跨会话的用户偏好（由前端 localStorage 记忆），
     // 主动关闭仅结束当前窗口会话；隐藏后的残留 pin 不会拦截后续划词
@@ -594,6 +600,15 @@ pub fn run() {
             // 初始化常驻系统托盘
             tray::setup_tray(app)?;
             Ok(())
+        })
+        // With `unstable`, the overlay is a child webview: native drops are
+        // WebviewEvents rather than synthesized WindowEvents.
+        .on_webview_event(|webview, event| {
+            if webview.label() == "overlay" {
+                if let tauri::WebviewEvent::DragDrop(event) = event {
+                    file_selection::handle_drag_drop(&webview.window(), event);
+                }
+            }
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

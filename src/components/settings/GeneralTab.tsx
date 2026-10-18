@@ -98,12 +98,12 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label className="text-xs text-foreground font-medium">
-                <span id="file-selection-label">{isZh ? '选中文件' : 'File selection'}</span>
+                <span id="file-selection-label">{isZh ? '拖动文件' : 'File drag menu'}</span>
               </Label>
               <p className="text-[11px] text-muted-foreground">
                 {isZh
-                  ? '在桌面或资源管理器选中文件后，弹出菜单发送到 AI 官网，支持多选'
-                  : 'Show an AI website menu when selecting files on the desktop or in Explorer, including multiple files'}
+                  ? '拖动桌面或资源管理器中的文件，悬停 1 秒弹出菜单，拖到 AI 上松手即可打开官网添加附件，支持多选'
+                  : 'Drag files from the desktop or Explorer, pause for 1 second, then drop onto an AI to open its website and attach files; multiple files supported'}
               </p>
             </div>
             <Switch

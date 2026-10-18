@@ -1,8 +1,9 @@
 //! Read actual Explorer/desktop selection through Shell COM, without clipboard access.
+use crate::file_drag::{DragDwell, FileDragSession};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 use windows::core::Interface;
 use windows::Win32::System::Com::{
@@ -18,12 +19,12 @@ use windows::Win32::UI::Shell::{
     SIGDN_FILESYSPATH, SWC_DESKTOP, SWFO_NEEDDISPATCH,
 };
 use windows_sys::Win32::Foundation::{HWND, POINT};
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 static MOUSE_DOWN: Mutex<Option<ShellTarget>> = Mutex::new(None);
-static SELECTED_FILES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static DRAG_SESSION: Mutex<Option<FileDragSession>> = Mutex::new(None);
 
 #[derive(Clone, Copy, PartialEq)]
 struct ShellTarget {
@@ -46,19 +47,64 @@ fn filter_files(paths: Vec<String>) -> Vec<String> {
     files
 }
 
-/// Only paths from the most recently shown menu may be read by attachment IPC.
-pub fn validate_selected_files(files: &[String]) -> Result<(), String> {
-    let selected = SELECTED_FILES
+/// Require a real native drop from this gesture before any file bytes can be read.
+pub fn claim_dropped_files(drag_id: u64, files: &[String]) -> Result<(), String> {
+    DRAG_SESSION
         .lock()
-        .map_err(|_| "File selection unavailable")?;
-    if files.is_empty() || files.iter().any(|path| !selected.contains(path)) {
-        return Err("File selection expired; select the files again".into());
+        .map_err(|_| "文件拖放不可用")?
+        .as_mut()
+        .ok_or("文件拖放已失效，请重新拖入文件")?
+        .claim(drag_id, files)
+}
+
+pub fn allow_retry(drag_id: u64) {
+    if let Ok(mut session) = DRAG_SESSION.lock() {
+        if let Some(session) = session.as_mut() {
+            session.allow_retry(drag_id);
+        }
     }
-    Ok(())
 }
 
 pub fn cancel_pending() {
     GENERATION.fetch_add(1, Ordering::SeqCst);
+    if let Ok(mut session) = DRAG_SESSION.lock() {
+        *session = None;
+    }
+}
+
+fn dismiss_menu(app: &AppHandle) {
+    let id = DRAG_SESSION
+        .lock()
+        .ok()
+        .and_then(|session| session.as_ref().map(|s| s.id));
+    cancel_pending();
+    if let Some(drag_id) = id {
+        let _ = app.emit_to("overlay", "file-drag-cancelled", drag_id);
+    }
+}
+
+fn enabled(app: &AppHandle) -> bool {
+    app.try_state::<crate::AppState>().is_some_and(|state| {
+        state.config.try_lock().is_ok_and(|config| {
+            config.general.auto_popup_on_file_selection
+                && crate::selection::is_modifier_satisfied(&config.general.trigger_modifier)
+                && !config
+                    .blacklist
+                    .iter()
+                    .any(|entry| entry.eq_ignore_ascii_case("explorer.exe"))
+        })
+    })
+}
+
+fn pointer() -> Option<((i32, i32), bool)> {
+    let mut point = POINT { x: 0, y: 0 };
+    // SAFETY: point is writable stack storage; the button query borrows no handles.
+    unsafe {
+        if GetCursorPos(&mut point) == 0 {
+            return None;
+        }
+        Some(((point.x, point.y), GetAsyncKeyState(VK_LBUTTON as i32) < 0))
+    }
 }
 
 /// Cheap HWND ancestry check on the hook thread. No COM calls on the hook thread.
@@ -97,100 +143,180 @@ fn target_at(point: (i32, i32)) -> Option<ShellTarget> {
     }
 }
 
-pub fn mouse_down(point: (i32, i32), inside_overlay: bool) {
-    cancel_pending();
-    if !inside_overlay {
-        if let Ok(mut files) = SELECTED_FILES.lock() {
-            files.clear();
-        }
+pub fn mouse_down(app: &AppHandle, point: (i32, i32), inside_overlay: bool) {
+    if inside_overlay {
+        return;
     }
+    dismiss_menu(app);
+    let target = if enabled(app) { target_at(point) } else { None };
     if let Ok(mut down) = MOUSE_DOWN.lock() {
-        *down = if inside_overlay {
-            None
-        } else {
-            target_at(point)
-        };
+        *down = target;
     }
-}
-
-/// Returns true for a Shell file gesture when the independent file setting is enabled.
-pub fn mouse_up(app: &AppHandle, point: (i32, i32), repeated_click: bool, is_drag: bool) -> bool {
-    let target = MOUSE_DOWN.lock().ok().and_then(|mut down| down.take());
-    let Some(target) = target else { return false };
-    if target_at(point) != Some(target) {
-        return false;
-    }
-    let settings = app.try_state::<crate::AppState>().and_then(|state| {
-        // Never wait on configuration persistence while running inside WH_MOUSE_LL.
-        state.config.try_lock().ok().map(|config| {
-            (
-                config.general.auto_popup_on_file_selection,
-                config.general.trigger_modifier.clone(),
-                config.blacklist.clone(),
-            )
-        })
-    });
-    let Some((enabled, modifier, blacklist)) = settings else {
-        return false;
+    let Some(target) = target else {
+        return;
     };
-    if !enabled {
-        return false;
-    }
-    let Some(process) = crate::selection::get_foreground_process_name() else {
-        return false;
-    };
-    if !process.eq_ignore_ascii_case("explorer.exe") {
-        return false;
-    }
-    // A second click opens files; it cancels the first-click worker without creating another.
-    if repeated_click
-        || !crate::selection::is_modifier_satisfied(&modifier)
-        || blacklist
-            .iter()
-            .any(|entry| entry.eq_ignore_ascii_case(&process))
-    {
-        return true;
-    }
     let generation = GENERATION.load(Ordering::SeqCst);
     let app = app.clone();
     std::thread::spawn(move || {
-        // Wait out Windows' double-click interval, so opening a file never flashes a menu.
-        // SAFETY: read-only system timing query; no pointers or handles are borrowed.
-        let delay = unsafe { GetDoubleClickTime() } as u64 + 25;
-        std::thread::sleep(Duration::from_millis(delay));
-        if !is_current(generation, target) || pinned_card(&app) {
+        // Let Explorer update its selection. COM/UIA must never run inside WH_MOUSE_LL.
+        std::thread::sleep(Duration::from_millis(50));
+        if !is_current(generation, target)
+            || !pointer().is_some_and(|(_, held)| held)
+            || pinned_card(&app)
+        {
             return;
         }
-        let Some(files) = shell_files(target, point, is_drag) else {
+        let Some(files) = shell_files(target, point, false) else {
             return;
         };
-        if files.is_empty() || !is_current(generation, target) {
+        if files.is_empty() {
             return;
         }
-        let main_app = app.clone();
-        let _ = app.run_on_main_thread(move || {
-            if !is_current(generation, target) || pinned_card(&main_app) {
+        // SAFETY: these system metrics are read-only and require no borrowed resources.
+        let threshold = unsafe {
+            (
+                GetSystemMetrics(SM_CXDRAG).max(1),
+                GetSystemMetrics(SM_CYDRAG).max(1),
+            )
+        };
+        let mut dwell = DragDwell::new(point, threshold);
+        let started = Instant::now();
+        loop {
+            if !is_current(generation, target) {
                 return;
             }
-            if let Some(state) = main_app.try_state::<crate::AppState>() {
-                if !state
-                    .config
-                    .lock()
-                    .is_ok_and(|config| config.general.auto_popup_on_file_selection)
-                {
-                    return;
-                }
+            let Some((position, held)) = pointer() else {
+                return;
+            };
+            if !held {
+                return;
             }
-            if let Ok(mut selected) = SELECTED_FILES.lock() {
-                *selected = files.clone();
+            if dwell.update(position, started.elapsed().as_millis() as u64, held) {
+                let main_app = app.clone();
+                let _ = app.run_on_main_thread(move || {
+                    if !is_current(generation, target)
+                        || !enabled(&main_app)
+                        || pinned_card(&main_app)
+                        || !pointer().is_some_and(|(_, held)| held)
+                    {
+                        return;
+                    }
+                    if let Ok(mut session) = DRAG_SESSION.lock() {
+                        *session = Some(FileDragSession::new(generation, files.clone()));
+                    } else {
+                        return;
+                    }
+                    crate::selection::cancel_pending_hide();
+                    crate::overlay_state::set_overlay_bubble_mode(true);
+                    let _ = main_app.emit_to(
+                        "overlay",
+                        "files-selected",
+                        FilesPayload {
+                            files,
+                            drag_id: generation,
+                        },
+                    );
+                    crate::window_manager::show_overlay_at(
+                        &main_app, position.0, position.1, 360, 194,
+                    );
+                });
+                return;
             }
-            crate::selection::cancel_pending_hide();
-            crate::overlay_state::set_overlay_bubble_mode(true);
-            let _ = main_app.emit("files-selected", FilesPayload { files });
-            crate::window_manager::show_overlay_at(&main_app, point.0, point.1, 360, 146);
-        });
+            std::thread::sleep(Duration::from_millis(25));
+        }
     });
+}
+
+/// Consume Shell gestures without invoking text-copy detection. Preserve an inside
+/// release until OLE delivers the native drop event after the low-level mouse hook.
+pub fn mouse_up(app: &AppHandle, point: (i32, i32)) -> bool {
+    let from_shell = MOUSE_DOWN
+        .lock()
+        .ok()
+        .and_then(|mut down| down.take())
+        .is_some();
+    if !from_shell {
+        return false;
+    }
+    if !crate::selection::is_point_inside_window(app, "overlay", point.0, point.1) {
+        dismiss_menu(app);
+    } else {
+        // Cancel a worker which has not displayed a menu, but retain its drop session.
+        GENERATION.fetch_add(1, Ordering::SeqCst);
+    }
     true
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileDropPayload {
+    drag_id: u64,
+    x: f64,
+    y: f64,
+    scale_factor: f64,
+}
+
+/// Called only for native OLE file events belonging to the overlay window.
+pub fn handle_drag_drop(window: &tauri::Window, event: &tauri::DragDropEvent) {
+    let app = window.app_handle();
+    match event {
+        tauri::DragDropEvent::Enter { position, .. } | tauri::DragDropEvent::Over { position } => {
+            let id = DRAG_SESSION
+                .lock()
+                .ok()
+                .and_then(|s| s.as_ref().map(|s| s.id));
+            if let Some(drag_id) = id {
+                let scale = window.scale_factor().unwrap_or(1.0);
+                let _ = app.emit_to(
+                    "overlay",
+                    "file-drag-over",
+                    FileDropPayload {
+                        drag_id,
+                        x: position.x,
+                        y: position.y,
+                        scale_factor: scale,
+                    },
+                );
+            }
+        }
+        tauri::DragDropEvent::Drop { paths, position } => {
+            let files = filter_files(
+                paths
+                    .iter()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect(),
+            );
+            let id = DRAG_SESSION.lock().ok().and_then(|mut s| {
+                let session = s.as_mut()?;
+                session.accept_drop(&files).then_some(session.id)
+            });
+            if let Some(drag_id) = id {
+                let scale = window.scale_factor().unwrap_or(1.0);
+                let _ = app.emit_to(
+                    "overlay",
+                    "file-drag-drop",
+                    FileDropPayload {
+                        drag_id,
+                        x: position.x,
+                        y: position.y,
+                        scale_factor: scale,
+                    },
+                );
+            } else {
+                dismiss_menu(app);
+            }
+        }
+        tauri::DragDropEvent::Leave => {
+            let id = DRAG_SESSION
+                .lock()
+                .ok()
+                .and_then(|s| s.as_ref().map(|s| s.id));
+            if let Some(drag_id) = id {
+                let _ = app.emit_to("overlay", "file-drag-leave", drag_id);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn pinned_card(app: &AppHandle) -> bool {
@@ -256,8 +382,10 @@ fn point_on_item(point: (i32, i32)) -> bool {
     }
 }
 #[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct FilesPayload {
     files: Vec<String>,
+    drag_id: u64,
 }
 
 struct Apartment;
