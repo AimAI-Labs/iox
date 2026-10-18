@@ -288,7 +288,11 @@ pub fn execute_web_action(
     }
 }
 
-const ATTACHMENT_ORIGIN_NOTICE: &str = "(()=>{if(window.top!==window)return;const p=document.createElement('div');p.style.cssText='position:fixed;z-index:2147483647;bottom:20px;right:20px;padding:16px;background:#18212f;color:white';p.textContent='IOX：页面来源已改变或需要登录，本次附件已停止。请登录并返回官网后重新选择文件。';p.onclick=()=>p.remove();document.body?.appendChild(p)})();";
+fn show_attachment_origin_notice(webview: &tauri::Webview) {
+    let theme = webview.state::<AppState>().config.lock()
+        .map(|config| config.general.theme.clone()).unwrap_or_else(|_| "system".into());
+    let _ = webview.eval(&super::scripts::build_attachment_origin_notice(&theme));
+}
 
 fn eval_attachment(webview: &tauri::Webview, script: &str, origin: &str) {
     // Native guard prevents even passing file bytes to a login/foreign document.
@@ -299,7 +303,7 @@ fn eval_attachment(webview: &tauri::Webview, script: &str, origin: &str) {
     {
         let _ = webview.eval(script);
     } else {
-        let _ = webview.eval(ATTACHMENT_ORIGIN_NOTICE);
+        show_attachment_origin_notice(webview);
     }
 }
 
@@ -375,7 +379,7 @@ fn attachment_on_page_load(
             if super::file_upload::is_attachment_destination(payload.url(), &origin) {
                 eval_attachment(&webview, &script, &origin);
             } else {
-                let _ = webview.eval(ATTACHMENT_ORIGIN_NOTICE);
+                show_attachment_origin_notice(&webview);
             }
         }
     })
@@ -437,7 +441,7 @@ pub fn execute_web_file_action(
         "file-{}",
         NEXT_REQUEST.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     );
-    let script = super::file_upload::build_attachment_script(&origin, &attachments, &request_id);
+    let script = super::file_upload::build_attachment_script(&origin, &attachments, &request_id, &config.general.theme);
     if config.general.web_window_mode == "tabbed" {
         execute_tabbed_hub_action(
             app,

@@ -2,6 +2,13 @@
 
 use super::vendors::get_vendor_adapter;
 
+pub const WEB_TOAST_SCRIPT: &str = include_str!("web_toast.js");
+
+pub fn build_attachment_origin_notice(theme: &str) -> String {
+    let theme = serde_json::to_string(theme).unwrap();
+    format!("(()=>{{if(window.top!==window)return;{}\nconst notice=createIoxToast({{theme:{theme}}});notice.update({{type:'error',title:'附件已停止',description:'页面来源已改变或需要登录。请登录并返回官网后重新选择文件。'}});}})();", WEB_TOAST_SCRIPT)
+}
+
 /// 页面缩放持久化脚本：在页面加载时自动应用 localStorage 中保存的缩放比例，并监听 Ctrl+滚轮与快捷键缩放
 pub const ZOOM_PERSISTENCE_SCRIPT: &str = r#"(function() {
     try {

@@ -84,11 +84,12 @@ pub fn is_attachment_destination(url: &tauri::Url, origin: &str) -> bool {
         })
 }
 
-pub fn build_attachment_script(origin: &str, files: &[Attachment], request_id: &str) -> String {
+pub fn build_attachment_script(origin: &str, files: &[Attachment], request_id: &str, theme: &str) -> String {
     let origin = serde_json::to_string(origin).unwrap();
     let files = serde_json::to_string(files).unwrap();
     let id = serde_json::to_string(request_id).unwrap();
-    format!("(()=>{{const expectedOrigin={origin};if(window.top!==window||location.origin!==expectedOrigin||location.pathname.split('/').some(part=>['login','signin','sign-in','auth','oauth','passport','signup','register'].includes(part.toLowerCase())))return;const requestId={id};\n{}\n}})();", ATTACHMENT_SCRIPT.replace("__FILES__", &files))
+    let theme = serde_json::to_string(theme).unwrap();
+    format!("(()=>{{const expectedOrigin={origin};if(window.top!==window||location.origin!==expectedOrigin||location.pathname.split('/').some(part=>['login','signin','sign-in','auth','oauth','passport','signup','register'].includes(part.toLowerCase())))return;const requestId={id},toastTheme={theme};\n{}\n{}\n}})();", super::scripts::WEB_TOAST_SCRIPT, ATTACHMENT_SCRIPT.replace("__FILES__", &files))
 }
 
 const ATTACHMENT_SCRIPT: &str = r#"
@@ -100,11 +101,13 @@ if(requests.size>100)requests.delete(requests.values().next().value);
 let payload=__FILES__, timer=null, finished=false;
 const deadline=Date.now()+60000;
 const epoch=window.__iox_injection_epoch||0;
-let panel=null;
-function status(message){
+let panel=null, statusType=null;
+function status(type,title,description){
  if(!document.body)return;
- if(!panel){panel=document.createElement('div');panel.style.cssText='position:fixed;z-index:2147483647;bottom:20px;right:20px;max-width:420px;padding:14px 18px;border-radius:10px;background:#18212f;color:#fff;font:14px/1.6 system-ui;box-shadow:0 4px 24px #0005;cursor:pointer';panel.setAttribute?.('role','status');panel.addEventListener('click',()=>{cleanup();panel.remove()});document.body.appendChild(panel)}
- panel.textContent=message;
+ if(statusType===type)return;
+ if(!panel)panel=createIoxToast({theme:toastTheme,onDismiss:cleanup});
+ statusType=type;
+ panel.update({type,title,description,duration:type==='loading'?0:3500});
 }
 function cleanup(){finished=true;payload=[];if(timer!==null)clearInterval(timer);window.removeEventListener('pagehide',cleanup)}
 window.addEventListener('pagehide',cleanup,{once:true});
@@ -117,11 +120,11 @@ function accepts(input,file){
 }
 function attempt(){
  if(finished)return;
- if((window.__iox_injection_epoch||0)!==epoch){cleanup();panel?.remove();return}
- if(window.top!==window||location.origin!==expectedOrigin||location.pathname.split('/').some(part=>['login','signin','sign-in','auth','oauth','passport','signup','register'].includes(part.toLowerCase()))){status('IOX：页面已改变或需要登录，本次已停止。请返回官网后重新选择文件。');cleanup();return}
- if(Date.now()>=deadline){status('IOX：未找到兼容的附件入口。请登录后点击网站附件按钮，或手动选择文件；本次已停止。');cleanup();return}
+ if((window.__iox_injection_epoch||0)!==epoch){cleanup();panel?.dismiss();return}
+ if(window.top!==window||location.origin!==expectedOrigin||location.pathname.split('/').some(part=>['login','signin','sign-in','auth','oauth','passport','signup','register'].includes(part.toLowerCase()))){status('error','附件已停止','页面已改变或需要登录，本次已停止。请返回官网后重新选择文件。');cleanup();return}
+ if(Date.now()>=deadline){status('error','未找到附件入口','请登录后点击网站附件按钮，或手动选择文件；本次已停止。');cleanup();return}
  const input=Array.from(document.querySelectorAll('input[type="file"]')).find(el=>!el.disabled&&(payload.length===1||el.multiple)&&payload.every(file=>accepts(el,file)));
- if(!input){status('IOX：等待附件入口（最多 60 秒）。请先登录并点击网站的附件按钮；仅添加文件，不自动发送。点击此提示可取消。');return}
+ if(!input){status('loading','正在等待附件入口','请先登录并点击网站附件按钮，最多等待 60 秒。仅添加文件，不自动发送；关闭提示可取消。');return}
  try{
   const transfer=new DataTransfer();
   for(const file of payload){const bytes=Uint8Array.from(atob(file.data),c=>c.charCodeAt(0));transfer.items.add(new File([bytes],file.name,{type:mime(file.name)}))}
@@ -130,8 +133,8 @@ function attempt(){
   cleanup();
   input.dispatchEvent(new Event('input',{bubbles:true}));
   input.dispatchEvent(new Event('change',{bubbles:true}));
-  status('IOX：已交给网页附件入口，请确认网站中的附件及上传结果后手动发送。');
- }catch(_){status('IOX：网站未能接收本次附件，请使用网站附件按钮手动选择文件。');cleanup()}
+  status('success','附件已交给网页','请确认网站中的附件及上传结果后手动发送。');
+ }catch(_){status('error','网页未能接收附件','请使用网站附件按钮手动选择文件。');cleanup()}
 }
 attempt();if(!finished)timer=setInterval(attempt,500);
 "#;
@@ -222,7 +225,15 @@ mod tests {
                 data: "aGk=".into(),
             }],
             "request-1",
+            "system",
         );
+        // Test the attachment lifecycle independently of the website toast DOM renderer.
+        let script = script.replace(super::super::scripts::WEB_TOAST_SCRIPT, r#"
+function createIoxToast(options) {
+ const panel=document.createElement('div');document.body.appendChild(panel);
+ return {update(status){panel.textContent=status.description;panel.dismiss=options.onDismiss},dismiss(){options.onDismiss();panel.remove()}};
+}
+"#);
         let harness = r#"
 const vm = require('node:vm'), assert = require('node:assert/strict');
 const script = SCRIPT;
