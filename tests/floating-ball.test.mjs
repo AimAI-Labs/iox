@@ -87,7 +87,7 @@ function mountBall(t, overrides = {}) {
         }
         if (overrides[command]) return overrides[command](args);
         if (command === 'set_floating_ball_expanded') return [0, 0, 'top-right'];
-        return command === 'get_current_selection' ? 'selected text' : [0, 0, 'top-right'];
+        return command === 'get_current_selection' ? 'selected text' : [0, 0, 'top-right', 'right'];
       } };
       if (name.includes('useTranslation')) return { useTranslation: () => ({ t: (key) => key }) };
       if (name.includes('utils')) return { cn: (...values) => values.filter(Boolean).join(' ') };
@@ -177,6 +177,36 @@ test('passing over the ball cancels the pending hover without copying', async (t
   await ball.advance(300);
   assert.equal(ball.find('menu'), undefined);
   assert.equal(ball.calls.includes('get_current_selection'), false);
+});
+
+test('a freely placed ball stays visible while idle and still opens its menu', async (t) => {
+  const ball = mountBall(t, { init_floating_ball: () => [500, 300, 'top-right', 'none'] });
+  await ball.render();
+  await ball.advance(10000);
+  assert.doesNotMatch(ball.find('floating-ball-trigger').props.className, /is-idle|is-docked/);
+  ball.tree.props.onMouseEnter();
+  await ball.advance(220);
+  assert.ok(ball.find('menu'));
+});
+
+test('dragging away from an edge disables hiding and docking again restores it', async (t) => {
+  let placement = [500, 300, 'top-right', 'none'];
+  const ball = mountBall(t, { start_floating_ball_dragging: () => placement });
+  await ball.render();
+  const drag = async () => {
+    const button = ball.find('floating-ball-trigger');
+    button.props.onMouseDown({ button: 0, screenX: 100, screenY: 100 });
+    await button.props.onMouseMove({ screenX: 120, screenY: 100 });
+    await ball.render();
+  };
+  await drag();
+  await ball.advance(10000);
+  assert.doesNotMatch(ball.find('floating-ball-trigger').props.className, /is-idle|is-docked/);
+  placement = [0, 300, 'top-left', 'left'];
+  await drag();
+  await ball.advance(2500);
+  assert.match(ball.find('floating-ball-trigger').props.className, /is-docked-left/);
+  assert.match(ball.find('floating-ball-trigger').props.className, /is-idle/);
 });
 
 test('custom hover delay controls menu expansion and updates while waiting', async (t) => {

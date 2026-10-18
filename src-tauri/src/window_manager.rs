@@ -337,7 +337,7 @@ pub fn hide_overlay_window(window: &WebviewWindow) {
     let _ = window.hide();
 }
 
-/// 计算常驻悬浮球贴边吸附后的目标坐标与吸附边缘 ("left" | "right")
+/// 保留自由位置，仅在距侧边 24 逻辑像素以内吸附；球体大小已按 DPI 缩放。
 pub fn calculate_floating_ball_snap(
     x: i32,
     y: i32,
@@ -348,14 +348,20 @@ pub fn calculate_floating_ball_snap(
     let dist_to_left = (x - wa_left).abs();
     let dist_to_right = (wa_right - (x + ball_size)).abs();
 
-    let (target_x, edge) = if dist_to_left < dist_to_right {
+    let snap_distance = (ball_size * 2 / 5).max(1);
+    let max_x = (wa_right - ball_size).max(wa_left);
+    let (target_x, edge) = if dist_to_left <= snap_distance && dist_to_left <= dist_to_right {
         (wa_left, "left")
+    } else if dist_to_right <= snap_distance {
+        (max_x, "right")
     } else {
-        (wa_right - ball_size, "right")
+        let target_x = x.clamp(wa_left, max_x);
+        let edge = if target_x == wa_left { "left" } else if target_x == max_x { "right" } else { "none" };
+        (target_x, edge)
     };
 
     let min_y = wa_top + 10;
-    let max_y = wa_bottom - ball_size - 10;
+    let max_y = (wa_bottom - ball_size - 10).max(min_y);
     let target_y = y.clamp(min_y, max_y);
 
     (target_x, target_y, edge)
@@ -377,16 +383,18 @@ pub fn get_screen_work_area(x: i32, y: i32) -> (i32, i32, i32, i32) {
 }
 
 /// 停靠后重建固定画布布局，返回球体逻辑坐标及卡片角落。
+pub type FloatingBallPosition = (i32, i32, String, String);
+
 pub fn snap_floating_ball(
     window: &WebviewWindow,
     current_x: i32,
     current_y: i32,
-) -> (i32, i32, String) {
+) -> FloatingBallPosition {
     init_floating_ball(window, (current_x, current_y))
 }
 
 /// 初始化固定画布；前端提交角落定位后才显示，保存坐标仍表示 60px 球体。
-pub fn init_floating_ball(window: &WebviewWindow, saved_pos: (i32, i32)) -> (i32, i32, String) {
+pub fn init_floating_ball(window: &WebviewWindow, saved_pos: (i32, i32)) -> FloatingBallPosition {
     let scale_factor = window.scale_factor().unwrap_or(1.0);
     let phys_size = (60.0 * scale_factor).round() as i32;
 
@@ -401,7 +409,7 @@ pub fn init_floating_ball(window: &WebviewWindow, saved_pos: (i32, i32)) -> (i32
     };
 
     let work_area = get_screen_work_area(phys_x, phys_y);
-    let (target_phys_x, target_phys_y, _edge) =
+    let (target_phys_x, target_phys_y, edge) =
         calculate_floating_ball_snap(phys_x, phys_y, phys_size, work_area);
 
     let layout = calculate_floating_menu_placement(
@@ -423,7 +431,7 @@ pub fn init_floating_ball(window: &WebviewWindow, saved_pos: (i32, i32)) -> (i32
     }
     // The frontend commits this corner before set_floating_ball_expanded shows it.
     ((target_phys_x as f64 / scale_factor).round() as i32,
-     (target_phys_y as f64 / scale_factor).round() as i32, layout.corner.to_string())
+     (target_phys_y as f64 / scale_factor).round() as i32, layout.corner.to_string(), edge.to_string())
 }
 
 struct FloatingMenuPlacement {
@@ -833,29 +841,45 @@ mod tests {
     }
 
     #[test]
+    fn floating_ball_keeps_free_positions_and_only_snaps_near_edges() {
+        for scale in [1, 2] {
+            let area = (-1280 * scale, 0, 0, 1080 * scale);
+            let size = 60 * scale;
+            assert_eq!(calculate_floating_ball_snap(-600 * scale, 300 * scale, size, area),
+                (-600 * scale, 300 * scale, "none"));
+            assert_eq!(calculate_floating_ball_snap(-1260 * scale, 300 * scale, size, area),
+                (-1280 * scale, 300 * scale, "left"));
+            assert_eq!(calculate_floating_ball_snap(-80 * scale, 300 * scale, size, area),
+                (-60 * scale, 300 * scale, "right"));
+            assert_eq!(calculate_floating_ball_snap(-90 * scale, 300 * scale, size, area),
+                (-90 * scale, 300 * scale, "none"));
+        }
+    }
+
+    #[test]
     fn test_floating_ball_snap_edge_calc() {
         let work_area = (0, 0, 1920, 1080); // left, top, right, bottom
         
         // 靠近屏幕左侧 (x=100, y=300)
-        let (target_x, target_y, edge) = calculate_floating_ball_snap(100, 300, 60, work_area);
+        let (target_x, target_y, edge) = calculate_floating_ball_snap(20, 300, 60, work_area);
         assert_eq!(target_x, 0);
         assert_eq!(target_y, 300);
         assert_eq!(edge, "left");
 
         // 靠近屏幕右侧 (x=1800, y=300)
-        let (target_x, target_y, edge) = calculate_floating_ball_snap(1800, 300, 60, work_area);
+        let (target_x, target_y, edge) = calculate_floating_ball_snap(1840, 300, 60, work_area);
         assert_eq!(target_x, 1920 - 60);
         assert_eq!(target_y, 300);
         assert_eq!(edge, "right");
 
         // 靠近屏幕顶部越界 (x=1800, y=-50) -> clamp 到 top + 10
-        let (target_x, target_y, edge) = calculate_floating_ball_snap(1800, -50, 60, work_area);
+        let (target_x, target_y, edge) = calculate_floating_ball_snap(1840, -50, 60, work_area);
         assert_eq!(target_x, 1920 - 60);
         assert_eq!(target_y, 10);
         assert_eq!(edge, "right");
 
         // 靠近屏幕底部越界 (x=100, y=2000) -> clamp 到 bottom - 60 - 10
-        let (target_x, target_y, edge) = calculate_floating_ball_snap(100, 2000, 60, work_area);
+        let (target_x, target_y, edge) = calculate_floating_ball_snap(20, 2000, 60, work_area);
         assert_eq!(target_x, 0);
         assert_eq!(target_y, 1080 - 60 - 10);
         assert_eq!(edge, "left");

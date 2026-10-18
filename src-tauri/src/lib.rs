@@ -442,7 +442,7 @@ async fn fetch_provider_models(
 }
 
 #[tauri::command]
-fn init_floating_ball(app: AppHandle, state: State<AppState>) -> Result<(i32, i32, String), String> {
+fn init_floating_ball(app: AppHandle, state: State<AppState>) -> Result<window_manager::FloatingBallPosition, String> {
     if let Some(window) = app.get_webview_window("floating_ball") {
         let (pos, enabled) = {
             let config = state.config.lock().unwrap();
@@ -450,7 +450,7 @@ fn init_floating_ball(app: AppHandle, state: State<AppState>) -> Result<(i32, i3
         };
         if !enabled {
             let _ = window.hide();
-            return Ok((pos.0, pos.1, "right".to_string()));
+            return Ok((pos.0, pos.1, "top-right".to_string(), "none".to_string()));
         }
         let res = window_manager::init_floating_ball(&window, pos);
         Ok(res)
@@ -465,7 +465,7 @@ fn snap_floating_ball(
     state: State<AppState>,
     x: i32,
     y: i32,
-) -> Result<(i32, i32, String), String> {
+) -> Result<window_manager::FloatingBallPosition, String> {
     if let Some(window) = app.get_webview_window("floating_ball") {
         let enabled = {
             let config = state.config.lock().unwrap();
@@ -473,14 +473,14 @@ fn snap_floating_ball(
         };
         if !enabled {
             let _ = window.hide();
-            return Ok((x, y, "right".to_string()));
+            return Ok((x, y, "top-right".to_string(), "none".to_string()));
         }
-        let (logical_x, logical_y, edge) = window_manager::snap_floating_ball(&window, x, y);
+        let (logical_x, logical_y, corner, edge) = window_manager::snap_floating_ball(&window, x, y);
         if let Ok(mut config) = state.config.lock() {
             config.general.floating_ball_pos = (logical_x, logical_y);
             let _ = config.save();
         }
-        Ok((logical_x, logical_y, edge))
+        Ok((logical_x, logical_y, corner, edge))
     } else {
         Err("Floating ball window not found".to_string())
     }
@@ -490,7 +490,7 @@ fn snap_floating_ball(
 async fn start_floating_ball_dragging(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<(i32, i32, String), String> {
+) -> Result<window_manager::FloatingBallPosition, String> {
     let window = app
         .get_webview_window("floating_ball")
         .ok_or_else(|| "Floating ball window not found".to_string())?;
@@ -501,7 +501,7 @@ async fn start_floating_ball_dragging(
     };
     if !enabled {
         let _ = window.hide();
-        return Ok((0, 0, "right".to_string()));
+        return Ok((0, 0, "top-right".to_string(), "none".to_string()));
     }
 
     let (drag_x, drag_y) = tauri::async_runtime::spawn_blocking(move || {
@@ -511,12 +511,12 @@ async fn start_floating_ball_dragging(
     .map_err(|e| e.to_string())?;
 
     if let Some(win) = app.get_webview_window("floating_ball") {
-        let (logical_x, logical_y, edge) = window_manager::snap_floating_ball(&win, drag_x, drag_y);
+        let (logical_x, logical_y, corner, edge) = window_manager::snap_floating_ball(&win, drag_x, drag_y);
         if let Ok(mut config) = state.config.lock() {
             config.general.floating_ball_pos = (logical_x, logical_y);
             let _ = config.save();
         }
-        Ok((logical_x, logical_y, edge))
+        Ok((logical_x, logical_y, corner, edge))
     } else {
         Err("Floating ball window not found".to_string())
     }

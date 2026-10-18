@@ -13,6 +13,8 @@ export interface FloatingBallProps {
 }
 
 type Timer = ReturnType<typeof setTimeout>;
+type DockedEdge = 'left' | 'right' | 'none';
+type BallPosition = [number, number, FloatingMenuCorner, DockedEdge];
 interface CloseOptions { immediate?: boolean; reversible?: boolean }
 interface ClosingTransition {
   promise: Promise<boolean>;
@@ -28,7 +30,8 @@ function cancelTimer(ref: { current: Timer | null }) {
 
 export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
   const { t } = useTranslation();
-  const [edge, setEdge] = useState<'left' | 'right'>('right');
+  const [edge, setEdge] = useState<DockedEdge>('right');
+  const dockedEdge = useRef<DockedEdge>('right');
   const [corner, setCorner] = useState<FloatingMenuCorner>('top-right');
   const [isIdle, setIsIdle] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -55,23 +58,26 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
   const resetIdleTimer = useCallback(() => {
     cancelTimer(idleTimer);
     setIsIdle(false);
-    if ((config?.general.floatingBallAutoHide ?? true) && !expanded.current && !opening.current && !dragging.current && !inside.current) {
+    if (dockedEdge.current !== 'none' && (config?.general.floatingBallAutoHide ?? true) && !expanded.current && !opening.current && !dragging.current && !inside.current) {
       idleTimer.current = setTimeout(() => setIsIdle(true), hideDelayMs);
     }
-  }, [config?.general.floatingBallAutoHide, hideDelayMs]);
+  }, [config?.general.floatingBallAutoHide, hideDelayMs, edge]);
 
-  const commitPlacement = useCallback((next: FloatingMenuCorner) => {
+  const commitPlacement = useCallback((next: FloatingMenuCorner, dock: DockedEdge = 'none') => {
+    dockedEdge.current = dock;
+    if (dock === 'none') cancelTimer(idleTimer);
     flushSync(() => {
       setCorner(next);
-      setEdge(next.endsWith('left') ? 'left' : 'right');
+      setEdge(dock);
+      setIsIdle(false);
     });
   }, []);
 
   useEffect(() => {
     if (config?.general.enableFloatingBall === false) return;
-    nativeQueue.current = invoke<[number, number, FloatingMenuCorner]>('init_floating_ball')
+    nativeQueue.current = invoke<BallPosition>('init_floating_ball')
       .then(async (result) => {
-        commitPlacement(result[2]);
+        commitPlacement(result[2], result[3]);
         await invoke('set_floating_ball_expanded', { expanded: false });
       })
       .catch((error) => console.error('Failed to init floating ball:', error));
@@ -290,8 +296,8 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
     inside.current = false;
     try {
       if (!await closeMenu({ immediate: true })) return;
-      const result = await invoke<[number, number, FloatingMenuCorner]>('start_floating_ball_dragging');
-      commitPlacement(result[2]);
+      const result = await invoke<BallPosition>('start_floating_ball_dragging');
+      commitPlacement(result[2], result[3]);
       await invoke('set_floating_ball_expanded', { expanded: false });
     } catch (error) {
       console.error('Floating ball drag failed:', error);
@@ -360,7 +366,7 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
         type="button"
         data-testid="floating-ball-trigger"
         className={cn('floating-ball floating-launcher-ball',
-          edge === 'left' ? 'is-docked-left' : 'is-docked-right', !isExpanded && isIdle && 'is-idle')}
+          edge === 'left' && 'is-docked-left', edge === 'right' && 'is-docked-right', !isExpanded && isIdle && 'is-idle')}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
