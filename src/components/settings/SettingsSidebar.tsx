@@ -1,5 +1,5 @@
 import React from "react";
-import { Cpu, Zap, Layers, MessageSquare, Globe, Sliders, Shield, Save, Code } from "lucide-react";
+import { Cpu, Zap, Layers, MessageSquare, MessagesSquare, Globe, Sliders, Shield, Save, Code } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { Button } from "@/components/ui";
@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { SettingsTab } from "@/types/config";
 
 export type { SettingsTab };
+
+const menuItemClassName = "w-full h-8 justify-start gap-2.5 px-2.5 text-xs text-muted-foreground";
 
 interface SettingsSidebarProps {
   activeTab: SettingsTab;
@@ -28,7 +30,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
     { id: "actions", label: t('settings.sidebar.actions'), icon: Zap },
     { id: "api_card", label: t('settings.sidebar.apiCard'), icon: Layers },
     { id: "sessions", label: t('settings.sidebar.sessions'), icon: MessageSquare },
-    { id: "web_sessions", label: resolvedLanguage === 'zh' ? '网页会话' : 'Web conversations', icon: Globe },
+    { id: "web_sessions", label: resolvedLanguage === 'zh' ? '网页会话' : 'Web conversations', icon: MessagesSquare },
     { id: "web", label: t('settings.sidebar.web'), icon: Globe },
     { id: "general", label: t('settings.sidebar.general'), icon: Sliders },
     { id: "blacklist", label: t('settings.sidebar.blacklist'), icon: Shield },
@@ -60,26 +62,22 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
-              <button
+              <Button
                 key={item.id}
                 type="button"
+                variant="ghost"
+                aria-current={isActive ? "page" : undefined}
                 onClick={() => onTabChange(item.id)}
                 className={cn(
-                  "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 text-left outline-none",
+                  "w-full flex items-center justify-start gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 text-left outline-none",
                   isActive
                     ? "bg-primary/12 text-primary dark:text-blue-400 font-semibold shadow-xs"
                     : "text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
                 )}
               >
-                <Icon
-                  size={14}
-                  className={cn(
-                    "transition-colors",
-                    isActive ? "text-primary dark:text-blue-400" : "text-muted-foreground"
-                  )}
-                />
+                <Icon size={14} className="shrink-0" />
                 <span>{item.label}</span>
-              </button>
+              </Button>
             );
           })}
         </nav>
@@ -97,7 +95,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
               toast.error(t('settings.sidebar.devtoolsFailed'), { description: String(error) });
             }
           }}
-          className="w-full h-8 justify-start gap-2.5 px-2.5 text-xs text-muted-foreground"
+          className={menuItemClassName}
         >
           <Code size={14} />
           <span>{t('settings.sidebar.devtools')}</span>
