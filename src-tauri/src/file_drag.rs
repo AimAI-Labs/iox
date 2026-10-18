@@ -65,19 +65,21 @@ impl FileMenuLayout {
     }
 }
 
-/// One gesture: move beyond the system drag threshold, then dwell for one second.
+/// One gesture: move beyond the system drag threshold, then dwell for the configured delay.
 pub struct DragDwell {
     start: (i32, i32),
     threshold: (i32, i32),
+    delay_ms: u64,
     anchor: Option<((i32, i32), u64)>,
     finished: bool,
 }
 
 impl DragDwell {
-    pub fn new(start: (i32, i32), threshold: (i32, i32)) -> Self {
+    pub fn new(start: (i32, i32), threshold: (i32, i32), delay_ms: u64) -> Self {
         Self {
             start,
             threshold,
+            delay_ms: delay_ms.clamp(200, 3000),
             anchor: None,
             finished: false,
         }
@@ -104,7 +106,7 @@ impl DragDwell {
             self.anchor = Some((point, now_ms));
             return false;
         }
-        if now_ms.saturating_sub(since) >= 1000 {
+        if now_ms.saturating_sub(since) >= self.delay_ms {
             self.finished = true;
             return true;
         }
@@ -213,7 +215,7 @@ mod tests {
 
     #[test]
     fn click_and_stationary_hold_do_not_start_a_drag() {
-        let mut dwell = DragDwell::new((10, 10), (4, 4));
+        let mut dwell = DragDwell::new((10, 10), (4, 4), 1000);
         assert!(!dwell.update((10, 10), 2000, true));
         assert!(!dwell.update((11, 11), 3000, true));
         assert!(!dwell.update((11, 11), 4000, false));
@@ -221,7 +223,7 @@ mod tests {
 
     #[test]
     fn requires_a_full_second_after_drag_and_only_fires_once() {
-        let mut dwell = DragDwell::new((0, 0), (4, 4));
+        let mut dwell = DragDwell::new((0, 0), (4, 4), 1000);
         assert!(!dwell.update((20, 20), 50, true));
         assert!(!dwell.update((20, 20), 1049, true));
         assert!(dwell.update((20, 20), 1050, true));
@@ -229,8 +231,28 @@ mod tests {
     }
 
     #[test]
+    fn uses_custom_hover_delays_and_clamps_out_of_range_values() {
+        for (configured, effective) in [(500, 500), (1700, 1700), (0, 200), (u64::MAX, 3000)] {
+            let mut dwell = DragDwell::new((0, 0), (4, 4), configured);
+            assert!(!dwell.update((20, 20), 50, true));
+            assert!(!dwell.update((20, 20), 50 + effective - 1, true));
+            assert!(dwell.update((20, 20), 50 + effective, true));
+            assert!(!dwell.update((20, 20), 5000, true));
+        }
+    }
+
+    #[test]
+    fn movement_restarts_the_configured_hover_delay() {
+        let mut dwell = DragDwell::new((0, 0), (4, 4), 500);
+        assert!(!dwell.update((20, 20), 0, true));
+        assert!(!dwell.update((30, 20), 400, true));
+        assert!(!dwell.update((30, 20), 899, true));
+        assert!(dwell.update((30, 20), 900, true));
+    }
+
+    #[test]
     fn movement_resets_dwell_but_small_jitter_does_not() {
-        let mut dwell = DragDwell::new((0, 0), (4, 4));
+        let mut dwell = DragDwell::new((0, 0), (4, 4), 1000);
         assert!(!dwell.update((20, 20), 0, true));
         assert!(!dwell.update((30, 20), 900, true));
         assert!(!dwell.update((32, 21), 1800, true));
@@ -239,7 +261,7 @@ mod tests {
 
     #[test]
     fn releasing_before_dwell_cancels_the_gesture() {
-        let mut dwell = DragDwell::new((0, 0), (4, 4));
+        let mut dwell = DragDwell::new((0, 0), (4, 4), 1000);
         assert!(!dwell.update((20, 20), 0, true));
         assert!(!dwell.update((20, 20), 999, false));
         assert!(!dwell.update((20, 20), 2000, true));

@@ -27,6 +27,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 }) => {
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
+  const fileDragHoverDelayMs = Math.min(3000, Math.max(200, general.fileDragHoverDelayMs ?? 1000));
 
   return (
     <div className="space-y-4">
@@ -102,8 +103,8 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
               </Label>
               <p className="text-[11px] text-muted-foreground">
                 {isZh
-                  ? '拖动桌面或资源管理器中的文件，悬停 1 秒弹出菜单，拖到 AI 上松手即可打开官网添加附件，支持多选'
-                  : 'Drag files from the desktop or Explorer, pause for 1 second, then drop onto an AI to open its website and attach files; multiple files supported'}
+                  ? '拖动桌面或资源管理器中的文件，悬停后弹出菜单，拖到 AI 上松手即可添加附件，支持多选'
+                  : 'Drag files from the desktop or Explorer, pause to show the menu, then drop onto an AI to attach files; multiple files supported'}
               </p>
             </div>
             <Switch
@@ -112,6 +113,32 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
               onCheckedChange={(checked) => onUpdateGeneral({ autoPopupOnFileSelection: checked })}
             />
           </div>
+
+          {general.autoPopupOnFileSelection && (
+            <div className="space-y-2 rounded-lg border border-border/50 bg-muted/30 p-3 animate-in fade-in slide-in-from-top-1 duration-150 motion-reduce:animate-none">
+              <div className="flex items-center justify-between gap-4">
+                <Label htmlFor="file-drag-hover-delay" className="text-xs font-medium">
+                  {isZh ? '悬停时间' : 'Hover delay'}
+                </Label>
+                <span className="text-xs font-mono tabular-nums text-primary" aria-live="polite">
+                  {(fileDragHoverDelayMs / 1000).toFixed(1)} {isZh ? '秒' : 's'}
+                </span>
+              </div>
+              <Slider
+                id="file-drag-hover-delay"
+                min={200}
+                max={3000}
+                step={100}
+                value={fileDragHoverDelayMs}
+                onChange={(value) => onUpdateGeneral({ fileDragHoverDelayMs: value })}
+                aria-valuetext={`${(fileDragHoverDelayMs / 1000).toFixed(1)} ${isZh ? '秒' : 'seconds'}`}
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>{isZh ? '0.2 秒 · 更快弹出' : '0.2 s · Faster'}</span>
+                <span>{isZh ? '3 秒 · 减少误触' : '3 s · Fewer accidental popups'}</span>
+              </div>
+            </div>
+          )}
 
           <Separator />
 

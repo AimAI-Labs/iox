@@ -180,7 +180,9 @@ pub fn mouse_down(app: &AppHandle, point: (i32, i32), inside_overlay: bool) {
                 GetSystemMetrics(SM_CYDRAG).max(1),
             )
         };
-        let mut dwell = DragDwell::new(point, threshold);
+        let delay_ms = app.state::<crate::AppState>().config.lock()
+            .map(|config| config.general.file_drag_hover_delay_ms).unwrap_or(1000);
+        let mut dwell = DragDwell::new(point, threshold, delay_ms);
         let started = Instant::now();
         loop {
             if !is_current(generation, target) {

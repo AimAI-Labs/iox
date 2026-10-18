@@ -90,6 +90,8 @@ pub struct GeneralConfig {
     pub auto_popup_on_selection: bool,
     #[serde(default)]
     pub auto_popup_on_file_selection: bool,
+    #[serde(default = "default_file_drag_hover_delay_ms")]
+    pub file_drag_hover_delay_ms: u64,
     pub min_selection_length: usize,
     pub trigger_modifier: String, // "None" | "Ctrl" | "Alt" | "Shift"
     pub global_hotkey: String,    // e.g. "Alt+Space"
@@ -117,11 +119,16 @@ pub struct GeneralConfig {
     pub language: String,         // "auto" | "zh" | "en"
 }
 
+fn default_file_drag_hover_delay_ms() -> u64 {
+    1000
+}
+
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             auto_popup_on_selection: true,
             auto_popup_on_file_selection: false,
+            file_drag_hover_delay_ms: default_file_drag_hover_delay_ms(),
             min_selection_length: 1,
             trigger_modifier: "None".to_string(),
             global_hotkey: "Alt+Space".to_string(),
@@ -1154,6 +1161,19 @@ mod tests {
 
 #[cfg(test)]
 mod file_selection_config_tests {
+    #[test]
+    fn file_drag_hover_delay_defaults_for_legacy_configs_and_round_trips() {
+        let mut json = serde_json::to_value(super::AppConfig::default()).unwrap();
+        assert_eq!(json["general"]["fileDragHoverDelayMs"], 1000);
+        json["general"].as_object_mut().unwrap().remove("fileDragHoverDelayMs");
+        let legacy: super::AppConfig = serde_json::from_value(json).unwrap();
+        let mut json = serde_json::to_value(legacy).unwrap();
+        assert_eq!(json["general"]["fileDragHoverDelayMs"], 1000);
+        json["general"]["fileDragHoverDelayMs"] = serde_json::json!(650);
+        let custom: super::AppConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(serde_json::to_value(custom).unwrap()["general"]["fileDragHoverDelayMs"], 650);
+    }
+
     #[test]
     fn file_selection_is_opt_in_for_new_and_legacy_configs() {
         let mut json = serde_json::to_value(super::AppConfig::default()).unwrap();
