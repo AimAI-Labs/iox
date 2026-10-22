@@ -53,7 +53,9 @@ pub fn apply_ui_style(app: &AppHandle, style: &str, theme: &str) {
     NATIVE_CHROME.store(native, Ordering::Relaxed);
     let window_theme = to_window_theme(theme);
 
-    for (label, window) in app.webview_windows() {
+    // 使用 windows() 而非 webview_windows()：Web 卡片由 WindowBuilder + 子 Webview 构建，
+    // 不会出现在 webview_windows() 中，否则永远无法附加系统标题栏。
+    for (label, window) in app.windows() {
         if is_style_exempt(&label) {
             continue;
         }
@@ -64,7 +66,7 @@ pub fn apply_ui_style(app: &AppHandle, style: &str, theme: &str) {
 /// 仅同步系统标题栏配色，不重建窗口装饰
 pub fn sync_window_theme(app: &AppHandle, theme: &str) {
     let window_theme = to_window_theme(theme);
-    for (label, window) in app.webview_windows() {
+    for (label, window) in app.windows() {
         if is_style_exempt(&label) {
             continue;
         }
@@ -73,7 +75,7 @@ pub fn sync_window_theme(app: &AppHandle, theme: &str) {
 }
 
 /// 对单个窗口应用界面策略：系统标题栏开关、直角/圆角与标题栏配色
-pub fn apply_window_ui_style(window: &WebviewWindow, native: bool, theme: Option<tauri::Theme>) {
+pub fn apply_window_ui_style(window: &tauri::Window, native: bool, theme: Option<tauri::Theme>) {
     let _ = window.set_theme(theme);
     let _ = window.set_decorations(native);
     if let Ok(hwnd) = window.hwnd() {

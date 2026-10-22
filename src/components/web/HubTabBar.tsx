@@ -5,6 +5,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { MacTrafficLights } from '@/components/MacTrafficLights';
 import { DynamicIcon } from '@/components/Icons';
+import { useUiTheme } from '@/themes/ThemeProvider';
 import { WebHubState, AppConfig, ActionConfig } from '@/types/config';
 import {
   RotateCw,
@@ -21,6 +22,7 @@ import {
 import { cn } from '@/lib/utils';
 
 export const HubTabBar: React.FC = () => {
+  const uiTheme = useUiTheme();
   const [hubState, setHubState] = useState<WebHubState>({
     tabs: [],
     activeTabId: null,
@@ -307,14 +309,16 @@ export const HubTabBar: React.FC = () => {
         onMouseDown={handleMouseDownDrag}
         onDoubleClick={handleDoubleClickDrag}
       >
-        {/* 左侧：交通灯区域 */}
-        <div className="flex items-center gap-2 shrink-0 pr-2 h-full">
-          <MacTrafficLights
-            onClose={handleClose}
-            onMinimize={handleMinimize}
-            onMaximize={handleMaximize}
-          />
-        </div>
+        {/* 左侧：经典样式下的交通灯；原生样式由系统标题栏提供控制按钮 */}
+        {uiTheme.windowChrome === 'custom' && (
+          <div className="flex items-center gap-2 shrink-0 pr-2 h-full">
+            <MacTrafficLights
+              onClose={handleClose}
+              onMinimize={handleMinimize}
+              onMaximize={handleMaximize}
+            />
+          </div>
+        )}
 
         {/* 中间：可滚动的 Tab 标签页列表 */}
         <div

@@ -6,8 +6,8 @@ export interface UiTheme {
   readonly id: string;
   /** 窗口外框由系统绘制 (native) 还是应用自绘 (custom) */
   readonly windowChrome: 'custom' | 'native';
-  /** 自绘标题栏内的窗口控制形式 */
-  readonly titleBarControls: 'traffic-lights' | 'hidden';
+  /** 自绘标题栏内的窗口控制形式；原生外框窗口由系统绘制，不渲染自绘控件 */
+  readonly titleBarControls: 'traffic-lights' | 'windows';
 }
 
 /**
@@ -23,7 +23,7 @@ export const uiThemes: Record<UiStyle, UiTheme> = {
   windows: {
     id: 'windows',
     windowChrome: 'native',
-    titleBarControls: 'hidden',
+    titleBarControls: 'windows',
   },
 };
 

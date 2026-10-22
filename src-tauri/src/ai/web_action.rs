@@ -536,12 +536,13 @@ fn execute_multi_window_action(
         .build()
         .map_err(|e| format!("Failed to create web window: {}", e))?;
 
-    if let Ok(hwnd) = window.hwnd() {
-        crate::window_manager::apply_main_window_native_style(hwnd.0 as _);
-    }
+    crate::window_manager::apply_window_ui_style(
+        &window,
+        native_chrome,
+        crate::window_manager::to_window_theme(&config.general.theme),
+    );
     let icon = tauri::include_image!("icons/icon.png");
     let _ = window.set_icon(icon);
-    let _ = window.set_theme(crate::window_manager::to_window_theme(&config.general.theme));
 
     let title_param = urlencoding::encode(&action.name);
     let url_param = urlencoding::encode(target_url_str);
@@ -789,12 +790,13 @@ fn execute_tabbed_hub_action(
         .build()
         .map_err(|e| format!("Failed to create web hub window: {}", e))?;
 
-    if let Ok(hwnd) = window.hwnd() {
-        crate::window_manager::apply_main_window_native_style(hwnd.0 as _);
-    }
+    crate::window_manager::apply_window_ui_style(
+        &window,
+        native_chrome,
+        crate::window_manager::to_window_theme(&config.general.theme),
+    );
     let icon = tauri::include_image!("icons/icon.png");
     let _ = window.set_icon(icon);
-    let _ = window.set_theme(crate::window_manager::to_window_theme(&config.general.theme));
 
     // 构建顶部 Hub 专用多标签栏 Webview
     let bar_path = format!("index.html?view=web_titlebar&label={}", window_label);

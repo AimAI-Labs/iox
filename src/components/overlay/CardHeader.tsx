@@ -2,8 +2,10 @@ import React from 'react';
 import { useWindowDrag } from '@/hooks/useWindowDrag';
 import { DynamicIcon } from '@/components/Icons';
 import { MacTrafficLights } from '@/components/MacTrafficLights';
+import { WindowsCaptionControls } from '@/components/WindowsCaptionControls';
 import { TabBar, TabItem } from '@/components/overlay/TabBar';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useUiTheme } from '@/themes/ThemeProvider';
 import { Pin, RotateCcw, Plus, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -65,24 +67,28 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
 }) => {
   const { t, resolvedLanguage } = useTranslation();
   const { handleMouseDown } = useWindowDrag();
+  const uiTheme = useUiTheme();
+  const isNativeStyle = uiTheme.titleBarControls === 'windows';
 
   return (
     <div
       onMouseDown={handleMouseDown}
       className="flex shrink-0 items-center justify-between border-b border-line/60 bg-transparent px-3 py-1.5 select-none cursor-grab active:cursor-grabbing gap-2"
     >
-      {/* 左侧：Mac 交通灯三色圆点 */}
-      <div data-tauri-drag-region className="flex shrink-0 items-center">
-        <MacTrafficLights
-          onClose={onClose}
-          onMinimize={onMinimize}
-          onMaximize={onToggleMaximize}
-          isMaximized={isMaximized}
-          closeTitle={t('card.closeCard')}
-          minimizeTitle={resolvedLanguage === 'zh' ? '收起并保留会话' : 'Minimize and Keep Session'}
-          maximizeTitle={isMaximized ? (resolvedLanguage === 'zh' ? '还原窗口尺寸' : 'Restore Window Size') : (resolvedLanguage === 'zh' ? '全屏最大化' : 'Maximize Window')}
-        />
-      </div>
+      {/* 左侧：经典样式下的 Mac 交通灯三色圆点；原生样式改用右侧系统风格按钮 */}
+      {!isNativeStyle && (
+        <div data-tauri-drag-region className="flex shrink-0 items-center">
+          <MacTrafficLights
+            onClose={onClose}
+            onMinimize={onMinimize}
+            onMaximize={onToggleMaximize}
+            isMaximized={isMaximized}
+            closeTitle={t('card.closeCard')}
+            minimizeTitle={resolvedLanguage === 'zh' ? '收起并保留会话' : 'Minimize and Keep Session'}
+            maximizeTitle={isMaximized ? (resolvedLanguage === 'zh' ? '还原窗口尺寸' : 'Restore Window Size') : (resolvedLanguage === 'zh' ? '全屏最大化' : 'Maximize Window')}
+          />
+        </div>
+      )}
 
       {/* 中间：多标签栏 (TabBar) 或 默认动作标题 */}
       {tabs && tabs.length > 0 && onSelectTab && onCloseTab && onNewTab ? (
@@ -181,6 +187,20 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
             )}
           />
         </button>
+
+        {/* 原生样式：系统风格的最小化 / 最大化 / 关闭按钮 */}
+        {isNativeStyle && (
+          <WindowsCaptionControls
+            onClose={onClose}
+            onMinimize={onMinimize}
+            onMaximize={onToggleMaximize}
+            isMaximized={isMaximized}
+            closeTitle={t('card.closeCard')}
+            minimizeTitle={resolvedLanguage === 'zh' ? '收起并保留会话' : 'Minimize and Keep Session'}
+            maximizeTitle={isMaximized ? (resolvedLanguage === 'zh' ? '还原窗口尺寸' : 'Restore Window Size') : (resolvedLanguage === 'zh' ? '全屏最大化' : 'Maximize Window')}
+            className="ml-1 -mr-3"
+          />
+        )}
       </div>
     </div>
   );
