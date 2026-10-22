@@ -1,15 +1,11 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
 import { invoke } from '@tauri-apps/api/core';
 import { ActionConfig, ProviderConfig, ApiCardConfig } from '@/types/config';
 import { CardHeader } from '@/components/overlay/CardHeader';
 import { TabItem } from '@/components/overlay/TabBar';
 import { LoadingState } from '@/components/overlay/LoadingState';
 import { ThinkingBlock } from '@/components/overlay/ThinkingBlock';
-import { CodeBlock } from '@/components/overlay/CodeBlock';
+import { MarkdownContent } from '@/components/overlay/MarkdownContent';
 import { PromptBar } from '@/components/overlay/PromptBar';
 import { ResponseToolbar } from '@/components/overlay/ResponseToolbar';
 import { UserBubble } from '@/components/overlay/UserBubble';
@@ -831,23 +827,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
                       {/* Markdown 正文 */}
                       {turnMain && (
-                        <div className="markdown-body">
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm, remarkMath]}
-                            rehypePlugins={[rehypeKatex]}
-                            components={{
-                              code: (props: any) => (
-                                <CodeBlock
-                                  {...props}
-                                  codeBlockWrap={apiCard?.codeBlockWrap}
-                                  codeBlockLineNumbers={apiCard?.codeBlockLineNumbers}
-                                />
-                              ),
-                              pre: ({ children }: any) => <>{children}</>,
-                            }}
-                          >
-                            {turnMain}
-                          </ReactMarkdown>
+                        <div className="relative">
+                          <MarkdownContent
+                            content={turnMain}
+                            codeBlockWrap={apiCard?.codeBlockWrap}
+                            codeBlockLineNumbers={apiCard?.codeBlockLineNumbers}
+                          />
                           {isLoading && isLast && !turnIsThinking && (
                             <span className="ml-0.5 inline-block h-3.5 w-[3px] translate-y-0.5 rounded-full bg-primary align-middle animate-pulse" />
                           )}

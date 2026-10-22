@@ -77,31 +77,49 @@ export function useActionStream({
   activeActionRef.current = activeAction;
 
   // 监听流式事件
+  // 回调经 ref 转发：调用方传入的多为内联函数，若直接作为 effect 依赖，
+  // 每个 token 触发的重渲染都会重新订阅；而 listen/unlisten 均为异步，
+  // 注册与注销存在竞态，会残留重复监听器导致同一 token 被追加多次。
+  const streamHandlersRef = useRef({ onAppendToken, onStreamDone, onStreamError });
+  streamHandlersRef.current = { onAppendToken, onStreamDone, onStreamError };
+
   useEffect(() => {
-    const unlistenToken = listen<StreamTokenPayload>('action-stream-token', (event) => {
-      if (activeActionRef.current && event.payload.actionId === activeActionRef.current.id) {
-        onAppendToken(event.payload.token);
-      }
-    });
+    let disposed = false;
+    const unlisteners: Array<() => void> = [];
 
-    const unlistenDone = listen<StreamDonePayload>('action-stream-done', (event) => {
-      if (activeActionRef.current && event.payload.actionId === activeActionRef.current.id) {
-        onStreamDone();
-      }
-    });
+    const subscribe = <T extends { actionId: string }>(
+      eventName: string,
+      handler: (payload: T) => void
+    ) => {
+      listen<T>(eventName, (event) => {
+        if (disposed) return;
+        const action = activeActionRef.current;
+        if (action && event.payload?.actionId === action.id) {
+          handler(event.payload);
+        }
+      })
+        .then((unlisten) => {
+          if (disposed) unlisten();
+          else unlisteners.push(unlisten);
+        })
+        .catch((err) => console.warn(`Failed to listen to ${eventName}:`, err));
+    };
 
-    const unlistenError = listen<StreamErrorPayload>('action-stream-error', (event) => {
-      if (activeActionRef.current && event.payload.actionId === activeActionRef.current.id) {
-        onStreamError(event.payload.error);
-      }
-    });
+    subscribe<StreamTokenPayload>('action-stream-token', (payload) =>
+      streamHandlersRef.current.onAppendToken(payload.token)
+    );
+    subscribe<StreamDonePayload>('action-stream-done', () =>
+      streamHandlersRef.current.onStreamDone()
+    );
+    subscribe<StreamErrorPayload>('action-stream-error', (payload) =>
+      streamHandlersRef.current.onStreamError(payload.error)
+    );
 
     return () => {
-      unlistenToken.then((fn) => fn());
-      unlistenDone.then((fn) => fn());
-      unlistenError.then((fn) => fn());
+      disposed = true;
+      unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [onAppendToken, onStreamDone, onStreamError]);
+  }, []);
 
   // 判断当前供应商是否支持 API 级深度思考（目前适配 DeepSeek 及其兼容端点）
   const isThinkingApiSupported = useCallback(

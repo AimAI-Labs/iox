@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import ReactMarkdown from 'react-markdown';
 import {
   MessageSquare,
   Search,
@@ -14,7 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { ChatSessionData } from '@/types/session';
-import { CodeBlock } from '@/components/overlay/CodeBlock';
+import { MarkdownContent } from '@/components/overlay/MarkdownContent';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
@@ -255,22 +254,12 @@ export const SessionsTab: React.FC = () => {
                 )}
 
                 {/* AI 回答渲染 */}
-                <div className="markdown-body text-xs leading-relaxed text-foreground">
-                  <ReactMarkdown
-                    components={{
-                      code: (props: any) => (
-                        <CodeBlock
-                          {...props}
-                          codeBlockWrap={true}
-                          codeBlockLineNumbers={true}
-                        />
-                      ),
-                      pre: ({ children }: any) => <>{children}</>,
-                    }}
-                  >
-                    {currentSession.streamText}
-                  </ReactMarkdown>
-                </div>
+                <MarkdownContent
+                  content={currentSession.streamText}
+                  codeBlockWrap
+                  codeBlockLineNumbers
+                  className="text-xs leading-relaxed text-foreground"
+                />
               </div>
             </div>
           ) : (
