@@ -660,10 +660,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       onContextMenu={(e) => e.preventDefault()}
       className={cn(
         'relative flex flex-col w-full h-full transition-all duration-200 ease-out',
-        'bg-[#fcfcfd]/95 dark:bg-[#18181b]/95 text-zinc-900 dark:text-zinc-100 backdrop-blur-2xl',
+        // 使用不透明背景并移除 backdrop-blur / 外阴影，与 Web 卡片保持一致；
+        // 悬浮窗尺寸与卡片一致，外阴影会被窗口边缘裁切成一圈灰色硬边
+        'bg-[#fcfcfd] dark:bg-[#18181b] text-zinc-900 dark:text-zinc-100',
         isMaximized
-          ? 'rounded-none shadow-none border-none'
-          : 'rounded-[20px] shadow-2xl border border-zinc-200/80 dark:border-zinc-800/80',
+          ? 'rounded-none border-none'
+          : 'rounded-[20px] border border-black/10 dark:border-white/10',
         'overflow-hidden',
         isClosing
           ? 'animate-capsule-out'
