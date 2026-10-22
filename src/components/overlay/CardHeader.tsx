@@ -109,7 +109,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
           )}
           <span
             data-tauri-drag-region
-            className="truncate text-[13px] font-medium text-zinc-900 dark:text-zinc-100 cursor-grab active:cursor-grabbing max-w-36"
+            className="max-w-36 truncate text-[13px] font-medium leading-[1.4] text-zinc-900 dark:text-zinc-100 cursor-grab active:cursor-grabbing"
           >
             {title}
           </span>
