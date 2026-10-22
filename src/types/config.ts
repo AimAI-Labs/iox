@@ -1,5 +1,7 @@
 export type WebWindowMode = 'multi_window' | 'tabbed';
 export type LanguageSetting = 'auto' | 'zh' | 'en';
+/** 界面样式标识：classic = 自绘圆角（默认），windows = 系统标题栏 + 直角 */
+export type UiStyle = 'classic' | 'windows';
 
 export interface GeneralConfig {
   autoPopupOnSelection: boolean;
@@ -9,6 +11,7 @@ export interface GeneralConfig {
   triggerModifier: 'None' | 'Ctrl' | 'Alt' | 'Shift';
   globalHotkey: string;
   theme: 'system' | 'dark' | 'light';
+  uiStyle?: UiStyle;
   autoStart: boolean;
   webWindowMode: WebWindowMode;
   autoCopyOnWebAction: boolean;

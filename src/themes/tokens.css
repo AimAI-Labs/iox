@@ -1,0 +1,47 @@
+/* ==========================================================================
+   界面样式语义令牌
+   组件只消费变量，新增样式只需在此追加一组覆盖值 + 注册表条目。
+   ========================================================================== */
+:root,
+html[data-ui-style="classic"] {
+  /* 自绘标题栏高度：0 表示由系统标题栏接管 */
+  --ui-titlebar-height: 38px;
+  --ui-window-radius: 12px;
+  --ui-card-radius: 20px;
+  --ui-bubble-radius: 8px;
+  --ui-popover-radius: 12px;
+  --ui-web-titlebar-radius: 12px;
+}
+
+html[data-ui-style="windows"] {
+  --ui-titlebar-height: 0px;
+  --ui-window-radius: 0px;
+  --ui-card-radius: 0px;
+  --ui-bubble-radius: 0px;
+  --ui-popover-radius: 0px;
+  --ui-web-titlebar-radius: 0px;
+}
+
+/* Windows 样式使用系统标题栏，自绘交通灯与标题让位给系统导航栏 */
+html[data-ui-style="windows"] .web-titlebar-root .mac-traffic-lights {
+  display: none;
+}
+
+html[data-ui-style="windows"] .web-titlebar-root .mac-titlebar-title {
+  display: none;
+}
+
+/* 原生窗口框架下采用不透明底色，避免桌面透出到系统标题栏下方 */
+html[data-ui-style="windows"] .app-window-frame {
+  background: var(--bg-card);
+  border-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-ui-style="windows"] .web-titlebar-root > div,
+html[data-ui-style="windows"] .web-titlebar-root > header {
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}

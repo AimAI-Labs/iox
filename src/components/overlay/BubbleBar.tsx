@@ -130,7 +130,7 @@ export const BubbleBar: React.FC<BubbleBarProps> = ({
         className={cn(
           "inline-flex items-center h-[30px] px-1.5 py-0.5 gap-0.5",
           "capsule-glass",
-          "rounded-lg max-w-[calc(100vw-16px)] overflow-hidden",
+          "rounded-[var(--ui-bubble-radius)] max-w-[calc(100vw-16px)] overflow-hidden",
           "border border-zinc-200/80 dark:border-zinc-800/80",
           !isPreview && (isClosing ? "animate-capsule-out" : "animate-capsule-in")
         )}

@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
@@ -9,12 +10,84 @@ use windows_sys::Win32::System::Threading::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
-/// 为主设置窗口与浮窗启用 Windows 11/10 原生 DWM 硬件级抗锯齿圆角与亚克力材质
+/// 当前界面样式是否启用系统原生标题栏（由 `apply_ui_style` 依据配置同步）
+static NATIVE_CHROME: AtomicBool = AtomicBool::new(false);
+
+/// 界面样式策略：新增样式时只需扩展此处与 `config::normalize_ui_style`
+#[derive(Debug, Clone, Copy)]
+pub struct UiStylePolicy {
+    pub native_chrome: bool,
+}
+
+pub fn ui_style_policy(style: &str) -> UiStylePolicy {
+    match style {
+        "windows" => UiStylePolicy { native_chrome: true },
+        _ => UiStylePolicy { native_chrome: false },
+    }
+}
+
+/// 是否处于 Windows 原生标题栏样式
+pub fn is_native_chrome() -> bool {
+    NATIVE_CHROME.load(Ordering::Relaxed)
+}
+
+/// 将配置的深浅色映射为系统窗口主题
+pub fn to_window_theme(theme: &str) -> Option<tauri::Theme> {
+    match theme {
+        "dark" => Some(tauri::Theme::Dark),
+        "light" => Some(tauri::Theme::Light),
+        _ => None,
+    }
+}
+
+/// 划词浮窗、常驻悬浮球与后台采集窗不参与界面样式装饰：
+/// 浮窗需保持无边框无激活，后台窗全程隐藏。
+fn is_style_exempt(label: &str) -> bool {
+    matches!(label, "overlay" | "floating_ball") || label.starts_with("iox_history_")
+}
+
+/// 将配置中的界面样式应用到全部窗口：`windows` 使用系统标题栏与直角边框，
+/// 其余样式保持自绘无边框 + DWM 圆角。
+pub fn apply_ui_style(app: &AppHandle, style: &str, theme: &str) {
+    let native = ui_style_policy(style).native_chrome;
+    NATIVE_CHROME.store(native, Ordering::Relaxed);
+    let window_theme = to_window_theme(theme);
+
+    for (label, window) in app.webview_windows() {
+        if is_style_exempt(&label) {
+            continue;
+        }
+        apply_window_ui_style(&window, native, window_theme);
+    }
+}
+
+/// 仅同步系统标题栏配色，不重建窗口装饰
+pub fn sync_window_theme(app: &AppHandle, theme: &str) {
+    let window_theme = to_window_theme(theme);
+    for (label, window) in app.webview_windows() {
+        if is_style_exempt(&label) {
+            continue;
+        }
+        let _ = window.set_theme(window_theme);
+    }
+}
+
+/// 对单个窗口应用界面策略：系统标题栏开关、直角/圆角与标题栏配色
+pub fn apply_window_ui_style(window: &WebviewWindow, native: bool, theme: Option<tauri::Theme>) {
+    let _ = window.set_theme(theme);
+    let _ = window.set_decorations(native);
+    if let Ok(hwnd) = window.hwnd() {
+        apply_main_window_native_style(hwnd.0 as _);
+    }
+}
+
+/// 为主设置窗口与浮窗启用 Windows 11/10 原生 DWM 硬件级抗锯齿圆角与亚克力材质。
+/// Windows 原生标题栏样式下改为直角边框。
 pub fn apply_main_window_native_style(hwnd: HWND) {
     unsafe {
         // DWMWA_WINDOW_CORNER_PREFERENCE = 33
-        // DWMWCP_ROUND = 2 (圆角)
-        let corner_preference: u32 = 2;
+        // DWMWCP_DONOTROUND = 1 (直角), DWMWCP_ROUND = 2 (圆角)
+        let corner_preference: u32 = if is_native_chrome() { 1 } else { 2 };
         let _ = DwmSetWindowAttribute(
             hwnd,
             33, // DWMWA_WINDOW_CORNER_PREFERENCE
@@ -64,6 +137,11 @@ pub fn bring_window_to_foreground(hwnd: HWND) {
 
 /// 为外部 Content Webview 的 child HWND 设置底部圆角物理裁切（仅裁切 child webview，绝不影响主窗口 DWM 帧）
 pub fn apply_content_webview_bottom_round(parent_hwnd: HWND, radius: i32) {
+    // Windows 原生标题栏样式使用直角边框，无需对子 Webview 做圆角裁切
+    if is_native_chrome() || radius <= 0 {
+        remove_content_webview_round(parent_hwnd);
+        return;
+    }
     unsafe {
         let mut children: Vec<HWND> = Vec::new();
         unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {

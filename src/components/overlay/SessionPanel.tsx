@@ -67,7 +67,7 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
       className={cn(
         // 面板完全覆盖卡片，不需要 backdrop-blur；半透明 + backdrop-filter
         // 参与缩放动画时，WebView2 会偶发合成层闪白
-        'absolute inset-0 z-50 flex flex-col bg-[#fcfcfd] dark:bg-[#18181b] rounded-[20px] overflow-hidden select-none border border-zinc-200/90 dark:border-zinc-700/80 shadow-2xl',
+        'absolute inset-0 z-50 flex flex-col bg-[#fcfcfd] dark:bg-[#18181b] rounded-[var(--ui-card-radius)] overflow-hidden select-none border border-zinc-200/90 dark:border-zinc-700/80 shadow-2xl',
         isClosing
           ? // fill-mode-forwards：动画结束后保持透明，避免卸载前回弹到白底而闪白
             'animate-out fade-out zoom-out-95 duration-150 fill-mode-forwards pointer-events-none'

@@ -665,7 +665,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         'bg-[#fcfcfd] dark:bg-[#18181b] text-zinc-900 dark:text-zinc-100',
         isMaximized
           ? 'rounded-none border-none'
-          : 'rounded-[20px] border border-black/10 dark:border-white/10',
+          : 'rounded-[var(--ui-card-radius)] border border-black/10 dark:border-white/10',
         'overflow-hidden',
         isClosing
           ? 'animate-capsule-out'

@@ -2,6 +2,7 @@ import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { MacTrafficLights } from '@/components/MacTrafficLights';
+import { useUiTheme } from '@/themes/ThemeProvider';
 import { cn } from '@/lib/utils';
 
 export interface MacTitleBarProps {
@@ -23,6 +24,9 @@ export const MacTitleBar: React.FC<MacTitleBarProps> = ({
   tools,
   className,
 }) => {
+  const uiTheme = useUiTheme();
+  const showTrafficLights = uiTheme.titleBarControls === 'traffic-lights';
+
   const handleClose = async () => {
     if (onClose) {
       onClose();
@@ -103,11 +107,13 @@ export const MacTitleBar: React.FC<MacTitleBarProps> = ({
       onDoubleClick={handleDoubleClick}
     >
       <div className="flex items-center gap-2">
-        <MacTrafficLights
-          onClose={handleClose}
-          onMinimize={handleMinimize}
-          onMaximize={handleMaximize}
-        />
+        {showTrafficLights && (
+          <MacTrafficLights
+            onClose={handleClose}
+            onMinimize={handleMinimize}
+            onMaximize={handleMaximize}
+          />
+        )}
         {badge}
       </div>
 

@@ -43,11 +43,21 @@ fn get_config(state: State<AppState>) -> AppConfig {
 #[tauri::command]
 fn save_config(app: AppHandle, new_config: AppConfig, state: State<AppState>) -> Result<(), String> {
     new_config.save()?;
-    {
+    let (style_changed, theme_changed) = {
         let mut config = state.config.lock().unwrap();
+        let style_changed = config.general.ui_style != new_config.general.ui_style;
+        let theme_changed = config.general.theme != new_config.general.theme;
         *config = new_config.clone();
-    }
+        (style_changed, theme_changed)
+    };
     let _ = app.emit("config_updated", &new_config);
+
+    // 样式变化重设窗口装饰；仅深浅色变化时只同步系统标题栏配色
+    if style_changed {
+        window_manager::apply_ui_style(&app, &new_config.general.ui_style, &new_config.general.theme);
+    } else if theme_changed {
+        window_manager::sync_window_theme(&app, &new_config.general.theme);
+    }
 
     // 即时同步常驻悬浮球窗口的显示/隐藏
     if let Some(window) = app.get_webview_window("floating_ball") {
@@ -58,6 +68,25 @@ fn save_config(app: AppHandle, new_config: AppConfig, state: State<AppState>) ->
             let _ = window.hide();
         }
     }
+    Ok(())
+}
+
+/// 即时切换界面样式并单独持久化，不提交设置页其他未保存的修改
+#[tauri::command]
+fn set_ui_style(app: AppHandle, state: State<AppState>, style: String) -> Result<(), String> {
+    let style = config::normalize_ui_style(&style);
+    let updated = {
+        let mut config = state.config.lock().map_err(|_| "配置不可用".to_string())?;
+        if config.general.ui_style == style {
+            return Ok(());
+        }
+        config.general.ui_style = style;
+        config.clone()
+    };
+    updated.save()?;
+
+    window_manager::apply_ui_style(&app, &updated.general.ui_style, &updated.general.theme);
+    let _ = app.emit("config_updated", &updated);
     Ok(())
 }
 
@@ -599,10 +628,13 @@ pub fn run() {
         .manage(app_state)
         .setup(move |app| {
             let handle = app.handle().clone();
+            // 首帧前应用持久化的界面样式，避免窗口显示后再切换装饰
+            window_manager::apply_ui_style(
+                &handle,
+                &initial_config.general.ui_style,
+                &initial_config.general.theme,
+            );
             if let Some(main_win) = app.get_webview_window("main") {
-                if let Ok(hwnd) = main_win.hwnd() {
-                    window_manager::apply_main_window_native_style(hwnd.0 as _);
-                }
                 let icon = tauri::include_image!("icons/icon.png");
                 let _ = main_win.set_icon(icon);
             }
@@ -642,6 +674,7 @@ pub fn run() {
             open_settings_devtools,
             get_config,
             save_config,
+            set_ui_style,
             save_api_card_size,
             trigger_api_action,
             trigger_web_action,

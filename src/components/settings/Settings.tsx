@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
-import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig, ApiCardConfig } from "@/types/config";
+import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig, ApiCardConfig, UiStyle } from "@/types/config";
 import { broadcastThemeChange } from "@/hooks/useTheme";
+import { useUiTheme } from "@/themes/ThemeProvider";
 import { MacTitleBar } from "@/components/MacTitleBar";
 import { SettingsSidebar, SettingsTab } from "@/components/settings/SettingsSidebar";
 import { ProvidersTab } from "@/components/settings/ProvidersTab";
@@ -23,6 +25,7 @@ export interface SettingsProps {
 export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
+  const uiTheme = useUiTheme();
   const [activeTab, setActiveTab] = useState<SettingsTab>("providers");
   const [formData, setFormData] = useState<AppConfig>(config);
   const [saving, setSaving] = useState(false);
@@ -194,6 +197,20 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     });
   };
 
+  // 即时切换界面样式：后端单独持久化，不提交其他未保存修改
+  const handleUiStyleChange = async (style: UiStyle) => {
+    const previous = formDataRef.current.general.uiStyle ?? 'classic';
+    updateGeneral({ uiStyle: style });
+    try {
+      await invoke('set_ui_style', { style });
+    } catch (err) {
+      updateGeneral({ uiStyle: previous });
+      toast.error(isZh ? '切换界面样式失败' : 'Failed to switch interface style', {
+        description: String(err),
+      });
+    }
+  };
+
   // 更新 ApiCard 配置
   const updateApiCard = (updated: Partial<ApiCardConfig>) => {
     setFormData((prev) => ({
@@ -228,12 +245,15 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
 
   return (
     <div className="w-screen h-screen bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
-      <div className="w-full h-full flex flex-col bg-[var(--bg-overlay-card)] text-foreground rounded-xl border border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl">
-        {/* macOS 沉浸式标题栏 */}
-        <MacTitleBar title={t('settings.title')} />
+      <div className="app-window-frame w-full h-full flex flex-col bg-[var(--bg-overlay-card)] text-foreground rounded-[var(--ui-window-radius)] border border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl">
+        {/* 自绘沉浸式标题栏；Windows 原生样式下由系统标题栏接管 */}
+        {uiTheme.windowChrome === 'custom' && <MacTitleBar title={t('settings.title')} />}
 
         {/* 设置主体区 */}
-        <div className="flex flex-1 h-[calc(100%-38px)] overflow-hidden">
+        <div
+          className="flex flex-1 overflow-hidden"
+          style={{ height: 'calc(100% - var(--ui-titlebar-height))' }}
+        >
           {/* 左侧侧边栏 */}
           <SettingsSidebar
             activeTab={activeTab}
@@ -310,6 +330,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
                 <GeneralTab
                   general={formData.general}
                   onUpdateGeneral={updateGeneral}
+                  onUiStyleChange={handleUiStyleChange}
                 />
               </div>
             )}

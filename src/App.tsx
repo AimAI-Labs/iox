@@ -1,10 +1,11 @@
-import { useEffect, useState, Suspense, lazy } from 'react';
+import { useEffect, useState, Suspense, lazy, type ReactNode } from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { invoke } from '@tauri-apps/api/core';
 import { useConfig } from '@/hooks/useConfig';
 import { useTheme, broadcastThemeChange } from '@/hooks/useTheme';
 import { useOverlayState } from '@/hooks/useOverlayState';
 import { I18nProvider } from '@/hooks/useTranslation';
+import { ThemeProvider } from '@/themes/ThemeProvider';
 import { BubbleBar, ResultCard, FloatingBall } from '@/components/overlay';
 import { FileSelectionMenu } from '@/components/overlay/FileSelectionMenu';
 import { Toaster } from 'sonner';
@@ -34,6 +35,11 @@ export function App() {
 
   // 统一应用与监听主题及透明度
   useTheme(config?.general.theme, config?.general.overlayOpacity);
+
+  // 所有视图共享同一套界面样式策略（CSS 令牌 + 组件策略）
+  const withTheme = (node: ReactNode) => (
+    <ThemeProvider style={config?.general.uiStyle}>{node}</ThemeProvider>
+  );
 
   const handleOpenSettings = async (tab?: string) => {
     try {
@@ -122,7 +128,7 @@ export function App() {
 
   // 0. Web 官网浮窗标题栏视图
   if (isWebTitleBar) {
-    return (
+    return withTheme(
       <I18nProvider languageSetting={config.general.language}>
         <Suspense fallback={null}>
           <WebTitleBar />
@@ -136,7 +142,7 @@ export function App() {
     if (config.general.enableFloatingBall === false) {
       return null;
     }
-    return (
+    return withTheme(
       <I18nProvider languageSetting={config.general.language}>
         <FloatingBall config={config} />
       </I18nProvider>
@@ -149,7 +155,7 @@ export function App() {
       return null;
     }
 
-    return (
+    return withTheme(
       <I18nProvider languageSetting={config.general.language}>
         <div className="overlay-root">
           {overlayState.mode === 'bubble' ? (
@@ -219,7 +225,7 @@ export function App() {
   }
 
   // 2. Settings 设置面板视图 (主窗口异步载入)
-  return (
+  return withTheme(
     <I18nProvider languageSetting={config.general.language}>
       <Toaster
         position="top-center"

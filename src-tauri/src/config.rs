@@ -51,6 +51,18 @@ fn default_language() -> String {
     "auto".to_string()
 }
 
+fn default_ui_style() -> String {
+    "classic".to_string()
+}
+
+/// 归一化界面样式标识：仅接受已注册的样式，未知值一律回退经典样式
+pub fn normalize_ui_style(style: &str) -> String {
+    match style {
+        "windows" => "windows".to_string(),
+        _ => "classic".to_string(),
+    }
+}
+
 /// 获取系统当前 UI 语言代码，若是中文（包含繁体、简体）返回 "zh"，其余一切语言一律返回 "en"
 pub fn get_system_language() -> &'static str {
     #[cfg(windows)]
@@ -96,6 +108,9 @@ pub struct GeneralConfig {
     pub trigger_modifier: String, // "None" | "Ctrl" | "Alt" | "Shift"
     pub global_hotkey: String,    // e.g. "Alt+Space"
     pub theme: String,            // "system" | "dark" | "light"
+    /// 界面样式：`classic` (自绘圆角) | `windows` (系统标题栏 + 直角)
+    #[serde(default = "default_ui_style")]
+    pub ui_style: String,
     pub auto_start: bool,
     #[serde(default = "default_web_window_mode")]
     pub web_window_mode: String,  // "multi_window" | "tabbed"
@@ -140,6 +155,7 @@ impl Default for GeneralConfig {
             trigger_modifier: "None".to_string(),
             global_hotkey: "Alt+Space".to_string(),
             theme: "system".to_string(),
+            ui_style: default_ui_style(),
             auto_start: false,
             web_window_mode: "multi_window".to_string(),
             auto_copy_on_web_action: false,
@@ -1226,6 +1242,17 @@ mod file_selection_config_tests {
         json["general"]["fileDragHoverDelayMs"] = serde_json::json!(650);
         let custom: super::AppConfig = serde_json::from_value(json).unwrap();
         assert_eq!(serde_json::to_value(custom).unwrap()["general"]["fileDragHoverDelayMs"], 650);
+    }
+
+    #[test]
+    fn ui_style_defaults_for_legacy_configs_and_normalizes_unknown_values() {
+        let mut json = serde_json::to_value(super::AppConfig::default()).unwrap();
+        assert_eq!(json["general"]["uiStyle"], "classic");
+        json["general"].as_object_mut().unwrap().remove("uiStyle");
+        let legacy: super::AppConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(legacy.general.ui_style, "classic");
+        assert_eq!(super::normalize_ui_style("windows"), "windows");
+        assert_eq!(super::normalize_ui_style("unknown-style"), "classic");
     }
 
     #[test]

@@ -521,13 +521,15 @@ fn execute_multi_window_action(
     let initial_width = if saved_w >= 520.0 { saved_w } else { 860.0 };
     let initial_height = if saved_h >= 400.0 { saved_h } else { 640.0 };
     let titlebar_height = 38.0;
+    let native_chrome =
+        crate::window_manager::ui_style_policy(&config.general.ui_style).native_chrome;
 
     let window = WindowBuilder::new(app, &label)
         .title(&action.name)
         .inner_size(initial_width, initial_height)
         .min_inner_size(520.0, 400.0)
         .resizable(true)
-        .decorations(false)
+        .decorations(native_chrome)
         .transparent(true)
         .shadow(false)
         .visible(false)
@@ -539,6 +541,7 @@ fn execute_multi_window_action(
     }
     let icon = tauri::include_image!("icons/icon.png");
     let _ = window.set_icon(icon);
+    let _ = window.set_theme(crate::window_manager::to_window_theme(&config.general.theme));
 
     let title_param = urlencoding::encode(&action.name);
     let url_param = urlencoding::encode(target_url_str);
@@ -696,6 +699,8 @@ fn execute_tabbed_hub_action(
     let initial_width = if saved_w >= 520.0 { saved_w } else { 860.0 };
     let initial_height = if saved_h >= 400.0 { saved_h } else { 640.0 };
     let titlebar_height = 38.0;
+    let native_chrome =
+        crate::window_manager::ui_style_policy(&config.general.ui_style).native_chrome;
 
     let init_script = build_initialization_script(&config.general.theme, None);
 
@@ -777,7 +782,7 @@ fn execute_tabbed_hub_action(
         .inner_size(initial_width, initial_height)
         .min_inner_size(520.0, 400.0)
         .resizable(true)
-        .decorations(false)
+        .decorations(native_chrome)
         .transparent(true)
         .shadow(false)
         .visible(false)
@@ -789,6 +794,7 @@ fn execute_tabbed_hub_action(
     }
     let icon = tauri::include_image!("icons/icon.png");
     let _ = window.set_icon(icon);
+    let _ = window.set_theme(crate::window_manager::to_window_theme(&config.general.theme));
 
     // 构建顶部 Hub 专用多标签栏 Webview
     let bar_path = format!("index.html?view=web_titlebar&label={}", window_label);

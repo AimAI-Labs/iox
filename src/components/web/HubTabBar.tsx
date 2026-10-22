@@ -302,7 +302,7 @@ export const HubTabBar: React.FC = () => {
   return (
     <div className="web-titlebar-root w-full h-[38px] max-h-[38px] bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
       <header
-        className="w-full h-[38px] max-h-[38px] flex items-center justify-between px-3 bg-[var(--bg-overlay-card)] text-foreground rounded-t-xl border-t border-l border-r border-b border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl box-border"
+        className="w-full h-[38px] max-h-[38px] flex items-center justify-between px-3 bg-[var(--bg-overlay-card)] text-foreground rounded-t-[var(--ui-web-titlebar-radius)] border-t border-l border-r border-b border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl box-border"
         data-tauri-drag-region
         onMouseDown={handleMouseDownDrag}
         onDoubleClick={handleDoubleClickDrag}

@@ -1,6 +1,6 @@
 import React from "react";
-import { Monitor, Moon, Sun, Sparkles } from "lucide-react";
-import { GeneralConfig, LanguageSetting } from "@/types/config";
+import { AppWindow, Monitor, Moon, Sun, Sparkles } from "lucide-react";
+import { GeneralConfig, LanguageSetting, UiStyle } from "@/types/config";
 import { switchThemeWithTransition } from "@/hooks/useTheme";
 import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
@@ -19,12 +19,15 @@ import { IOXLogo } from "@/components/common";
 interface GeneralTabProps {
   general: GeneralConfig;
   onUpdateGeneral: (updated: Partial<GeneralConfig>) => void;
+  onUiStyleChange: (style: UiStyle) => void;
 }
 
 export const GeneralTab: React.FC<GeneralTabProps> = ({
   general,
   onUpdateGeneral,
+  onUiStyleChange,
 }) => {
+  const uiStyle = general.uiStyle ?? 'classic';
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
   const fileDragHoverDelayMs = Math.min(3000, Math.max(200, general.fileDragHoverDelayMs ?? 1000));
@@ -306,7 +309,35 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
 
           <Separator />
 
-          {/* 7. Overlay Opacity */}
+          {/* 7. Windows Native UI Style */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1.5">
+                <AppWindow size={13} className="text-muted-foreground" />
+                <Label className="text-xs text-foreground font-medium">
+                  {t('settings.general.uiStyle')}
+                </Label>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {t('settings.general.uiStyleDesc')}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {uiStyle === 'windows'
+                  ? t('settings.general.uiStyleWindows')
+                  : t('settings.general.uiStyleClassic')}
+              </span>
+              <Switch
+                checked={uiStyle === 'windows'}
+                onCheckedChange={(checked) => onUiStyleChange(checked ? 'windows' : 'classic')}
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* 8. Overlay Opacity */}
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
