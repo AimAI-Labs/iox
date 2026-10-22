@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils';
 
 export interface LinkFaviconProps {
   domain: string;
+  /** 页面声明的 favicon 地址，优先使用 */
+  faviconUrl?: string;
   size?: number;
   className?: string;
   style?: React.CSSProperties;
@@ -14,6 +16,7 @@ export interface LinkFaviconProps {
  */
 export const LinkFavicon: React.FC<LinkFaviconProps> = ({
   domain,
+  faviconUrl,
   size = 20,
   className,
   style,
@@ -21,15 +24,19 @@ export const LinkFavicon: React.FC<LinkFaviconProps> = ({
   const [failed, setFailed] = useState(false);
   const [sourceIndex, setSourceIndex] = useState(0);
 
-  const sources = useMemo(
-    () => (domain ? [getFaviconUrl(domain), `https://${domain}/favicon.ico`] : []),
-    [domain]
-  );
+  const sources = useMemo(() => {
+    const list: string[] = [];
+    if (faviconUrl) list.push(faviconUrl);
+    if (domain) {
+      list.push(getFaviconUrl(domain), `https://${domain}/favicon.ico`);
+    }
+    return list;
+  }, [domain, faviconUrl]);
 
   useEffect(() => {
     setFailed(false);
     setSourceIndex(0);
-  }, [domain]);
+  }, [domain, faviconUrl]);
 
   const initial = domain?.charAt(0).toUpperCase() || '?';
   const src = sources[sourceIndex];

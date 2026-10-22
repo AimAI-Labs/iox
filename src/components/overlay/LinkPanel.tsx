@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ExternalLink, Link as LinkIcon, X } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { LinkFavicon } from '@/components/overlay/LinkFavicon';
+import { LinkCardContent } from '@/components/overlay/LinkCardContent';
+import { useLinkMetadata } from '@/hooks/useLinkMetadata';
 import type { LinkInfo } from '@/lib/links';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
@@ -14,6 +15,31 @@ export interface LinkPanelProps {
   links: LinkInfo[];
   onClose: () => void;
 }
+
+const LinkPanelItem: React.FC<{ link: LinkInfo }> = ({ link }) => {
+  const { t } = useTranslation();
+  const metadata = useLinkMetadata(link.href);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void openUrl(link.href).catch((err) => console.warn('Failed to open link:', err));
+      }}
+      className="group flex w-full items-start gap-2 rounded-xl border border-line/60 bg-white/70 p-3 text-left transition-colors hover:border-line-strong hover:bg-hover dark:bg-zinc-900/50 cursor-pointer"
+      title={t('card.openLink')}
+    >
+      <div className="min-w-0 flex-1">
+        <LinkCardContent link={link} metadata={metadata} />
+      </div>
+
+      <ExternalLink
+        size={12}
+        className="mt-0.5 shrink-0 text-ink-3 transition-colors group-hover:text-primary"
+      />
+    </button>
+  );
+};
 
 /**
  * 右侧链接详情栏：列出当前回答中的全部外链。
@@ -49,10 +75,6 @@ export const LinkPanel: React.FC<LinkPanelProps> = ({ isOpen, links, onClose }) 
 
   const isClosing = isMounted && !isOpen;
   if (!isMounted) return null;
-
-  const handleOpenLink = (href: string) => {
-    void openUrl(href).catch((err) => console.warn('Failed to open link:', err));
-  };
 
   return (
     <div className={cn('absolute inset-0 z-40', isClosing && 'pointer-events-none')}>
@@ -97,34 +119,9 @@ export const LinkPanel: React.FC<LinkPanelProps> = ({ isOpen, links, onClose }) 
           </button>
         </div>
 
-        <div className="custom-scrollbar flex-1 min-h-0 space-y-1.5 overflow-y-auto p-3">
+        <div className="custom-scrollbar flex-1 min-h-0 space-y-2 overflow-y-auto p-3">
           {links.map((link) => (
-            <button
-              key={link.href}
-              type="button"
-              onClick={() => handleOpenLink(link.href)}
-              className="group flex w-full items-start gap-2.5 rounded-xl border border-line/60 bg-white/60 p-2.5 text-left transition-colors hover:border-line-strong hover:bg-hover dark:bg-zinc-900/50 cursor-pointer"
-              title={t('card.openLink')}
-            >
-              <LinkFavicon domain={link.domain} size={26} className="mt-0.5" />
-
-              <div className="min-w-0 flex-1">
-                <div className="line-clamp-2 text-[12.5px] font-medium leading-snug text-ink">
-                  {link.title}
-                </div>
-                <div className="mt-0.5 truncate text-[11px] text-ink-3">
-                  {link.domain}
-                </div>
-                <div className="mt-0.5 line-clamp-2 break-all text-[10.5px] leading-snug text-ink-3/80">
-                  {link.href}
-                </div>
-              </div>
-
-              <ExternalLink
-                size={12}
-                className="mt-0.5 shrink-0 text-ink-3 transition-colors group-hover:text-primary"
-              />
-            </button>
+            <LinkPanelItem key={link.href} link={link} />
           ))}
         </div>
       </aside>

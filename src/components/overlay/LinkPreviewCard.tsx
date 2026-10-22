@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
-import { ExternalLink, Link as LinkIcon } from 'lucide-react';
-import { LinkFavicon } from '@/components/overlay/LinkFavicon';
+import { LinkCardContent } from '@/components/overlay/LinkCardContent';
+import { useLinkMetadata } from '@/hooks/useLinkMetadata';
 import { cn } from '@/lib/utils';
 
 export interface LinkPreviewRect {
@@ -29,6 +29,7 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
   domain,
   anchorRect,
 }) => {
+  const metadata = useLinkMetadata(href);
   const cardRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: EDGE, top: EDGE });
   const [origin, setOrigin] = useState({ x: 150, y: 0 });
@@ -54,13 +55,13 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
       y: height,
     });
     setReady(true);
-  }, [anchorRect, href, title, domain]);
+  }, [anchorRect, href, title, domain, metadata]);
 
   return (
     <div
       ref={cardRef}
       className={cn(
-        'pointer-events-none fixed z-[9999] w-[300px] max-w-[calc(100vw-16px)]',
+        'pointer-events-none fixed z-[9999] w-[320px] max-w-[calc(100vw-16px)]',
         ready && 'link-preview-pop'
       )}
       style={{
@@ -71,23 +72,10 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
       }}
     >
       <div className="rounded-xl border border-line bg-[#fcfcfd] p-3 shadow-overlay dark:bg-[#202024]">
-        <div className="flex items-start gap-2.5">
-          <LinkFavicon domain={domain} size={28} className="mt-0.5" />
-
-          <div className="min-w-0 flex-1">
-            <div className="line-clamp-2 text-[12.5px] font-semibold leading-snug text-ink">
-              {title}
-            </div>
-            <div className="mt-0.5 truncate text-[11px] text-ink-3">{domain}</div>
-          </div>
-
-          <ExternalLink size={12} className="mt-0.5 shrink-0 text-ink-3" />
-        </div>
-
-        <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-field px-2 py-1">
-          <LinkIcon size={10} className="shrink-0 text-ink-3" />
-          <span className="truncate text-[10.5px] text-ink-2">{href}</span>
-        </div>
+        <LinkCardContent
+          link={{ href, domain, title }}
+          metadata={metadata}
+        />
       </div>
     </div>
   );

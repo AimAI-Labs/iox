@@ -5,6 +5,7 @@ pub mod web_history_sync;
 pub mod config;
 pub mod file_selection;
 mod file_drag;
+pub mod link_metadata;
 pub mod overlay_state;
 pub mod picker;
 pub mod selection;
@@ -667,6 +668,7 @@ pub fn run() {
             close_web_hub_tab,
             reload_web_hub_active_tab,
             get_site_presets,
+            link_metadata::fetch_link_metadata,
             start_window_picker,
             cancel_window_picker,
             fetch_provider_models,
