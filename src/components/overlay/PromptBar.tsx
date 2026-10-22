@@ -14,6 +14,7 @@ import {
   Layers,
   Box,
   Settings,
+  X,
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { ProviderConfig } from '@/types/config';
@@ -310,21 +311,40 @@ export const PromptBar: React.FC<PromptBarProps> = ({
         </div>
 
         {/* 输入区 */}
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          placeholder={inputPlaceholder}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={isLoading || disabled}
-          style={{ maxHeight: `${getMaxHeight()}px` }}
-          className={cn(
-            'w-full resize-none bg-transparent text-[13.5px] leading-relaxed text-zinc-900 dark:text-zinc-100',
-            'outline-none placeholder:text-zinc-400 dark:placeholder:text-zinc-500 select-text custom-scrollbar',
-            'disabled:opacity-50'
+        <div className="relative">
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            placeholder={inputPlaceholder}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isLoading || disabled}
+            style={{ maxHeight: `${getMaxHeight()}px` }}
+            className={cn(
+              'w-full resize-none bg-transparent text-[13.5px] leading-relaxed text-zinc-900 dark:text-zinc-100',
+              'outline-none placeholder:text-zinc-400 dark:placeholder:text-zinc-500 select-text custom-scrollbar',
+              'disabled:opacity-50',
+              value && 'pr-7'
+            )}
+          />
+
+          {/* 清空当前输入 */}
+          {value && !isLoading && !disabled && (
+            <button
+              type="button"
+              onClick={() => {
+                onChange('');
+                textareaRef.current?.focus();
+              }}
+              className="absolute right-0 top-0 flex size-5 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-200/70 hover:text-zinc-700 active:scale-95 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 cursor-pointer"
+              title={isZh ? '清空输入内容' : 'Clear input'}
+              aria-label={isZh ? '清空输入内容' : 'Clear input'}
+            >
+              <X size={12} />
+            </button>
           )}
-        />
+        </div>
 
         {/* 底部工具行 */}
         <div className="mt-2 flex items-center justify-between">
