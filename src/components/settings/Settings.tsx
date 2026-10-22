@@ -108,6 +108,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
       apiKey: "",
       models: [],
       defaultModel: "",
+      enabled: true,
     };
     setFormData((prev) => ({
       ...prev,

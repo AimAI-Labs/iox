@@ -31,6 +31,8 @@ export interface ProviderConfig {
   apiKey: string;
   models: string[];
   defaultModel: string;
+  /** 是否启用；旧配置缺省时视为启用 */
+  enabled?: boolean;
 }
 
 export type ActionType = 'api' | 'web' | 'copy';

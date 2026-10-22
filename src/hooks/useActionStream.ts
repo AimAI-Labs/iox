@@ -398,7 +398,9 @@ export function useActionStream({
   const handleProviderChange = useCallback(
     (newProviderId: string) => {
       if (!config?.providers) return;
-      const provider = config.providers.find((p) => p.id === newProviderId);
+      const provider = config.providers.find(
+        (p) => p.id === newProviderId && p.enabled !== false
+      );
       if (!provider) return;
       const newModel = provider.defaultModel || provider.models[0] || '';
 

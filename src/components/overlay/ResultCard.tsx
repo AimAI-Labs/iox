@@ -478,7 +478,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const [totalDuration, setTotalDuration] = useState<number | undefined>(undefined);
   const requestStartTimeRef = useRef<number | null>(null);
 
-  const provider = providers.find((p) => p.id === action.providerId);
+  // 底部模型切换器只展示已启用的服务商配置
+  const enabledProviders = useMemo(
+    () => providers.filter((p) => p.enabled !== false),
+    [providers]
+  );
+  const provider = enabledProviders.find((p) => p.id === action.providerId);
   const availableModels = provider?.models || [];
 
   // 最大化切换
@@ -894,7 +899,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         isLoading={isLoading}
         disabled={Boolean(error)}
         title={action.name || 'AI'}
-        providers={providers}
+        providers={enabledProviders}
         selectedProviderId={action.providerId}
         selectedModel={selectedModel}
         availableModels={availableModels}

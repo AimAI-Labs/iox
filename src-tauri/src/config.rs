@@ -157,6 +157,10 @@ impl Default for GeneralConfig {
     }
 }
 
+fn default_provider_enabled() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderConfig {
@@ -166,6 +170,9 @@ pub struct ProviderConfig {
     pub api_key: String,
     pub models: Vec<String>,
     pub default_model: String,
+    /// 旧配置没有该字段时默认启用
+    #[serde(default = "default_provider_enabled")]
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -271,6 +278,7 @@ impl AppConfig {
                     api_key: "".to_string(),
                     models: vec![],
                     default_model: "".to_string(),
+                    enabled: true,
                 },
                 ProviderConfig {
                     id: "qwen".to_string(),
@@ -279,6 +287,7 @@ impl AppConfig {
                     api_key: "".to_string(),
                     models: vec![],
                     default_model: "".to_string(),
+                    enabled: true,
                 },
                 ProviderConfig {
                     id: "ollama".to_string(),
@@ -287,6 +296,7 @@ impl AppConfig {
                     api_key: "".to_string(),
                     models: vec![],
                     default_model: "".to_string(),
+                    enabled: true,
                 },
             ]
         } else {
@@ -298,6 +308,7 @@ impl AppConfig {
                     api_key: "".to_string(),
                     models: vec![],
                     default_model: "".to_string(),
+                    enabled: true,
                 },
                 ProviderConfig {
                     id: "qwen".to_string(),
@@ -306,6 +317,7 @@ impl AppConfig {
                     api_key: "".to_string(),
                     models: vec![],
                     default_model: "".to_string(),
+                    enabled: true,
                 },
                 ProviderConfig {
                     id: "ollama".to_string(),
@@ -314,6 +326,7 @@ impl AppConfig {
                     api_key: "".to_string(),
                     models: vec![],
                     default_model: "".to_string(),
+                    enabled: true,
                 },
             ]
         };
@@ -863,6 +876,21 @@ mod tests {
         assert!(!default_config.api_card.code_block_line_numbers);
         assert_eq!(default_config.api_card.context_turns, 5);
         assert_eq!(default_config.api_card.send_key_shortcut, "Enter");
+    }
+
+    #[test]
+    fn provider_enabled_defaults_to_true_for_legacy_config() {
+        let provider: ProviderConfig = serde_json::from_value(serde_json::json!({
+            "id": "legacy",
+            "name": "Legacy",
+            "baseUrl": "https://example.com/v1",
+            "apiKey": "key",
+            "models": ["model"],
+            "defaultModel": "model"
+        }))
+        .unwrap();
+
+        assert!(provider.enabled);
     }
 
     #[test]

@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { Plus, Trash2, Eye, EyeOff, Box, RefreshCw } from "lucide-react";
+import { Plus, Trash2, Eye, EyeOff, Box, RefreshCw, Power, PowerOff } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { ProviderConfig } from "@/types/config";
 import { DynamicIcon } from "@/components/Icons";
 import { useTranslation } from "@/hooks/useTranslation";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardHeader,
@@ -138,6 +139,7 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
         {providers.map((p) => {
           const isKeyVisible = showKeys[p.id] || false;
           const isFetching = fetchingIds[p.id] || false;
+          const isEnabled = p.enabled !== false;
 
           // 合并当前已选项与已获取候选模型，去重生成选项
           const candidateList = Array.from(
@@ -147,7 +149,12 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
           return (
             <Card
               key={p.id}
-              className="group border-border/60 bg-card/60 hover:border-border/90 transition-all"
+              className={cn(
+                "group border-border/60 bg-card/60 transition-all",
+                isEnabled
+                  ? "hover:border-border/90"
+                  : "opacity-60 hover:opacity-95"
+              )}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 py-2.5 px-3.5 border-b border-border/40 bg-muted/20">
                 <div className="flex items-center gap-2">
@@ -164,15 +171,50 @@ export const ProvidersTab: React.FC<ProvidersTabProps> = ({
                     placeholder={t('settings.providers.providerName')}
                   />
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => onRemoveProvider(p.id)}
-                  className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10"
-                  title={t('common.delete')}
-                >
-                  <Trash2 size={12} />
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateProvider(p.id, { enabled: !isEnabled })
+                    }
+                    className={cn(
+                      'flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-medium transition-colors cursor-pointer',
+                      isEnabled
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400'
+                        : 'border-border/70 bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'
+                    )}
+                    title={
+                      isEnabled
+                        ? isZh
+                          ? '点击停用该服务商'
+                          : 'Click to disable this provider'
+                        : isZh
+                        ? '点击启用该服务商'
+                        : 'Click to enable this provider'
+                    }
+                  >
+                    {isEnabled ? <Power size={11} /> : <PowerOff size={11} />}
+                    <span>
+                      {isEnabled
+                        ? isZh
+                          ? '已启用'
+                          : 'Enabled'
+                        : isZh
+                        ? '已停用'
+                        : 'Disabled'}
+                    </span>
+                  </button>
+
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => onRemoveProvider(p.id)}
+                    className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10"
+                    title={t('common.delete')}
+                  >
+                    <Trash2 size={12} />
+                  </Button>
+                </div>
               </CardHeader>
 
               <CardContent className="p-3.5 space-y-3">
