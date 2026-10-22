@@ -54,6 +54,8 @@ export const UserBubble: React.FC<UserBubbleProps> = ({
 
   return (
     <div
+      data-user-message="true"
+      data-user-message-text={content.slice(0, 160)}
       className={cn(
         'group/bubble relative mb-2.5 flex justify-end pl-12 select-text',
         className

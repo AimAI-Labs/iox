@@ -1095,10 +1095,10 @@
 }
 
 /* ==========================================================================
-   Link Preview — 链接悬浮卡片弹出动画
+   Floating Pop — 统一悬浮卡片弹出动画
    ========================================================================== */
 
-@keyframes link-preview-pop {
+@keyframes floating-pop {
   0% {
     opacity: 0;
     transform: scale(0.88);
@@ -1113,8 +1113,8 @@
   }
 }
 
-.link-preview-pop {
-  animation: link-preview-pop 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+.floating-pop {
+  animation: floating-pop 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* ==========================================================================

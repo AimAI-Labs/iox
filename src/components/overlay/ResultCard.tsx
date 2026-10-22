@@ -14,6 +14,7 @@ import { ContextMenu } from '@/components/overlay/ContextMenu';
 import { SessionPanel } from '@/components/overlay/SessionPanel';
 import { LinkDock } from '@/components/overlay/LinkDock';
 import { LinkPanel } from '@/components/overlay/LinkPanel';
+import { MessageRail } from '@/components/overlay/MessageRail';
 import { FloatingQuoteMenu } from '@/components/overlay/FloatingQuoteMenu';
 import { DynamicIcon } from '@/components/Icons';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
@@ -711,15 +712,16 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       />
 
       {/* 2. 正文与对话流内容区 */}
-      <div
-        ref={bodyRef}
-        onContextMenu={handleContextMenu}
-        onScroll={handleScroll}
-        onMouseUp={handleSelectionCheck}
-        onKeyUp={handleSelectionCheck}
-        style={{ fontSize: `${apiCard?.fontSize || 13}px` }}
-        className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-3 pb-2 text-ink select-text custom-scrollbar"
-      >
+      <div className="relative flex-1 min-h-0">
+        <div
+          ref={bodyRef}
+          onContextMenu={handleContextMenu}
+          onScroll={handleScroll}
+          onMouseUp={handleSelectionCheck}
+          onKeyUp={handleSelectionCheck}
+          style={{ fontSize: `${apiCard?.fontSize || 13}px` }}
+          className="h-full overflow-y-auto px-3.5 pt-3 pb-2 text-ink select-text custom-scrollbar"
+        >
         {/* 初始用户选中文本气泡 (如果存在) */}
         {selectedText && (
           <UserBubble content={selectedText} isInitialContext={true} />
@@ -883,6 +885,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             <LoadingState onCancel={onCancel} />
           </div>
         ) : null}
+        </div>
+
+        <MessageRail
+          scrollRef={bodyRef}
+          refreshKey={`${streamText.length}:${selectedText.length}:${activeTabId}`}
+        />
       </div>
 
       {/* 底部链接聚合入口 */}

@@ -8,10 +8,8 @@ import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from 'r
 import rehypeKatex from 'rehype-katex';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { CodeBlock } from '@/components/overlay/CodeBlock';
-import {
-  LinkPreviewCard,
-  type LinkPreviewRect,
-} from '@/components/overlay/LinkPreviewCard';
+import { LinkPreviewCard } from '@/components/overlay/LinkPreviewCard';
+import type { PopoverAnchorRect } from '@/components/overlay/HoverPopover';
 import { prepareMarkdown } from '@/lib/markdown';
 import { getDomain, isHttpUrl } from '@/lib/links';
 import { cn } from '@/lib/utils';
@@ -69,7 +67,7 @@ interface HoveredLink {
   href: string;
   title: string;
   domain: string;
-  anchorRect: LinkPreviewRect;
+  anchorRect: PopoverAnchorRect;
 }
 
 const MarkdownContentInner: React.FC<MarkdownContentProps> = ({
@@ -115,8 +113,8 @@ const MarkdownContentInner: React.FC<MarkdownContentProps> = ({
                 anchorRect: {
                   left: rect.left,
                   top: rect.top,
-                  bottom: rect.bottom,
                   width: rect.width,
+                  height: rect.height,
                 },
               });
             }}
