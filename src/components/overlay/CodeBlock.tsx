@@ -2,10 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
+import { highlightCode, type HighlightedLine } from '@/lib/codeHighlight';
 
 /* ─────────────────────────────────────────────────────────
  * BUI CodeBlock — 代码块 (beautifului.dev)
- * 凹陷底色 + mono 行号 + 实时可复制的 Copy 按钮
+ * One Dark 语法高亮 + mono 行号 + 实时可复制的 Copy 按钮
  * ───────────────────────────────────────────────────────── */
 
 export interface CodeBlockProps {
@@ -36,7 +37,14 @@ const LANGUAGE_LABELS: Record<string, string> = {
   java: 'Java',
   kt: 'Kotlin',
   kotlin: 'Kotlin',
+  scala: 'Scala',
+  sc: 'Scala',
+  dart: 'Dart',
+  lua: 'Lua',
   swift: 'Swift',
+  objectivec: 'Objective-C',
+  'objective-c': 'Objective-C',
+  objc: 'Objective-C',
   ruby: 'Ruby',
   rb: 'Ruby',
   php: 'PHP',
@@ -97,7 +105,13 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   const rawCode = useMemo(() => code.replace(/\n$/, ''), [code]);
   const lang = parseLanguage(language);
   const displayLanguage = LANGUAGE_LABELS[lang] || lang || 'Text';
-  const lines = useMemo(() => rawCode.split('\n'), [rawCode]);
+
+  const lines = useMemo<HighlightedLine[]>(() => {
+    const highlighted = lang ? highlightCode(rawCode, lang) : null;
+    if (highlighted) return highlighted;
+    return rawCode.split('\n').map((text) => [{ text }]);
+  }, [rawCode, lang]);
+
   const gutterWidth = Math.max(String(lines.length).length, 2);
 
   const handleCopy = async () => {
@@ -113,13 +127,13 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   return (
     <div
       className={cn(
-        'my-2.5 overflow-hidden rounded-[10px] border border-line bg-inset shadow-hairline',
+        'md-code-block my-2.5 overflow-hidden rounded-[10px] border shadow-hairline',
         className
       )}
     >
       {/* 顶部语言与复制栏 */}
-      <div className="flex select-none items-center justify-between border-b border-line bg-field/40 px-3 py-1.5">
-        <span className="font-mono text-[11.5px] font-medium text-ink-2">
+      <div className="md-code-block-header flex select-none items-center justify-between border-b px-3 py-1.5">
+        <span className="md-code-block-lang text-[11.5px] font-medium">
           {displayLanguage}
         </span>
 
@@ -127,9 +141,9 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
           type="button"
           onClick={handleCopy}
           className={cn(
-            'flex h-6 items-center gap-1 rounded-[6px] px-1.5 text-[11.5px] font-medium',
-            'cursor-pointer transition-colors duration-100 hover:bg-hover',
-            copied ? 'text-emerald-600' : 'text-ink-3 hover:text-ink'
+            'md-code-block-copy flex h-6 items-center gap-1 rounded-[6px] px-1.5 text-[11.5px] font-medium',
+            'cursor-pointer transition-colors duration-100',
+            copied && 'is-copied'
           )}
           title={t('card.codeCopy')}
         >
@@ -143,13 +157,13 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       </div>
 
       {/* 代码正文与行号区 */}
-      <pre className="custom-scrollbar overflow-x-auto bg-inset px-3 py-2.5 font-mono text-[11.5px] leading-[1.7] text-ink-2 select-text">
+      <pre className="md-code-block-scroll custom-scrollbar overflow-x-auto px-3 py-2.5 select-text">
         <code className="block">
           {lines.map((line, index) => (
-            <div key={index} className="flex min-h-[1.7em]">
+            <div key={index} className="md-code-block-line">
               {codeBlockLineNumbers && (
                 <span
-                  className="shrink-0 select-none pr-2.5 text-right text-[10.5px] text-ink-3/60 tabular-nums"
+                  className="md-code-block-gutter shrink-0 select-none pr-2.5 text-right tabular-nums"
                   style={{ width: `calc(${gutterWidth}ch + 10px)` }}
                 >
                   {index + 1}
@@ -157,13 +171,15 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
               )}
               <span
                 className={cn(
-                  'flex-1 font-mono',
-                  codeBlockWrap
-                    ? 'whitespace-pre-wrap break-words'
-                    : 'whitespace-pre'
+                  'flex-1',
+                  codeBlockWrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
                 )}
               >
-                {line}
+                {line.map((segment, segmentIndex) => (
+                  <span key={segmentIndex} className={segment.className}>
+                    {segment.text}
+                  </span>
+                ))}
               </span>
             </div>
           ))}

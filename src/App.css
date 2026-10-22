@@ -64,6 +64,9 @@
     --success: #10b981;
     --danger: #ef4444;
 
+    /* 代码字体：与 VS Code Windows 默认编辑器字体保持一致 */
+    --font-code: Consolas, "Courier New", Menlo, Monaco, "Droid Sans Mono", monospace;
+
     /* ── BUI (beautifului.dev) 设计令牌 ─────────────────── */
     --ink: #1f1e1c;
     --ink-2: #57544e;
@@ -840,8 +843,9 @@
   border-radius: 5px;
   background: var(--inset);
   color: var(--ink);
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-code);
   font-size: 0.9em;
+  font-variant-ligatures: none;
   word-break: break-word;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -855,9 +859,10 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--inset);
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-code);
   font-size: 0.92em;
   line-height: 1.7;
+  font-variant-ligatures: none;
 }
 
 /* 分隔线 / 图片 / 键盘按键 */
@@ -874,14 +879,42 @@
   vertical-align: middle;
 }
 .markdown-body kbd {
-  padding: 1px 5px;
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0.08em 0.42em;
   border: 1px solid var(--line-strong);
   border-bottom-width: 2px;
   border-radius: 5px;
   background: var(--field);
-  font-family: 'JetBrains Mono', monospace;
+  box-shadow: inset 0 -1px 0 var(--line-strong);
+  font-family: var(--font-code);
   font-size: 0.85em;
+  line-height: 1.45;
+  text-align: center;
   color: var(--ink-2);
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.markdown-body u {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-body details {
+  margin: 0.6em 0;
+}
+.markdown-body summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--ink);
+  user-select: none;
+}
+.markdown-body summary::marker {
+  color: var(--ink-3);
+}
+.markdown-body details[open] > summary {
+  margin-bottom: 0.35em;
 }
 
 /* GFM 表格：外层负责横向滚动，内层保持完整列宽 */
@@ -946,7 +979,123 @@
 }
 
 /* ==========================================================================
-   主题切换水滴扩散与收缩圆形遮罩 (View Transition API)
+   Code Block — One Dark
+   ========================================================================== */
+
+.md-code-block {
+  border-color: rgba(255, 255, 255, 0.09);
+  background: #282c34;
+  color: #abb2bf;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.md-code-block-header {
+  background: #21252b;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.md-code-block-lang {
+  color: #9da5b4;
+  font-family: var(--font-code);
+}
+
+.md-code-block-copy {
+  color: #7f8797;
+}
+.md-code-block-copy:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #abb2bf;
+}
+.md-code-block-copy.is-copied {
+  color: #98c379;
+}
+
+.md-code-block-scroll {
+  background: #282c34;
+  color: #abb2bf;
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 1.6;
+  font-variant-ligatures: none;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.md-code-block-line {
+  display: flex;
+  min-height: 1.6em;
+}
+
+.md-code-block-gutter {
+  color: rgba(171, 178, 191, 0.32);
+}
+
+.md-code-block ::selection {
+  background: rgba(97, 175, 239, 0.32);
+}
+
+/* One Dark 语法配色 */
+.md-code-block .hljs-comment,
+.md-code-block .hljs-quote {
+  color: #5c6370;
+  font-style: italic;
+}
+.md-code-block .hljs-doctag,
+.md-code-block .hljs-keyword,
+.md-code-block .hljs-formula {
+  color: #c678dd;
+}
+.md-code-block .hljs-section,
+.md-code-block .hljs-name,
+.md-code-block .hljs-selector-tag,
+.md-code-block .hljs-deletion,
+.md-code-block .hljs-subst {
+  color: #e06c75;
+}
+.md-code-block .hljs-literal {
+  color: #56b6c2;
+}
+.md-code-block .hljs-string,
+.md-code-block .hljs-regexp,
+.md-code-block .hljs-addition,
+.md-code-block .hljs-attribute,
+.md-code-block .hljs-meta .hljs-string {
+  color: #98c379;
+}
+.md-code-block .hljs-attr,
+.md-code-block .hljs-variable,
+.md-code-block .hljs-template-variable,
+.md-code-block .hljs-type,
+.md-code-block .hljs-selector-class,
+.md-code-block .hljs-selector-attr,
+.md-code-block .hljs-selector-pseudo,
+.md-code-block .hljs-number {
+  color: #d19a66;
+}
+.md-code-block .hljs-symbol,
+.md-code-block .hljs-bullet,
+.md-code-block .hljs-link,
+.md-code-block .hljs-meta,
+.md-code-block .hljs-selector-id,
+.md-code-block .hljs-title {
+  color: #61aeee;
+}
+.md-code-block .hljs-built_in,
+.md-code-block .hljs-title.class_,
+.md-code-block .hljs-class .hljs-title {
+  color: #e6c07b;
+}
+.md-code-block .hljs-emphasis {
+  font-style: italic;
+}
+.md-code-block .hljs-strong {
+  font-weight: 700;
+}
+.md-code-block .hljs-link {
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+  主题切换水滴扩散与收缩圆形遮罩 (View Transition API)
    动画完全由 CSS @keyframes 驱动（坐标/半径经 CSS 变量由 JS 预先写入），
    在伪元素树构建的首帧即生效，规避 transition.ready + WAAPI 的 JS 时序
    窗口导致的首帧全屏闪烁（闪屏）。

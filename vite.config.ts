@@ -46,7 +46,13 @@ export default defineConfig(async () => ({
           if (id.includes("lucide-react")) {
             return "vendor-lucide";
           }
-          if (id.includes("react-markdown")) {
+          if (
+            id.includes("react-markdown") ||
+            id.includes("rehype-raw") ||
+            id.includes("rehype-sanitize") ||
+            id.includes("lowlight") ||
+            id.includes("highlight.js")
+          ) {
             return "vendor-markdown";
           }
         },

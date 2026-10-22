@@ -2,6 +2,8 @@ import React, { memo, useMemo, type ComponentProps, type ReactNode } from 'react
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { CodeBlock } from '@/components/overlay/CodeBlock';
@@ -12,8 +14,32 @@ type MarkdownProps = ComponentProps<typeof ReactMarkdown>;
 
 const REMARK_PLUGINS: MarkdownProps['remarkPlugins'] = [remarkGfm, remarkMath];
 
-// strict: 'ignore' 让中文、公式中的非常规写法不再抛错/告警
+/**
+ * 在 GitHub 默认白名单基础上：
+ * - 补充 u / mark 常用内联标签；
+ * - 保留 remark-math 生成节点上的 math 类名，避免公式被过滤。
+ */
+const SANITIZE_SCHEMA: SanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), 'u', 'mark'],
+  attributes: {
+    ...defaultSchema.attributes,
+    span: [
+      ...(defaultSchema.attributes?.span ?? []),
+      ['className', /^math($|-)/],
+    ],
+    div: [
+      ...(defaultSchema.attributes?.div ?? []),
+      ['className', /^math($|-)/],
+    ],
+  },
+};
+
 const REHYPE_PLUGINS: MarkdownProps['rehypePlugins'] = [
+  // 解析原始 HTML（kbd、u、details 等），随后用白名单过滤，防止脚本注入
+  rehypeRaw,
+  [rehypeSanitize, SANITIZE_SCHEMA],
+  // strict: 'ignore' 让中文、公式中的非常规写法不再抛错/告警
   [rehypeKatex, { throwOnError: false, strict: 'ignore' }],
 ];
 
