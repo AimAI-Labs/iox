@@ -34,6 +34,7 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
   const [position, setPosition] = useState({ left: EDGE, top: EDGE });
   const [origin, setOrigin] = useState({ x: 150, y: 0 });
   const [ready, setReady] = useState(false);
+  const [animationDone, setAnimationDone] = useState(false);
 
   useLayoutEffect(() => {
     const element = cardRef.current;
@@ -43,15 +44,16 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
     const height = element.offsetHeight;
     const maxLeft = Math.max(EDGE, window.innerWidth - width - EDGE);
     const anchorCenter = anchorRect.left + anchorRect.width / 2;
-    const left = Math.min(Math.max(EDGE, anchorCenter - width / 2), maxLeft);
+    // 取整定位，避免小数坐标导致文字栅格化模糊
+    const left = Math.round(Math.min(Math.max(EDGE, anchorCenter - width / 2), maxLeft));
 
     // 统一放在链接上方，避免遮挡下方正文
-    const top = Math.max(EDGE, anchorRect.top - height - GAP);
+    const top = Math.round(Math.max(EDGE, anchorRect.top - height - GAP));
 
     setPosition({ left, top });
     // 让缩放动画从链接位置展开，而不是从卡片中心“飘”出来
     setOrigin({
-      x: Math.min(Math.max(anchorCenter - left, 20), width - 20),
+      x: Math.round(Math.min(Math.max(anchorCenter - left, 20), width - 20)),
       y: height,
     });
     setReady(true);
@@ -62,13 +64,16 @@ export const LinkPreviewCard: React.FC<LinkPreviewCardProps> = ({
       ref={cardRef}
       className={cn(
         'pointer-events-none fixed z-[9999] w-[320px] max-w-[calc(100vw-16px)]',
-        ready && 'link-preview-pop'
+        ready && !animationDone && 'link-preview-pop'
       )}
       style={{
         left: position.left,
         top: position.top,
         transformOrigin: `${origin.x}px ${origin.y}px`,
         visibility: ready ? 'visible' : 'hidden',
+      }}
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget) setAnimationDone(true);
       }}
     >
       <div className="rounded-xl border border-line bg-[#fcfcfd] p-3 shadow-overlay dark:bg-[#202024]">

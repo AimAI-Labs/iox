@@ -1115,7 +1115,6 @@
 
 .link-preview-pop {
   animation: link-preview-pop 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  will-change: transform, opacity;
 }
 
 /* ==========================================================================
