@@ -1,4 +1,13 @@
-import React, { memo, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -77,6 +86,40 @@ const MarkdownContentInner: React.FC<MarkdownContentProps> = ({
   className,
 }) => {
   const [hoveredLink, setHoveredLink] = useState<HoveredLink | null>(null);
+  const showTimerRef = useRef<number | null>(null);
+  const hideTimerRef = useRef<number | null>(null);
+
+  const clearHoverTimers = useCallback(() => {
+    if (showTimerRef.current !== null) {
+      window.clearTimeout(showTimerRef.current);
+      showTimerRef.current = null;
+    }
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  }, []);
+
+  // 悬停意图：短暂停留后才展示，快速划过链接不会闪烁弹卡
+  const scheduleShow = useCallback(
+    (link: HoveredLink) => {
+      clearHoverTimers();
+      showTimerRef.current = window.setTimeout(() => {
+        showTimerRef.current = null;
+        setHoveredLink(link);
+      }, 180);
+    },
+    [clearHoverTimers]
+  );
+
+  // 离开后留出短暂缓冲，方便在相邻链接之间移动
+  const scheduleHide = useCallback(() => {
+    clearHoverTimers();
+    hideTimerRef.current = window.setTimeout(() => {
+      hideTimerRef.current = null;
+      setHoveredLink(null);
+    }, 120);
+  }, [clearHoverTimers]);
 
   const components = useMemo<Components>(
     () => ({
@@ -103,7 +146,7 @@ const MarkdownContentInner: React.FC<MarkdownContentProps> = ({
               if (!isHttpUrl(resolvedHref)) return;
 
               const rect = event.currentTarget.getBoundingClientRect();
-              setHoveredLink({
+              scheduleShow({
                 href: resolvedHref,
                 title:
                   (event.currentTarget.textContent || '')
@@ -118,7 +161,7 @@ const MarkdownContentInner: React.FC<MarkdownContentProps> = ({
                 },
               });
             }}
-            onMouseLeave={() => setHoveredLink(null)}
+            onMouseLeave={scheduleHide}
           >
             {children}
           </a>
@@ -194,7 +237,7 @@ const MarkdownContentInner: React.FC<MarkdownContentProps> = ({
         return <img src={src} alt={alt || ''} title={title} loading="lazy" />;
       },
     }),
-    [codeBlockWrap, codeBlockLineNumbers]
+    [codeBlockWrap, codeBlockLineNumbers, scheduleShow, scheduleHide]
   );
 
   const source = useMemo(() => prepareMarkdown(content), [content]);
@@ -203,7 +246,10 @@ const MarkdownContentInner: React.FC<MarkdownContentProps> = ({
   useEffect(() => {
     if (!hoveredLink) return;
 
-    const dismiss = () => setHoveredLink(null);
+    const dismiss = () => {
+      clearHoverTimers();
+      setHoveredLink(null);
+    };
     window.addEventListener('scroll', dismiss, true);
     window.addEventListener('resize', dismiss);
     window.addEventListener('mousedown', dismiss, true);
@@ -213,7 +259,29 @@ const MarkdownContentInner: React.FC<MarkdownContentProps> = ({
       window.removeEventListener('resize', dismiss);
       window.removeEventListener('mousedown', dismiss, true);
     };
-  }, [hoveredLink]);
+  }, [hoveredLink, clearHoverTimers]);
+
+  // 显示延迟期间发生滚动/点击/缩放时取消待展示的卡片
+  useEffect(() => {
+    const cancelPending = () => {
+      if (showTimerRef.current !== null) {
+        clearHoverTimers();
+      }
+    };
+
+    window.addEventListener('scroll', cancelPending, true);
+    window.addEventListener('resize', cancelPending);
+    window.addEventListener('mousedown', cancelPending, true);
+
+    return () => {
+      window.removeEventListener('scroll', cancelPending, true);
+      window.removeEventListener('resize', cancelPending);
+      window.removeEventListener('mousedown', cancelPending, true);
+    };
+  }, [clearHoverTimers]);
+
+  // 组件卸载时清理未触发的定时器
+  useEffect(() => clearHoverTimers, [clearHoverTimers]);
 
   // 悬浮状态变化时复用同一棵 Markdown 元素，避免重新解析整篇内容
   const rendered = useMemo(
