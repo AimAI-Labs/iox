@@ -935,7 +935,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         onSelectSession={chatSessions.handleSwitchSession}
         onNewSession={chatSessions.handleNewSession}
         onDeleteSession={chatSessions.handleDeleteSession}
-        onClearAll={chatSessions.handleClearAllSessions}
       />
     </div>
   );

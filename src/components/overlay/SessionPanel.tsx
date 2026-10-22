@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, X, MessageSquare, Clock, Layers } from 'lucide-react';
 import { SessionMeta } from '@/types/session';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
+
+// 略长于动画时长，确保退出动画完整播放后再卸载
+const EXIT_ANIMATION_MS = 180;
 
 export interface SessionPanelProps {
   isOpen: boolean;
@@ -12,7 +15,6 @@ export interface SessionPanelProps {
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
   onDeleteSession: (e: React.MouseEvent, id: string) => void;
-  onClearAll: () => void;
 }
 
 function formatRelativeTime(timestamp: number, isZh: boolean): string {
@@ -37,15 +39,41 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
   onSelectSession,
   onNewSession,
   onDeleteSession,
-  onClearAll,
 }) => {
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
 
-  if (!isOpen) return null;
+  // 保留挂载状态以播放退出动画；关闭动画结束后再卸载
+  const [isMounted, setIsMounted] = useState(isOpen);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsMounted(true);
+      return;
+    }
+    if (!isMounted) return;
+
+    const timer = window.setTimeout(() => setIsMounted(false), EXIT_ANIMATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, isMounted]);
+
+  // 同步派生，避免关闭瞬间先渲染一帧进入动画
+  const isClosing = isMounted && !isOpen;
+
+  if (!isMounted) return null;
 
   return (
-    <div className="absolute inset-0 z-50 flex flex-col bg-white/95 dark:bg-[#18181b]/95 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-150 rounded-[20px] overflow-hidden select-none border border-zinc-200/90 dark:border-zinc-700/80 shadow-2xl">
+    <div
+      className={cn(
+        // 面板完全覆盖卡片，不需要 backdrop-blur；半透明 + backdrop-filter
+        // 参与缩放动画时，WebView2 会偶发合成层闪白
+        'absolute inset-0 z-50 flex flex-col bg-[#fcfcfd] dark:bg-[#18181b] rounded-[20px] overflow-hidden select-none border border-zinc-200/90 dark:border-zinc-700/80 shadow-2xl',
+        isClosing
+          ? // fill-mode-forwards：动画结束后保持透明，避免卸载前回弹到白底而闪白
+            'animate-out fade-out zoom-out-95 duration-150 fill-mode-forwards pointer-events-none'
+          : 'animate-in fade-in zoom-in-95 duration-150'
+      )}
+    >
       {/* 头部 */}
       <div className="flex shrink-0 items-center justify-between border-b border-zinc-200/80 dark:border-zinc-800/80 px-4 py-3">
         <div className="flex items-center gap-2">
@@ -59,18 +87,6 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {sessions.length > 0 && (
-            <button
-              type="button"
-              onClick={onClearAll}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-zinc-500 hover:bg-red-500/10 hover:text-red-500 transition-colors cursor-pointer"
-              title={t('sessions.clearAllSessions')}
-            >
-              <Trash2 size={12} />
-              <span>{t('common.clear')}</span>
-            </button>
-          )}
-
           <button
             type="button"
             onClick={onClose}

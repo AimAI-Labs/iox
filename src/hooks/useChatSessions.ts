@@ -128,17 +128,6 @@ export function useChatSessions({
     [currentSessionId, handleNewSession, refreshSessions]
   );
 
-  // 清空所有历史会话
-  const handleClearAllSessions = useCallback(async () => {
-    try {
-      await invoke('clear_all_chat_sessions');
-      handleNewSession();
-      refreshSessions();
-    } catch (err) {
-      console.error('Failed to clear all chat sessions:', err);
-    }
-  }, [handleNewSession, refreshSessions]);
-
   const togglePanel = useCallback(() => {
     setIsPanelOpen((prev) => {
       if (!prev) {
@@ -157,7 +146,6 @@ export function useChatSessions({
     handleSwitchSession,
     handleNewSession,
     handleDeleteSession,
-    handleClearAllSessions,
     refreshSessions,
   };
 }
