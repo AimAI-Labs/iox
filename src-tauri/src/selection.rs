@@ -5,6 +5,13 @@ use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+    COINIT_APARTMENTTHREADED,
+};
+use windows::Win32::UI::Accessibility::{
+    CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationTextPattern, UIA_TextPatternId,
+};
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber;
 use windows_sys::Win32::System::Threading::*;
@@ -331,6 +338,119 @@ pub fn simulate_ctrl_c() -> bool {
     }
 }
 
+/// RAII 守卫：保证 UIA 探测线程的 COM 公寓在退出时被反初始化
+struct ComApartment;
+
+impl Drop for ComApartment {
+    fn drop(&mut self) {
+        // SAFETY: 仅在 CoInitializeEx 成功后构造，此时同作用域的 COM 对象已全部释放
+        unsafe { CoUninitialize() };
+    }
+}
+
+/// 划词手势结束后等待选区落定的最长时间：宿主程序可能延后一拍才应用选区
+const SELECTION_SETTLE_MS: u64 = 120;
+
+/// 探测光标处是否存在真正的文本选区，用于划词取词（双击选中 / 单击拖动选中）的前置校验。
+/// - `Some(true)`：宿主程序明确报告存在非空选区
+/// - `Some(false)`：宿主程序明确报告选区为空（只剩一个折叠光标）
+/// - `None`：宿主程序未暴露 UI Automation 文本模式，无法判定，交由剪贴板流程兜底
+fn probe_text_selection(point: (i32, i32)) -> Option<bool> {
+    // SAFETY: 所有 UIA 对象都在本线程的 STA 公寓内创建与释放，不跨线程共享；
+    // 探测过程只读，不改变焦点、选区、剪贴板或窗口状态。
+    unsafe {
+        CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().ok()?;
+        let _apartment = ComApartment;
+        let automation: IUIAutomation =
+            CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
+
+        let deadline = Instant::now() + Duration::from_millis(SELECTION_SETTLE_MS);
+        loop {
+            match query_text_selection(&automation, point) {
+                // 选区可能稍晚才落定：截止时间前持续复查，只有当宿主程序
+                // 始终报告“没有选中文字”时才否决这次双击
+                Some(false) if Instant::now() < deadline => {
+                    thread::sleep(Duration::from_millis(15));
+                }
+                verdict => return verdict,
+            }
+        }
+    }
+}
+
+/// 单次查询：优先读取键盘焦点元素的选区，读不到再退化为光标处元素
+fn query_text_selection(automation: &IUIAutomation, point: (i32, i32)) -> Option<bool> {
+    // SAFETY: UIA 对象来自本线程的 STA 公寓，查询全程只读
+    unsafe {
+        // 焦点控件的选区才是权威选区：光标处往往只是纯文本节点，
+        // 它自己的选区不能代表宿主程序当前的选区状态。
+        // 焦点落在本进程（例如自己的卡片输入框）时不参与判定。
+        if let Ok(focused) = automation.GetFocusedElement() {
+            let foreign = focused
+                .CurrentProcessId()
+                .is_ok_and(|pid| pid != std::process::id() as i32);
+            if foreign {
+                if let Some(verdict) = text_selection_verdict(automation, focused) {
+                    return Some(verdict);
+                }
+            }
+        }
+
+        let element = automation
+            .ElementFromPoint(windows::Win32::Foundation::POINT { x: point.0, y: point.1 })
+            .ok()?;
+        text_selection_verdict(automation, element)
+    }
+}
+
+/// 从给定元素向上最多 6 层寻找支持 TextPattern 的控件，并给出选区判定
+fn text_selection_verdict(
+    automation: &IUIAutomation,
+    mut element: IUIAutomationElement,
+) -> Option<bool> {
+    // SAFETY: automation 属于本线程的 UIA 客户端，遍历器只做只读查询
+    let walker = unsafe { automation.ControlViewWalker() }.ok()?;
+    for _ in 0..6 {
+        // SAFETY: element 来自本线程的 UIA 客户端，调用期间保持有效
+        if let Ok(pattern) =
+            unsafe { element.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId) }
+        {
+            return selection_has_text(&pattern);
+        }
+        match unsafe { walker.GetParentElement(&element) } {
+            Ok(parent) => element = parent,
+            Err(_) => break,
+        }
+    }
+    None
+}
+
+/// 判断 TextPattern 的选区是否包含文字；None 表示选区不可读，不能据此判定
+fn selection_has_text(pattern: &IUIAutomationTextPattern) -> Option<bool> {
+    // SAFETY: pattern 属于本线程的 STA 公寓，调用期间保持有效
+    unsafe {
+        let ranges = pattern.GetSelection().ok()?;
+        let count = ranges.Length().ok()?;
+        if count <= 0 {
+            // 规范要求有焦点的控件至少返回一个（可能是折叠的）范围，
+            // 返回空数组属于宿主程序实现异常，此时不做判定
+            return None;
+        }
+        for index in 0..count {
+            let Ok(range) = ranges.GetElement(index) else {
+                continue;
+            };
+            if range
+                .GetText(-1)
+                .is_ok_and(|text| !text.to_string().trim().is_empty())
+            {
+                return Some(true);
+            }
+        }
+        Some(false)
+    }
+}
+
 /// 安全提取选中文本（单例互斥锁保护：备份原始剪贴板 -> 记录序列号 -> 模拟 Ctrl+C -> 校验序列号更新 -> 读取新选区 -> 恢复原剪贴板）
 pub fn extract_selected_text_safely() -> Option<String> {
     let _guard = CLIPBOARD_LOCK.lock().ok()?;
@@ -631,6 +751,19 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
                 {
                     return;
                 }
+            }
+
+            // 划词手势（双击选中、单击拖动选中）只是让宿主程序选中文字，
+            // 本身不是取词指令：必须确认宿主程序此刻真的有选区才继续，
+            // 否则（双击空白处、拖过按钮或窗口留白）既不弹气泡，也不去碰剪贴板。
+            // 宿主程序没有暴露 UI Automation 文本模式时无法判定，沿用剪贴板探测兜底。
+            if probe_text_selection(cursor_pos) == Some(false) {
+                return;
+            }
+
+            // UIA 探测可能耗时，期间若产生新的鼠标/键盘操作则废弃本任务
+            if SELECTION_SEQ.load(Ordering::SeqCst) != task_seq {
+                return;
             }
 
             if let Some(text) = extract_selected_text_safely() {
