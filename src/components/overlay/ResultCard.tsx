@@ -12,6 +12,8 @@ import { UserBubble } from '@/components/overlay/UserBubble';
 import { ResizeHandle } from '@/components/overlay/ResizeHandle';
 import { ContextMenu } from '@/components/overlay/ContextMenu';
 import { SessionPanel } from '@/components/overlay/SessionPanel';
+import { LinkDock } from '@/components/overlay/LinkDock';
+import { LinkPanel } from '@/components/overlay/LinkPanel';
 import { FloatingQuoteMenu } from '@/components/overlay/FloatingQuoteMenu';
 import { DynamicIcon } from '@/components/Icons';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
@@ -21,6 +23,7 @@ import { AlertCircle, RotateCcw, Copy, Check, Brain, FileText, Wand2, Sparkles }
 import { cn } from '@/lib/utils';
 import { parseThinkingAndMain } from '@/lib/thinkingParser';
 import { splitTranscript, splitTurnChunk } from '@/lib/chatTranscript';
+import { collectLinksFromRoot, linksEqual, type LinkInfo } from '@/lib/links';
 
 /* ─────────────────────────────────────────────────────────
  * 流式结果卡片 (参考千问桌面端布局)
@@ -423,6 +426,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const bodyRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
 
+  // 当前回答中的外链与右侧链接详情栏
+  const [answerLinks, setAnswerLinks] = useState<LinkInfo[]>([]);
+  const [isLinkPanelOpen, setIsLinkPanelOpen] = useState(false);
+
   // 监听划选文本以展示浮动引用胶囊 (带边缘安全夹紧防变形)
   const handleSelectionCheck = React.useCallback(() => {
     const sel = window.getSelection();
@@ -546,6 +553,18 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       };
     });
   }, [streamText]);
+
+  // 收集最新一轮回答中出现的所有外链
+  useEffect(() => {
+    const root = bodyRef.current?.querySelector('[data-answer-markdown="true"]');
+    const next = root ? collectLinksFromRoot(root) : [];
+    setAnswerLinks((prev) => (linksEqual(prev, next) ? prev : next));
+  }, [streamText, error, activeTabId]);
+
+  // 回答被清空或切换后收起链接详情栏
+  useEffect(() => {
+    if (!answerLinks.length) setIsLinkPanelOpen(false);
+  }, [answerLinks.length]);
 
   // 监听请求起止以计算总耗时并快照记录本轮的模型与耗时
   useEffect(() => {
@@ -822,7 +841,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
                       {/* Markdown 正文 */}
                       {turnMain && (
-                        <div className="relative">
+                        <div className="relative" data-answer-markdown={isLast ? 'true' : undefined}>
                           <MarkdownContent
                             content={turnMain}
                             codeBlockWrap={apiCard?.codeBlockWrap}
@@ -860,6 +879,11 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           </div>
         ) : null}
       </div>
+
+      {/* 底部链接聚合入口 */}
+      {answerLinks.length > 0 && (
+        <LinkDock links={answerLinks} onOpen={() => setIsLinkPanelOpen(true)} />
+      )}
 
       {/* 3. 样图风格独立胶囊提问栏 */}
       <PromptBar
@@ -921,7 +945,14 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         onOpenSettings={onOpenSettings}
       />
 
-      {/* 6. 多会话历史侧滑面板 */}
+      {/* 6. 回答链接详情栏 */}
+      <LinkPanel
+        isOpen={isLinkPanelOpen}
+        links={answerLinks}
+        onClose={() => setIsLinkPanelOpen(false)}
+      />
+
+      {/* 7. 多会话历史侧滑面板 */}
       <SessionPanel
         isOpen={chatSessions.isPanelOpen}
         sessions={chatSessions.sessions}

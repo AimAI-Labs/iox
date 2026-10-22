@@ -1095,6 +1095,30 @@
 }
 
 /* ==========================================================================
+   Link Preview — 链接悬浮卡片弹出动画
+   ========================================================================== */
+
+@keyframes link-preview-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.link-preview-pop {
+  animation: link-preview-pop 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+/* ==========================================================================
   主题切换水滴扩散与收缩圆形遮罩 (View Transition API)
    动画完全由 CSS @keyframes 驱动（坐标/半径经 CSS 变量由 JS 预先写入），
    在伪元素树构建的首帧即生效，规避 transition.ready + WAAPI 的 JS 时序
