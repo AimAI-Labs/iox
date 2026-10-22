@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { User, Copy, Check, ChevronDown } from 'lucide-react';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 /* ─────────────────────────────────────────────────────────
  * BUI 用户气泡 (beautifului.dev Chat)
  * 右对齐软块 — rounded-xl bg-field，无多余装饰
+ * 超长内容按高度折叠，展开按钮始终位于可视区域内
  * ───────────────────────────────────────────────────────── */
 
 export interface UserBubbleProps {
@@ -14,6 +15,9 @@ export interface UserBubbleProps {
   isInitialContext?: boolean;
   className?: string;
 }
+
+/** 折叠时展示约 4 行（12.5px × 1.5 ≈ 18.75px/行） */
+const COLLAPSED_MAX_HEIGHT = 75;
 
 export const UserBubble: React.FC<UserBubbleProps> = ({
   content,
@@ -23,12 +27,30 @@ export const UserBubble: React.FC<UserBubbleProps> = ({
   const { t } = useTranslation();
   const { copied, copy } = useCopyFeedback(2000);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // 切换会话导致内容变化时，回到折叠态
+  useLayoutEffect(() => {
+    setIsExpanded(false);
+  }, [content]);
+
+  // 按真实渲染高度判断是否需要折叠，避免按字符数误伤短文本
+  useLayoutEffect(() => {
+    const element = contentRef.current;
+    if (!element || isExpanded) return;
+
+    const measure = () => {
+      setIsOverflowing(element.scrollHeight - element.clientHeight > 1);
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [content, isExpanded]);
 
   if (!content) return null;
-
-  const isLong = content.length > 200;
-  const displayContent =
-    isLong && !isExpanded ? content.slice(0, 180) + '...' : content;
 
   return (
     <div
@@ -37,7 +59,7 @@ export const UserBubble: React.FC<UserBubbleProps> = ({
         className
       )}
     >
-      <div className="flex max-w-full flex-col items-end gap-1">
+      <div className="flex min-w-0 max-w-full flex-col items-end gap-1">
         {/* 身份标识 — 仅初始选中文本展示 */}
         {isInitialContext && (
           <div className="flex items-center gap-1.5 px-1 text-[11px] text-ink-3 select-none">
@@ -48,26 +70,37 @@ export const UserBubble: React.FC<UserBubbleProps> = ({
 
         {/* 气泡本体 */}
         <div
-          className="max-w-full rounded-2xl bg-zinc-200/70 dark:bg-zinc-800/80 px-3.5 py-2 text-[12.5px] leading-[1.5] text-zinc-800 dark:text-zinc-200 break-words whitespace-pre-wrap border border-zinc-200/50 dark:border-zinc-700/50 shadow-2xs"
+          className="max-w-full rounded-2xl bg-zinc-200/70 dark:bg-zinc-800/80 px-3.5 py-2 text-[12.5px] leading-[1.5] text-zinc-800 dark:text-zinc-200 break-words [overflow-wrap:anywhere] whitespace-pre-wrap border border-zinc-200/50 dark:border-zinc-700/50 shadow-2xs"
           style={{
             animation: 'fade-up 300ms cubic-bezier(0.23, 1, 0.32, 1) both',
           }}
         >
-          <span>{displayContent}</span>
+          <div
+            ref={contentRef}
+            className={cn('relative', !isExpanded && 'overflow-hidden')}
+            style={!isExpanded ? { maxHeight: COLLAPSED_MAX_HEIGHT } : undefined}
+          >
+            {content}
 
-          {/* 长文本展开/收起 */}
-          {isLong && (
+            {/* 底部渐隐遮罩，提示内容被折叠 */}
+            {!isExpanded && isOverflowing && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-gradient-to-t from-zinc-200/95 via-zinc-200/70 to-transparent dark:from-zinc-800/95 dark:via-zinc-800/70" />
+            )}
+          </div>
+
+          {/* 展开/收起 — 固定在折叠区域外部，始终可见 */}
+          {isOverflowing && (
             <button
               type="button"
               onClick={() => setIsExpanded((prev) => !prev)}
-              className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors cursor-pointer select-none"
+              className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-lg py-1 text-[11px] font-medium text-zinc-500 transition-colors duration-150 hover:bg-zinc-300/40 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-700/50 dark:hover:text-zinc-100 cursor-pointer select-none"
             >
-              <span>{isExpanded ? t('card.collapseThinking') : t('card.expandThinking')}</span>
+              <span>{isExpanded ? t('card.collapseText') : t('card.expandText')}</span>
               <ChevronDown
-                size={10}
+                size={11}
                 className={cn(
                   'transition-transform duration-200',
-                  isExpanded ? 'rotate-180' : ''
+                  isExpanded && 'rotate-180'
                 )}
               />
             </button>

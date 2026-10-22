@@ -62,6 +62,8 @@ export const zh = {
     speedToken: '{speed} tok/s',
     tokenUsage: '{total} tokens',
     copyMessage: '复制消息',
+    expandText: '展开全文',
+    collapseText: '收起',
     regenerate: '重新生成',
     quoteSelection: '划词引用',
     deleteMessage: '删除此消息',

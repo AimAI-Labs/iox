@@ -4,6 +4,14 @@ import { listen } from '@tauri-apps/api/event';
 import { ActionConfig, AppConfig } from '@/types/config';
 import { OverlayMode } from '@/state/overlayReducer';
 import { formatQuoteText } from '@/lib/formatQuote';
+import {
+  FOLLOW_UP_MARKER,
+  buildHistoryContext,
+  createFollowUpChunk,
+  splitTranscript,
+  splitTurnChunk,
+  stripInternalMarkers,
+} from '@/lib/chatTranscript';
 
 interface StreamTokenPayload {
   actionId: string;
@@ -345,14 +353,13 @@ export function useActionStream({
         return;
       }
 
-      onSetStreamText(streamText + `\n\n---\n**追问：** ${followUpPrompt}\n\n`);
+      onSetStreamText(streamText + createFollowUpChunk(followUpPrompt));
       onSetLoading(true);
       onSetError(null);
 
       // 根据配置截取最近 N 轮历史对话
       const maxTurns = config?.apiCard?.contextTurns ?? 5;
-      const historyParts = streamText.split(/\n\n---\n\*\*追问：\*\*\s*/);
-      const recentHistory = historyParts.slice(-maxTurns).join('\n\n---\n**追问：** ');
+      const recentHistory = buildHistoryContext(streamText, maxTurns);
 
       const followUpCombined = selectedText
         ? `原始选中文本：\n${selectedText}\n\n前序对话：\n${recentHistory}\n\n最新追问：\n${followUpPrompt}`
@@ -433,7 +440,7 @@ export function useActionStream({
 
     const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported();
 
-    const parts = streamText.split(/\n\n---\n\*\*追问：\*\*\s*/);
+    const parts = splitTranscript(streamText);
     if (parts.length <= 1) {
       // 第一轮回答重新生成
       onSetStreamText('');
@@ -453,17 +460,16 @@ export function useActionStream({
     } else {
       // 多轮追问：保留前 N-1 轮历史，仅重置最新一轮
       const lastPart = parts[parts.length - 1];
-      const firstNewline = lastPart.indexOf('\n\n');
-      const latestPrompt =
-        firstNewline === -1 ? lastPart.trim() : lastPart.slice(0, firstNewline).trim();
+      const { prompt: latestPrompt } = splitTurnChunk(lastPart);
 
       const precedingParts = parts.slice(0, -1);
       const maxTurns = config?.apiCard?.contextTurns ?? 5;
-      const recentHistory = precedingParts.slice(-maxTurns).join('\n\n---\n**追问：** ');
+      const recentHistory = stripInternalMarkers(
+        precedingParts.slice(-maxTurns).join(FOLLOW_UP_MARKER)
+      );
 
       // 重置 streamText 为去掉最新轮 assistant 内容的状态
-      const baseStreamText =
-        precedingParts.join('\n\n---\n**追问：** ') + `\n\n---\n**追问：** ${latestPrompt}\n\n`;
+      const baseStreamText = precedingParts.join(FOLLOW_UP_MARKER) + createFollowUpChunk(latestPrompt);
       onSetStreamText(baseStreamText);
 
       const followUpCombined = selectedText
@@ -520,7 +526,7 @@ export function useActionStream({
     if (selectedText) {
       md += `### 原始选中文本\n> ${selectedText.replace(/\n/g, '\n> ')}\n\n---\n\n`;
     }
-    md += `### 对话内容\n\n${streamText}\n`;
+    md += `### 对话内容\n\n${stripInternalMarkers(streamText)}\n`;
 
     try {
       await navigator.clipboard.writeText(md);

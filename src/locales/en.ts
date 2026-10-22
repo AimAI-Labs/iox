@@ -64,6 +64,8 @@ export const en: TranslationTree = {
     speedToken: '{speed} tok/s',
     tokenUsage: '{total} tokens',
     copyMessage: 'Copy Message',
+    expandText: 'Show more',
+    collapseText: 'Show less',
     regenerate: 'Regenerate',
     quoteSelection: 'Quote Selection',
     deleteMessage: 'Delete Message',

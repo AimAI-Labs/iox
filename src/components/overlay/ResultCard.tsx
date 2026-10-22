@@ -20,6 +20,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { AlertCircle, RotateCcw, Copy, Check, Brain, FileText, Wand2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { parseThinkingAndMain } from '@/lib/thinkingParser';
+import { splitTranscript, splitTurnChunk } from '@/lib/chatTranscript';
 
 /* ─────────────────────────────────────────────────────────
  * 流式结果卡片 (参考千问桌面端布局)
@@ -517,7 +518,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   // 结构化多轮对话气泡流 (Conversation Turns)
   const conversationTurns = useMemo(() => {
-    const parts = streamText.split(/\n\n---\n\*\*追问：\*\*\s*/);
+    const parts = splitTranscript(streamText);
     if (parts.length <= 1) {
       return [
         {
@@ -536,18 +537,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           rawAssistantText: part,
         };
       }
-      const firstNewline = part.indexOf('\n\n');
-      if (firstNewline === -1) {
-        return {
-          id: `turn-${index}`,
-          userPrompt: part.trim(),
-          rawAssistantText: '',
-        };
-      }
+
+      const { prompt, answer } = splitTurnChunk(part);
       return {
         id: `turn-${index}`,
-        userPrompt: part.slice(0, firstNewline).trim(),
-        rawAssistantText: part.slice(firstNewline + 2),
+        userPrompt: prompt,
+        rawAssistantText: answer,
       };
     });
   }, [streamText]);
