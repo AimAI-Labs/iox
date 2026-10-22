@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Copy,
   FileText,
@@ -63,6 +64,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 }) => {
   const { t, resolvedLanguage } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: x, top: y });
+  const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
+  const [resizeTick, setResizeTick] = useState(0);
 
   // 点击外部收起与按键监听
   useEffect(() => {
@@ -88,29 +92,78 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     };
   }, [visible, onClose]);
 
+  // 窗口尺寸变化时重新测量
+  useEffect(() => {
+    if (!visible) return;
+    const handleResize = () => setResizeTick((tick) => tick + 1);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [visible]);
+
+  // 按真实内容高度定位，底部空间不足时整体上移；仍放不下则限高滚动
+  useLayoutEffect(() => {
+    if (!visible) return;
+    const element = menuRef.current;
+    if (!element) return;
+
+    const margin = 8;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    // 测量时临时解除上一轮的最大高度限制
+    const previousMaxHeight = element.style.maxHeight;
+    element.style.maxHeight = 'none';
+    const naturalHeight = element.offsetHeight;
+    const width = element.offsetWidth;
+    element.style.maxHeight = previousMaxHeight;
+
+    const availableHeight = Math.max(120, viewportHeight - margin * 2);
+    const height = Math.min(naturalHeight, availableHeight);
+
+    const left = Math.round(
+      Math.min(Math.max(margin, x), Math.max(margin, viewportWidth - width - margin))
+    );
+    const top = Math.round(
+      Math.min(Math.max(margin, y), Math.max(margin, viewportHeight - height - margin))
+    );
+
+    const nextMaxHeight = naturalHeight > availableHeight ? availableHeight : undefined;
+    setPosition((previous) =>
+      previous.left === left && previous.top === top ? previous : { left, top }
+    );
+    setMaxHeight((previous) => (previous === nextMaxHeight ? previous : nextMaxHeight));
+  }, [
+    visible,
+    x,
+    y,
+    resizeTick,
+    hasSelectionText,
+    hasAnswerText,
+    isPinned,
+    isMaximized,
+    Boolean(onResetSize),
+    Boolean(onThemeChange),
+    resolvedLanguage,
+  ]);
+
   if (!visible) return null;
-
-  // 视口边界防溢出计算
-  const menuWidth = 220;
-  const menuHeight = 320;
-  const screenW = window.innerWidth || 600;
-  const screenH = window.innerHeight || 900;
-
-  const posX = x + menuWidth > screenW ? Math.max(8, screenW - menuWidth - 8) : x;
-  const posY = y + menuHeight > screenH ? Math.max(8, screenH - menuHeight - 8) : y;
 
   const handleItemClick = (action?: () => void) => {
     onClose();
     action?.();
   };
 
-  return (
+  const menu = (
     <div
       ref={menuRef}
-      style={{ left: `${posX}px`, top: `${posY}px` }}
+      style={{
+        left: `${position.left}px`,
+        top: `${position.top}px`,
+        maxHeight,
+      }}
       onMouseDown={(e) => e.stopPropagation()}
       className={cn(
-        'fixed z-100 flex flex-col w-56 rounded-2xl p-1.5 select-none',
+        'fixed z-[100] flex w-56 flex-col overflow-y-auto rounded-2xl p-1.5 select-none custom-scrollbar',
         'bg-white/85 dark:bg-[#18181b]/90 text-zinc-800 dark:text-zinc-200',
         'border border-black/10 dark:border-white/10 shadow-2xl backdrop-blur-3xl',
         'ring-1 ring-black/5 dark:ring-white/5',
@@ -317,4 +370,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       </button>
     </div>
   );
+
+  // 挂到 body，避免被卡片的 overflow-hidden / 圆角裁切
+  return createPortal(menu, document.body);
 };
