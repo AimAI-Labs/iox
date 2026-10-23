@@ -208,6 +208,7 @@ export function App() {
               onModelChange={overlayState.handleModelChange}
               onThinkingModeChange={overlayState.handleThinkingModeChange}
               onSendFollowUp={overlayState.handleSendFollowUp}
+              onEditMessage={overlayState.handleEditMessage}
               onRegenerateCurrentTurn={overlayState.handleRegenerateCurrentTurn}
               onNewChat={overlayState.handleNewChat}
               onRestoreSession={overlayState.handleRestoreSession}

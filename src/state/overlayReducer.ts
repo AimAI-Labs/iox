@@ -65,6 +65,7 @@ export type OverlayAction =
   | { type: 'STREAM_DONE' }
   | { type: 'STREAM_ERROR'; error: string }
   | { type: 'SET_STREAM_TEXT'; text: string }
+  | { type: 'SET_SELECTED_TEXT'; text: string }
   | { type: 'SET_LOADING'; isLoading: boolean }
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'SET_MODEL'; model: string }
@@ -188,6 +189,9 @@ export function overlayReducer(state: OverlayState, action: OverlayAction): Over
         ...state,
         isLoading: action.isLoading,
       };
+
+    case 'SET_SELECTED_TEXT':
+      return { ...state, selectedText: action.text };
 
     case 'SET_ERROR':
       return {

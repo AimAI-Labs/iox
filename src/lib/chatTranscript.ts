@@ -70,6 +70,12 @@ export function buildHistoryContext(streamText: string, maxTurns: number): strin
   return stripInternalMarkers(parts.slice(-maxTurns).join(FOLLOW_UP_MARKER));
 }
 
+/** 只使用调用方传入的历史，避免编辑重发时混入被替换轮次及后续内容。 */
+export function buildFollowUpPrompt(history: string, selectedText: string, prompt: string): string {
+  const selection = selectedText ? `原始选中文本：\n${selectedText}\n\n` : '';
+  return `${selection}前序对话：\n${history}\n\n最新追问：\n${prompt}`;
+}
+
 export interface ContextUsage {
   estimatedTokens: number;
   usedTurns: number;

@@ -51,6 +51,7 @@ export interface ResultCardProps {
   onModelChange: (model: string) => void;
   onThinkingModeChange?: (mode: ThinkingMode) => void;
   onSendFollowUp: (prompt: string) => void;
+  onEditMessage?: (turnIndex: number, prompt: string) => Promise<boolean>;
   onRegenerateCurrentTurn?: () => void;
   onNewChat?: () => void;
   onRestoreSession?: (text: string, model?: string, providerId?: string) => void;
@@ -133,6 +134,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   onModelChange,
   onThinkingModeChange,
   onSendFollowUp,
+  onEditMessage,
   onRegenerateCurrentTurn,
   onNewChat,
   onRestoreSession,
@@ -149,6 +151,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   const { copied, copy } = useCopyFeedback(2000);
   const [followUpInput, setFollowUpInput] = useState(initialInput || '');
+  const [editingTurnIndex, setEditingTurnIndex] = useState<number | null>(null);
   const contextUsage = useMemo(
     () => getContextUsage(streamText, selectedText, followUpInput, apiCard?.contextTurns ?? 5),
     [streamText, selectedText, followUpInput, apiCard?.contextTurns]
@@ -589,6 +592,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   useEffect(() => {
     setActiveLinkTurnId(null);
+    setEditingTurnIndex(null);
   }, [activeTabId]);
 
   // 监听请求起止以计算总耗时并快照记录本轮的模型与耗时
@@ -682,6 +686,18 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     setIsThinkingOpen((prev) => !prev);
   };
 
+  const handleEditSubmit = async (turnIndex: number, prompt: string) => {
+    if (!onEditMessage || isLoading || !prompt.trim() || !selectedModel.trim()) return;
+    setTurnSnapshots((prev) => Object.fromEntries(
+      Object.entries(prev).filter(([id]) => Number(id.slice(5)) < turnIndex)
+    ));
+    setTotalDuration(undefined);
+    requestStartTimeRef.current = null;
+    setActiveLinkTurnId(null);
+    isAutoScrollRef.current = true;
+    if (await onEditMessage(turnIndex, prompt)) setEditingTurnIndex(null);
+  };
+
   return (
     <div
       onContextMenu={(e) => e.preventDefault()}
@@ -753,7 +769,16 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         >
         {/* 初始用户选中文本气泡 (如果存在) */}
         {selectedText && (
-          <UserBubble content={selectedText} isInitialContext={true} />
+          <UserBubble
+            content={selectedText}
+            isInitialContext={true}
+            isEditing={editingTurnIndex === 0}
+            editDisabled={isLoading}
+            sendKeyShortcut={apiCard?.sendKeyShortcut}
+            onStartEdit={onEditMessage ? () => setEditingTurnIndex(0) : undefined}
+            onCancelEdit={() => setEditingTurnIndex(null)}
+            onSubmitEdit={(prompt) => { void handleEditSubmit(0, prompt); }}
+          />
         )}
 
         {!streamText && !isLoading && !error ? (
@@ -838,7 +863,15 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 <div key={turn.id} className="flex flex-col gap-1.5">
                   {/* 用户追问气泡 */}
                   {turn.userPrompt && (
-                    <UserBubble content={turn.userPrompt} />
+                    <UserBubble
+                      content={turn.userPrompt}
+                      isEditing={editingTurnIndex === index}
+                      editDisabled={isLoading}
+                      sendKeyShortcut={apiCard?.sendKeyShortcut}
+                      onStartEdit={onEditMessage ? () => setEditingTurnIndex(index) : undefined}
+                      onCancelEdit={() => setEditingTurnIndex(null)}
+                      onSubmitEdit={(prompt) => { void handleEditSubmit(index, prompt); }}
+                    />
                   )}
 
                   {/* BUI Section 轮次块 */}

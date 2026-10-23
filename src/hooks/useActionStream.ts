@@ -7,6 +7,7 @@ import { formatQuoteText } from '@/lib/formatQuote';
 import {
   FOLLOW_UP_MARKER,
   buildHistoryContext,
+  buildFollowUpPrompt,
   createFollowUpChunk,
   splitTranscript,
   splitTurnChunk,
@@ -35,6 +36,7 @@ interface UseActionStreamProps {
   activeAction: ActionConfig | null;
   selectedModel: string;
   streamText: string;
+  isLoading: boolean;
   isPinned: boolean;
   thinkingMode: ThinkingMode;
   onStartAction: (action: ActionConfig, model?: string) => void;
@@ -44,6 +46,7 @@ interface UseActionStreamProps {
   onStreamDone: () => void;
   onStreamError: (error: string) => void;
   onSetStreamText: (text: string) => void;
+  onSetSelectedText: (text: string) => void;
   onSetLoading: (loading: boolean) => void;
   onSetError: (error: string | null) => void;
   onSetModel: (model: string) => void;
@@ -64,6 +67,7 @@ export function useActionStream({
   activeAction,
   selectedModel,
   streamText,
+  isLoading,
   isPinned,
   thinkingMode,
   onStartAction,
@@ -73,6 +77,7 @@ export function useActionStream({
   onStreamDone,
   onStreamError,
   onSetStreamText,
+  onSetSelectedText,
   onSetLoading,
   onSetError,
   onSetModel,
@@ -355,9 +360,7 @@ export function useActionStream({
       const maxTurns = config?.apiCard?.contextTurns ?? 5;
       const recentHistory = buildHistoryContext(streamText, maxTurns);
 
-      const followUpCombined = selectedText
-        ? `原始选中文本：\n${selectedText}\n\n前序对话：\n${recentHistory}\n\n最新追问：\n${followUpPrompt}`
-        : `前序对话：\n${recentHistory}\n\n最新追问：\n${followUpPrompt}`;
+      const followUpCombined = buildFollowUpPrompt(recentHistory, selectedText, followUpPrompt);
 
       const thinkingOptions = getThinkingOptions();
 
@@ -466,9 +469,7 @@ export function useActionStream({
       const baseStreamText = precedingParts.join(FOLLOW_UP_MARKER) + createFollowUpChunk(latestPrompt);
       onSetStreamText(baseStreamText);
 
-      const followUpCombined = selectedText
-        ? `原始选中文本：\n${selectedText}\n\n前序对话：\n${recentHistory}\n\n最新追问：\n${latestPrompt}`
-        : `前序对话：\n${recentHistory}\n\n最新追问：\n${latestPrompt}`;
+      const followUpCombined = buildFollowUpPrompt(recentHistory, selectedText, latestPrompt);
 
       try {
         await invoke('trigger_api_action', {
@@ -495,6 +496,41 @@ export function useActionStream({
     onSetLoading,
     onSetError,
   ]);
+
+  // 原位编辑：保留上方历史，替换当前问题并移除原回答及后续轮次。
+  const handleEditMessage = useCallback(async (turnIndex: number, prompt: string): Promise<boolean> => {
+    const editedPrompt = prompt.trim();
+    if (!activeAction || isLoading || !editedPrompt) return false;
+    const parts = splitTranscript(streamText);
+    if (!Number.isInteger(turnIndex) || turnIndex < 0 || turnIndex >= parts.length) return false;
+    if (turnIndex === 0 && !selectedText) return false;
+    if (!selectedModel.trim()) {
+      onSetError('⚠️ 当前未配置可用模型，请在下方切换服务商或前往设置添加模型。');
+      return false;
+    }
+
+    const precedingHistory = parts.slice(0, turnIndex).join(FOLLOW_UP_MARKER);
+    if (turnIndex === 0) onSetSelectedText(editedPrompt);
+    onSetStreamText(turnIndex === 0 ? '' : precedingHistory + createFollowUpChunk(editedPrompt));
+    onSetLoading(true);
+    onSetError(null);
+
+    const recentHistory = buildHistoryContext(precedingHistory, config?.apiCard?.contextTurns ?? 5);
+    try {
+      await invoke('trigger_api_action', {
+        actionId: activeAction.id,
+        text: turnIndex === 0 ? editedPrompt : buildFollowUpPrompt(recentHistory, selectedText, editedPrompt),
+        modelOverride: selectedModel,
+        promptOverride: turnIndex === 0 ? activeAction.promptTemplate : '{text}',
+        ...getThinkingOptions(),
+      });
+    } catch (err) {
+      onSetError(String(err));
+      onSetLoading(false);
+    }
+    return true;
+  }, [activeAction, isLoading, streamText, selectedText, selectedModel, config?.apiCard?.contextTurns,
+    onSetSelectedText, onSetStreamText, onSetLoading, onSetError, getThinkingOptions]);
 
   // 开启新会话 (彻底清空追问历史与选中文本，终止在途请求)
   const handleNewChat = useCallback(async () => {
@@ -556,6 +592,7 @@ export function useActionStream({
     handleTriggerActionWithoutText,
     handleTriggerQuoteAction,
     handleSendFollowUp,
+    handleEditMessage,
     handleProviderChange,
     handleModelChange,
     handleThinkingModeChange,
