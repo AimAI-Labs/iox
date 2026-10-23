@@ -427,9 +427,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const bodyRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
 
-  // 当前回答中的外链与右侧链接详情栏
-  const [answerLinks, setAnswerLinks] = useState<LinkInfo[]>([]);
-  const [isLinkPanelOpen, setIsLinkPanelOpen] = useState(false);
+  // 按回答轮次保存外链，详情栏只展示用户点击的那一轮
+  const [linksByTurn, setLinksByTurn] = useState<Record<string, LinkInfo[]>>({});
+  const [activeLinkTurnId, setActiveLinkTurnId] = useState<string | null>(null);
+  const answerLinks = activeLinkTurnId ? linksByTurn[activeLinkTurnId] || [] : [];
 
   // 监听划选文本以展示浮动引用胶囊 (带边缘安全夹紧防变形)
   const handleSelectionCheck = React.useCallback(() => {
@@ -560,17 +561,29 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     });
   }, [streamText]);
 
-  // 收集最新一轮回答中出现的所有外链
+  // 从各轮已渲染的正文独立收集外链，避免跨轮次混合
   useEffect(() => {
-    const root = bodyRef.current?.querySelector('[data-answer-markdown="true"]');
-    const next = root ? collectLinksFromRoot(root) : [];
-    setAnswerLinks((prev) => (linksEqual(prev, next) ? prev : next));
+    const next: Record<string, LinkInfo[]> = {};
+    bodyRef.current?.querySelectorAll<HTMLElement>('[data-answer-markdown]').forEach((root) => {
+      const turnId = root.dataset.answerMarkdown;
+      if (turnId) next[turnId] = collectLinksFromRoot(root);
+    });
+    setLinksByTurn((prev) =>
+      Object.keys(prev).length === Object.keys(next).length &&
+      Object.entries(next).every(([turnId, links]) => prev[turnId] && linksEqual(prev[turnId], links))
+        ? prev
+        : next
+    );
   }, [streamText, error, activeTabId]);
 
-  // 回答被清空或切换后收起链接详情栏
+  // 回答被清空或切换会话后收起链接详情栏
   useEffect(() => {
-    if (!answerLinks.length) setIsLinkPanelOpen(false);
+    if (!answerLinks.length) setActiveLinkTurnId(null);
   }, [answerLinks.length]);
+
+  useEffect(() => {
+    setActiveLinkTurnId(null);
+  }, [activeTabId]);
 
   // 监听请求起止以计算总耗时并快照记录本轮的模型与耗时
   useEffect(() => {
@@ -850,7 +863,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
                       {/* Markdown 正文 */}
                       {turnMain && (
-                        <div className="relative" data-answer-markdown={isLast ? 'true' : undefined}>
+                        <div className="relative" data-answer-markdown={turn.id}>
                           <MarkdownContent
                             content={turnMain}
                             codeBlockWrap={apiCard?.codeBlockWrap}
@@ -875,6 +888,13 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                           onRegenerate={handleRegenerate}
                         />
                       )}
+
+                      {(linksByTurn[turn.id]?.length ?? 0) > 0 && (
+                        <LinkDock
+                          links={linksByTurn[turn.id]}
+                          onOpen={() => setActiveLinkTurnId(turn.id)}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
@@ -894,11 +914,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           refreshKey={`${streamText.length}:${selectedText.length}:${activeTabId}`}
         />
       </div>
-
-      {/* 底部链接聚合入口 */}
-      {answerLinks.length > 0 && (
-        <LinkDock links={answerLinks} onOpen={() => setIsLinkPanelOpen(true)} />
-      )}
 
       {/* 3. 样图风格独立胶囊提问栏 */}
       <PromptBar
@@ -962,9 +977,9 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
       {/* 6. 回答链接详情栏 */}
       <LinkPanel
-        isOpen={isLinkPanelOpen}
+        isOpen={activeLinkTurnId !== null && answerLinks.length > 0}
         links={answerLinks}
-        onClose={() => setIsLinkPanelOpen(false)}
+        onClose={() => setActiveLinkTurnId(null)}
       />
 
       {/* 7. 多会话历史侧滑面板 */}

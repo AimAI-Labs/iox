@@ -30,7 +30,7 @@ export const LinkDock: React.FC<LinkDockProps> = ({ links, onOpen }) => {
   const extraCount = links.length - previews.length;
 
   return (
-    <div className="flex shrink-0 items-center px-3.5 pb-1 pt-0.5">
+    <div className="flex shrink-0 items-center pb-1 pt-0.5">
       <button
         type="button"
         onClick={onOpen}
