@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { parseThinkingAndMain } from '@/lib/thinkingParser';
 import { splitTranscript, splitTurnChunk } from '@/lib/chatTranscript';
 import { collectLinksFromRoot, linksEqual, type LinkInfo } from '@/lib/links';
+import type { ThinkingMode } from '@/lib/reasoning';
 
 /* ─────────────────────────────────────────────────────────
  * 流式结果卡片 (参考千问桌面端布局)
@@ -44,11 +45,11 @@ export interface ResultCardProps {
   error: string | null;
   apiCard?: ApiCardConfig;
   theme?: 'system' | 'dark' | 'light';
-  thinkingMode?: 'quick' | 'deep';
+  thinkingMode?: ThinkingMode;
   onThemeChange?: (theme: 'system' | 'dark' | 'light') => void;
   onProviderChange?: (providerId: string) => void;
   onModelChange: (model: string) => void;
-  onThinkingModeChange?: (mode: 'quick' | 'deep') => void;
+  onThinkingModeChange?: (mode: ThinkingMode) => void;
   onSendFollowUp: (prompt: string) => void;
   onRegenerateCurrentTurn?: () => void;
   onNewChat?: () => void;

@@ -3,7 +3,6 @@ import {
   ArrowUp,
   Square,
   Plus,
-  Zap,
   ChevronDown,
   Check,
   Brain,
@@ -21,6 +20,8 @@ import { ProviderConfig } from '@/types/config';
 import { DynamicIcon } from '@/components/Icons';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
+import { ReasoningControl } from '@/components/overlay/ReasoningControl';
+import { isDeepSeekProvider, type ThinkingMode } from '@/lib/reasoning';
 
 export interface ActionChip {
   label: string;
@@ -101,11 +102,11 @@ export interface PromptBarProps {
   selectedProviderId?: string;
   selectedModel?: string;
   availableModels?: string[];
-  thinkingMode?: 'quick' | 'deep';
+  thinkingMode?: ThinkingMode;
   sendKeyShortcut?: 'Enter' | 'Ctrl+Enter';
   onProviderChange?: (providerId: string) => void;
   onModelChange?: (model: string) => void;
-  onThinkingModeChange?: (mode: 'quick' | 'deep') => void;
+  onThinkingModeChange?: (mode: ThinkingMode) => void;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
   className?: string;
 }
@@ -258,11 +259,6 @@ export const PromptBar: React.FC<PromptBarProps> = ({
     if (isLoading || disabled) return;
     onChange(chip.prompt);
     textareaRef.current?.focus();
-  };
-
-  const toggleThinkingMode = () => {
-    const nextMode = thinkingMode === 'quick' ? 'deep' : 'quick';
-    onThinkingModeChange?.(nextMode);
   };
 
   const inputPlaceholder = placeholder || (isZh ? `向 ${title} 提问...` : `Ask ${title}...`);
@@ -544,30 +540,12 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               </div>
             )}
 
-            {/* 3. ⚡ 极速 / 🧠 深度思考 切换按钮 */}
-            <button
-              type="button"
-              onClick={toggleThinkingMode}
-              className={cn(
-                'flex size-6.5 items-center justify-center rounded-md transition-all duration-150 cursor-pointer border',
-                thinkingMode === 'deep'
-                  ? 'bg-purple-500/10 border-purple-500/30 text-purple-600 dark:text-purple-400 font-semibold shadow-xs'
-                  : 'bg-zinc-100/90 dark:bg-zinc-800/90 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100'
-              )}
-              aria-label={isZh ? '深度思考' : 'Reasoning'}
-              aria-pressed={thinkingMode === 'deep'}
-              title={
-                thinkingMode === 'deep'
-                  ? (isZh ? '当前模式: 深度思考 (点击切换为极速模式)' : 'Current mode: Reasoning (Click for Fast)')
-                  : (isZh ? '当前模式: 极速模式 (点击切换为深度思考)' : 'Current mode: Fast (Click for Reasoning)')
-              }
-            >
-              {thinkingMode === 'deep' ? (
-                <Brain size={14} className="shrink-0 text-purple-500" />
-              ) : (
-                <Zap size={14} className="shrink-0 text-amber-500 fill-amber-500" />
-              )}
-            </button>
+            <ReasoningControl
+              value={thinkingMode}
+              onChange={onThinkingModeChange}
+              supportsEffort={isDeepSeekProvider(currentProvider)}
+              isZh={isZh}
+            />
           </div>
 
           {/* 右侧操作组：圆形发送/停止按钮 */}

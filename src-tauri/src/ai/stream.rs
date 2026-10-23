@@ -6,6 +6,16 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio_util::sync::CancellationToken;
 
+/// DeepSeek 官方支持的推理强度；旧调用未指定时沿用 high。
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningEffort {
+    Low,
+    #[default]
+    High,
+    Max,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct ChatMessage {
     role: String,
@@ -29,7 +39,27 @@ struct ChatCompletionRequest {
     thinking: Option<ThinkingConfig>,
     /// DeepSeek 推理深度 ("low" | "high" | "max")
     #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_effort: Option<String>,
+    reasoning_effort: Option<ReasoningEffort>,
+}
+
+fn thinking_parameters(
+    is_deepseek: bool,
+    enabled: bool,
+    effort: Option<ReasoningEffort>,
+) -> (Option<ThinkingConfig>, Option<ReasoningEffort>) {
+    if !is_deepseek {
+        return (None, None);
+    }
+    (
+        Some(ThinkingConfig {
+            thinking_type: if enabled { "enabled" } else { "disabled" }.to_string(),
+        }),
+        if enabled {
+            Some(effort.unwrap_or_default())
+        } else {
+            None
+        },
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,6 +95,7 @@ pub async fn execute_stream_request(
     system_prompt: Option<String>,
     user_prompt: String,
     thinking_enabled: bool,
+    reasoning_effort: Option<ReasoningEffort>,
 ) {
     let cancel_token = CancellationToken::new();
     ai_manager
@@ -90,27 +121,15 @@ pub async fn execute_stream_request(
 
     let is_deepseek = provider.id.to_lowercase().contains("deepseek")
         || provider.base_url.to_lowercase().contains("deepseek");
+    let (thinking, reasoning_effort) =
+        thinking_parameters(is_deepseek, thinking_enabled, reasoning_effort);
 
     let request_body = ChatCompletionRequest {
         model,
         messages,
         stream: true,
-        thinking: if thinking_enabled {
-            Some(ThinkingConfig {
-                thinking_type: "enabled".to_string(),
-            })
-        } else if is_deepseek {
-            Some(ThinkingConfig {
-                thinking_type: "disabled".to_string(),
-            })
-        } else {
-            None
-        },
-        reasoning_effort: if thinking_enabled {
-            Some("high".to_string())
-        } else {
-            None
-        },
+        thinking,
+        reasoning_effort,
     };
 
     let client = reqwest::Client::builder()
@@ -131,12 +150,18 @@ pub async fn execute_stream_request(
     let endpoint = if provider.base_url.ends_with("/chat/completions") {
         provider.base_url.clone()
     } else {
-        format!("{}/chat/completions", provider.base_url.trim_end_matches('/'))
+        format!(
+            "{}/chat/completions",
+            provider.base_url.trim_end_matches('/')
+        )
     };
 
     let mut req = client.post(&endpoint).json(&request_body);
     if !provider.api_key.trim().is_empty() {
-        req = req.header("Authorization", format!("Bearer {}", provider.api_key.trim()));
+        req = req.header(
+            "Authorization",
+            format!("Bearer {}", provider.api_key.trim()),
+        );
     }
 
     let response = tokio::select! {
@@ -278,5 +303,66 @@ pub async fn execute_stream_request(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod reasoning_tests {
+    use super::*;
+
+    fn request_parameters(
+        is_deepseek: bool,
+        enabled: bool,
+        effort: Option<ReasoningEffort>,
+    ) -> serde_json::Value {
+        let (thinking, reasoning_effort) = thinking_parameters(is_deepseek, enabled, effort);
+        serde_json::to_value(ChatCompletionRequest {
+            model: "deepseek-flash".to_string(),
+            messages: vec![],
+            stream: true,
+            thinking,
+            reasoning_effort,
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn serializes_all_official_effort_levels() {
+        for (effort, expected) in [
+            (ReasoningEffort::Low, "low"),
+            (ReasoningEffort::High, "high"),
+            (ReasoningEffort::Max, "max"),
+        ] {
+            let request = request_parameters(true, true, Some(effort));
+            assert_eq!(request["thinking"]["type"], "enabled");
+            assert_eq!(request["reasoning_effort"], expected);
+        }
+    }
+
+    #[test]
+    fn legacy_calls_default_to_high() {
+        assert_eq!(
+            request_parameters(true, true, None)["reasoning_effort"],
+            "high"
+        );
+    }
+
+    #[test]
+    fn disabled_thinking_omits_effort() {
+        let request = request_parameters(true, false, Some(ReasoningEffort::Max));
+        assert_eq!(request["thinking"]["type"], "disabled");
+        assert!(request.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn other_providers_omit_deepseek_parameters() {
+        let request = request_parameters(false, true, Some(ReasoningEffort::Max));
+        assert!(request.get("thinking").is_none());
+        assert!(request.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn rejects_unknown_effort_values() {
+        assert!(serde_json::from_str::<ReasoningEffort>("\"medium\"").is_err());
     }
 }

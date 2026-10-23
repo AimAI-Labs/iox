@@ -151,6 +151,7 @@ fn trigger_api_action(
     model_override: Option<String>,
     prompt_override: Option<String>,
     thinking_enabled: Option<bool>,
+    reasoning_effort: Option<ai::stream::ReasoningEffort>,
 ) -> Result<(), String> {
     let (provider, model, prompt_template) = {
         let config = state.config.lock().unwrap();
@@ -196,6 +197,7 @@ fn trigger_api_action(
             None,
             user_prompt,
             thinking_enabled.unwrap_or(false),
+            reasoning_effort,
         )
         .await;
     });

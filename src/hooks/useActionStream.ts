@@ -12,6 +12,7 @@ import {
   splitTurnChunk,
   stripInternalMarkers,
 } from '@/lib/chatTranscript';
+import { getThinkingRequestOptions, type ThinkingMode } from '@/lib/reasoning';
 
 interface StreamTokenPayload {
   actionId: string;
@@ -35,7 +36,7 @@ interface UseActionStreamProps {
   selectedModel: string;
   streamText: string;
   isPinned: boolean;
-  thinkingMode: 'quick' | 'deep';
+  thinkingMode: ThinkingMode;
   onStartAction: (action: ActionConfig, model?: string) => void;
   onStartEmptyAction?: (action: ActionConfig, model?: string) => void;
   onStartQuoteAction?: (action: ActionConfig, initialInput: string, model?: string) => void;
@@ -47,7 +48,7 @@ interface UseActionStreamProps {
   onSetError: (error: string | null) => void;
   onSetModel: (model: string) => void;
   onSetProvider: (providerId: string, defaultModel: string) => void;
-  onSetThinkingMode: (mode: 'quick' | 'deep') => void;
+  onSetThinkingMode: (mode: ThinkingMode) => void;
   onNewChat?: () => void;
   updateWindowSize: (
     mode: OverlayMode,
@@ -129,19 +130,12 @@ export function useActionStream({
     };
   }, []);
 
-  // 判断当前供应商是否支持 API 级深度思考（目前适配 DeepSeek 及其兼容端点）
-  const isThinkingApiSupported = useCallback(
-    (providerId?: string) => {
-      const pid = providerId || activeAction?.providerId;
-      if (!pid || !config?.providers) return false;
-      const provider = config.providers.find((p) => p.id === pid);
-      if (!provider) return false;
-      return (
-        provider.id.toLowerCase().includes('deepseek') ||
-        provider.baseUrl.toLowerCase().includes('deepseek')
-      );
-    },
-    [activeAction?.providerId, config?.providers]
+  const getThinkingOptions = useCallback(
+    (providerId?: string) => getThinkingRequestOptions(
+      thinkingMode,
+      config?.providers.find((provider) => provider.id === (providerId || activeAction?.providerId))
+    ),
+    [thinkingMode, config?.providers, activeAction?.providerId]
   );
 
   // 触发动作
@@ -200,7 +194,7 @@ export function useActionStream({
         return;
       }
 
-      const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported(action.providerId);
+      const thinkingOptions = getThinkingOptions(action.providerId);
 
       try {
         await invoke('trigger_api_action', {
@@ -208,7 +202,7 @@ export function useActionStream({
           text: selectedText,
           modelOverride: defaultModel,
           promptOverride: action.promptTemplate,
-          thinkingEnabled: useThinkingApi,
+          ...thinkingOptions,
         });
       } catch (err) {
         onSetError(String(err));
@@ -220,7 +214,7 @@ export function useActionStream({
       selectedText,
       isPinned,
       thinkingMode,
-      isThinkingApiSupported,
+      getThinkingOptions,
       executeGracefulHide,
       updateWindowSize,
       onStartAction,
@@ -365,7 +359,7 @@ export function useActionStream({
         ? `原始选中文本：\n${selectedText}\n\n前序对话：\n${recentHistory}\n\n最新追问：\n${followUpPrompt}`
         : `前序对话：\n${recentHistory}\n\n最新追问：\n${followUpPrompt}`;
 
-      const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported();
+      const thinkingOptions = getThinkingOptions();
 
       try {
         await invoke('trigger_api_action', {
@@ -373,7 +367,7 @@ export function useActionStream({
           text: followUpCombined,
           modelOverride: selectedModel,
           promptOverride: '{text}',
-          thinkingEnabled: useThinkingApi,
+          ...thinkingOptions,
         });
       } catch (err) {
         onSetError(String(err));
@@ -387,7 +381,7 @@ export function useActionStream({
       selectedText,
       selectedModel,
       thinkingMode,
-      isThinkingApiSupported,
+      getThinkingOptions,
       onSetStreamText,
       onSetLoading,
       onSetError,
@@ -421,7 +415,7 @@ export function useActionStream({
 
   // 切换思考模式
   const handleThinkingModeChange = useCallback(
-    (mode: 'quick' | 'deep') => {
+    (mode: ThinkingMode) => {
       onSetThinkingMode(mode);
     },
     [onSetThinkingMode]
@@ -440,7 +434,7 @@ export function useActionStream({
     onSetLoading(true);
     onSetError(null);
 
-    const useThinkingApi = thinkingMode === 'deep' && isThinkingApiSupported();
+    const thinkingOptions = getThinkingOptions();
 
     const parts = splitTranscript(streamText);
     if (parts.length <= 1) {
@@ -453,7 +447,7 @@ export function useActionStream({
           text: selectedText,
           modelOverride: selectedModel,
           promptOverride: activeAction.promptTemplate,
-          thinkingEnabled: useThinkingApi,
+          ...thinkingOptions,
         });
       } catch (err) {
         onSetError(String(err));
@@ -484,7 +478,7 @@ export function useActionStream({
           text: followUpCombined,
           modelOverride: selectedModel,
           promptOverride: '{text}',
-          thinkingEnabled: useThinkingApi,
+          ...thinkingOptions,
         });
       } catch (err) {
         onSetError(String(err));
@@ -497,7 +491,7 @@ export function useActionStream({
     selectedText,
     selectedModel,
     thinkingMode,
-    isThinkingApiSupported,
+    getThinkingOptions,
     config?.apiCard?.contextTurns,
     onSetStreamText,
     onSetLoading,

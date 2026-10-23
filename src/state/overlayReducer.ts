@@ -1,5 +1,6 @@
 import { ActionConfig } from '@/types/config';
 import type { FileMenuLayout } from '@/lib/file-drop';
+import type { ThinkingMode } from '@/lib/reasoning';
 
 export type OverlayMode = 'bubble' | 'card';
 
@@ -18,7 +19,7 @@ export interface OverlayState {
   error: string | null;
   isClosing: boolean;
   animKey: number;
-  thinkingMode: 'quick' | 'deep';
+  thinkingMode: ThinkingMode;
   currentSessionId: string | null;
   initialInput?: string;
 }
@@ -68,7 +69,7 @@ export type OverlayAction =
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'SET_MODEL'; model: string }
   | { type: 'SET_PROVIDER'; providerId: string; defaultModel: string }
-  | { type: 'SET_THINKING_MODE'; mode: 'quick' | 'deep' }
+  | { type: 'SET_THINKING_MODE'; mode: ThinkingMode }
   | { type: 'SET_CURRENT_SESSION_ID'; sessionId: string | null }
   | { type: 'SET_PINNED'; isPinned: boolean }
   | { type: 'SET_CLOSING'; isClosing: boolean }
