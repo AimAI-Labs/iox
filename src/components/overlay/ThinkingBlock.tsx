@@ -170,7 +170,10 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
 
             <div ref={traceRef} className="group/trace relative flex flex-col gap-1 py-1">
               {/* 推理正文 */}
-              <div className="max-h-60 overflow-y-auto pr-1 text-[12.5px] leading-relaxed text-ink-2 whitespace-pre-wrap break-words select-text custom-scrollbar">
+              <div
+                data-thinking-content={isThinking ? 'true' : undefined}
+                className="max-h-60 overflow-y-auto pr-1 text-[12.5px] leading-relaxed text-ink-2 whitespace-pre-wrap break-words select-text custom-scrollbar"
+              >
                 {thinkingText || (resolvedLanguage === 'zh' ? 'AI 正在深入拆解问题与逻辑推理中...' : 'AI is reasoning and analyzing the problem...')}
                 <StreamingCursor active={isThinking} className="text-ink-2" />
               </div>

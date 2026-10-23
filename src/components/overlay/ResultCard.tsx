@@ -635,18 +635,26 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     prevThinkingRef.current = isThinking;
   }, [isThinking, apiCard?.thinkingDefaultOpen, apiCard?.autoCollapseThinkingOnDone]);
 
-  // 智能自动滚屏
+  // 每轮回答默认跟随最新内容，滚轮操作只暂停当前这一轮。
   useEffect(() => {
-    if (bodyRef.current && isAutoScrollRef.current && isLoading) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    }
-  }, [streamText, isLoading, thinkingText, isThinkingOpen]);
+    if (isLoading) isAutoScrollRef.current = true;
+  }, [isLoading]);
 
-  const handleScroll = () => {
-    if (!bodyRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = bodyRef.current;
-    // 如果用户距离底部超过 40px，则暂停自动滚动
-    isAutoScrollRef.current = scrollHeight - (scrollTop + clientHeight) < 40;
+  useEffect(() => {
+    if (!isLoading) return;
+    // 等本帧正文、链接条等布局完成，再把最新生成的位置带入视野。
+    const frame = requestAnimationFrame(() => {
+      if (bodyRef.current && isAutoScrollRef.current) {
+        const thinkingContent = bodyRef.current.querySelector<HTMLElement>('[data-thinking-content="true"]');
+        if (thinkingContent) thinkingContent.scrollTop = thinkingContent.scrollHeight;
+        bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [streamText, isLoading, thinkingText, isThinkingOpen, linksByTurn]);
+
+  const handleWheel = (event: React.WheelEvent) => {
+    if (event.deltaX || event.deltaY) isAutoScrollRef.current = false;
   };
 
   const handleFollowUpSubmit = (prompt: string) => {
@@ -732,7 +740,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         <div
           ref={bodyRef}
           onContextMenu={handleContextMenu}
-          onScroll={handleScroll}
+          onWheelCapture={handleWheel}
           onMouseUp={handleSelectionCheck}
           onKeyUp={handleSelectionCheck}
           style={{ fontSize: `${apiCard?.fontSize || 13}px` }}
