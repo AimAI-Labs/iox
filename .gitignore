@@ -28,3 +28,7 @@ docs/
 Requirements.md
 
 .codegraph
+
+# AI agent local state (do not commit)
+.agents/
+.claude/
