@@ -125,8 +125,8 @@
     --success: #10b981;
     --danger: #ef4444;
 
-    /* 代码字体：与 VS Code Windows 默认编辑器字体保持一致 */
-    --font-code: Consolas, "Courier New", Menlo, Monaco, "Droid Sans Mono", monospace;
+    /* 优先使用开发字体，未加载时回退到各系统的等宽字体。 */
+    --font-code: "JetBrains Mono", "Cascadia Code", "Cascadia Mono", Consolas, "SFMono-Regular", Menlo, Monaco, "Liberation Mono", "Courier New", monospace;
 
     /* ── BUI (beautifului.dev) 设计令牌 ─────────────────── */
     --ink: #1f1e1c;
@@ -926,6 +926,13 @@
   font-variant-ligatures: none;
 }
 
+/* 高亮 token、行号等子元素也必须使用等宽字体，覆盖全局 * 字体规则。 */
+.md-code-block-scroll *,
+.markdown-body .md-pre *,
+.markdown-body .md-inline-code * {
+  font-family: var(--font-code);
+}
+
 /* 分隔线 / 图片 / 键盘按键 */
 .markdown-body hr {
   height: 1px;
@@ -1073,21 +1080,26 @@
 
 .md-code-block-scroll {
   background: #282c34;
-  color: #abb2bf;
+  color: #d4dae5;
   font-family: var(--font-code);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.7;
+  letter-spacing: 0;
+  tab-size: 4;
   font-variant-ligatures: none;
   scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
 
 .md-code-block-line {
   display: flex;
-  min-height: 1.6em;
+  min-height: 1.7em;
 }
 
 .md-code-block-gutter {
-  color: rgba(171, 178, 191, 0.32);
+  color: #7f8999;
+  font-size: 12px;
+  line-height: calc(13px * 1.7);
 }
 
 .md-code-block ::selection {
@@ -1097,30 +1109,30 @@
 /* One Dark 语法配色 */
 .md-code-block .hljs-comment,
 .md-code-block .hljs-quote {
-  color: #5c6370;
-  font-style: italic;
+  color: #939dad;
+  font-style: normal;
 }
 .md-code-block .hljs-doctag,
 .md-code-block .hljs-keyword,
 .md-code-block .hljs-formula {
-  color: #c678dd;
+  color: #d6a2ed;
 }
 .md-code-block .hljs-section,
 .md-code-block .hljs-name,
 .md-code-block .hljs-selector-tag,
 .md-code-block .hljs-deletion,
 .md-code-block .hljs-subst {
-  color: #e06c75;
+  color: #ef9a9a;
 }
 .md-code-block .hljs-literal {
-  color: #56b6c2;
+  color: #7dcad4;
 }
 .md-code-block .hljs-string,
 .md-code-block .hljs-regexp,
 .md-code-block .hljs-addition,
 .md-code-block .hljs-attribute,
 .md-code-block .hljs-meta .hljs-string {
-  color: #98c379;
+  color: #afcf98;
 }
 .md-code-block .hljs-attr,
 .md-code-block .hljs-variable,
@@ -1130,7 +1142,7 @@
 .md-code-block .hljs-selector-attr,
 .md-code-block .hljs-selector-pseudo,
 .md-code-block .hljs-number {
-  color: #d19a66;
+  color: #e2b587;
 }
 .md-code-block .hljs-symbol,
 .md-code-block .hljs-bullet,
@@ -1138,12 +1150,12 @@
 .md-code-block .hljs-meta,
 .md-code-block .hljs-selector-id,
 .md-code-block .hljs-title {
-  color: #61aeee;
+  color: #82b7f7;
 }
 .md-code-block .hljs-built_in,
 .md-code-block .hljs-title.class_,
 .md-code-block .hljs-class .hljs-title {
-  color: #e6c07b;
+  color: #e8cc99;
 }
 .md-code-block .hljs-emphasis {
   font-style: italic;
