@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ActionConfig, ProviderConfig, ApiCardConfig } from '@/types/config';
 import { CardHeader } from '@/components/overlay/CardHeader';
@@ -21,7 +21,7 @@ import { DynamicIcon } from '@/components/Icons';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { useChatSessions } from '@/hooks/useChatSessions';
 import { useTranslation } from '@/hooks/useTranslation';
-import { AlertCircle, RotateCcw, Copy, Check, Brain, FileText, Wand2, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowDown, RotateCcw, Copy, Check, Brain, FileText, Wand2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { parseThinkingAndMain } from '@/lib/thinkingParser';
 import { getContextUsage, splitTranscript, splitTurnChunk } from '@/lib/chatTranscript';
@@ -435,6 +435,24 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const update = () => {
+      setShowScrollToBottom(body.scrollHeight - body.scrollTop - body.clientHeight > 2);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(body);
+    Array.from(body.children).forEach((child) => observer.observe(child));
+    body.addEventListener('scroll', update, { passive: true });
+    return () => {
+      observer.disconnect();
+      body.removeEventListener('scroll', update);
+    };
+  });
 
   // 按回答轮次保存外链，详情栏只展示用户点击的那一轮
   const [linksByTurn, setLinksByTurn] = useState<Record<string, LinkInfo[]>>({});
@@ -666,6 +684,18 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     if (event.deltaX || event.deltaY) isAutoScrollRef.current = false;
   };
 
+  const handleScrollToBottom = () => {
+    const body = bodyRef.current;
+    if (!body) return;
+    isAutoScrollRef.current = true;
+    body.scrollTo({
+      top: body.scrollHeight,
+      behavior: isLoading || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth',
+    });
+  };
+
   const handleFollowUpSubmit = (prompt: string) => {
     if (!prompt.trim() || isLoading) return;
     const trimmed = prompt.trim();
@@ -763,7 +793,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           onMouseUp={handleSelectionCheck}
           onKeyUp={handleSelectionCheck}
           style={{ fontSize: `${apiCard?.fontSize || 13}px` }}
-          className="h-full overflow-y-auto px-3.5 pt-3 pb-2 text-ink select-text custom-scrollbar"
+          className="h-full overflow-y-auto px-3.5 pt-3 pb-12 text-ink select-text custom-scrollbar"
         >
         {/* 初始用户选中文本气泡 (如果存在) */}
         {selectedText && (
@@ -959,6 +989,15 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           scrollRef={bodyRef}
           refreshKey={`${streamText.length}:${selectedText.length}:${activeTabId}`}
         />
+        {showScrollToBottom && <button
+          type="button"
+          onClick={handleScrollToBottom}
+          title={isZh ? '回到底部' : 'Scroll to bottom'}
+          aria-label={isZh ? '回到底部' : 'Scroll to bottom'}
+          className="absolute bottom-3 right-4 z-20 flex size-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 shadow-md transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-100 cursor-pointer"
+        >
+          <ArrowDown size={16} strokeWidth={2} />
+        </button>}
       </div>
 
       {/* 3. 样图风格独立胶囊提问栏 */}
