@@ -28,6 +28,66 @@
   100% { opacity: 1; filter: blur(0); }
 }
 
+/* 流式输出光标：光点与光晕一起缓慢淡出，不影响文字排版。 */
+.stream-cursor {
+  position: relative;
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  margin-inline: 0.4em 0.2em;
+  vertical-align: 0.05em;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity var(--cursor-fade-duration, 700ms) ease-out;
+}
+
+.stream-cursor[data-active='false'] {
+  opacity: 0;
+}
+
+.stream-cursor::before,
+.stream-cursor::after {
+  content: '';
+  position: absolute;
+  border-radius: inherit;
+  background: currentColor;
+  animation: stream-cursor-fade 3.6s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+.stream-cursor::before {
+  inset: 0;
+}
+
+.stream-cursor::after {
+  inset: -0.25em;
+  filter: blur(2px);
+  animation-name: stream-cursor-glow;
+}
+
+@keyframes stream-cursor-fade {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.2; }
+}
+
+@keyframes stream-cursor-glow {
+  0%, 100% { opacity: 0.14; }
+  50% { opacity: 0.03; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-cursor,
+  .stream-cursor::before,
+  .stream-cursor::after {
+    animation: none;
+    transition: none;
+  }
+
+  .stream-cursor::after {
+    opacity: 0.1;
+  }
+}
+
 
 @layer base {
   :root {

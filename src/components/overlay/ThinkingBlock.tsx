@@ -3,6 +3,7 @@ import { Copy, Check } from 'lucide-react';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
+import { StreamingCursor } from '@/components/overlay/StreamingCursor';
 
 /* ─────────────────────────────────────────────────────────
  * BUI Thinking — 可展开推理轨迹 (beautifului.dev Reasoning 变体)
@@ -171,9 +172,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
               {/* 推理正文 */}
               <div className="max-h-60 overflow-y-auto pr-1 text-[12.5px] leading-relaxed text-ink-2 whitespace-pre-wrap break-words select-text custom-scrollbar">
                 {thinkingText || (resolvedLanguage === 'zh' ? 'AI 正在深入拆解问题与逻辑推理中...' : 'AI is reasoning and analyzing the problem...')}
-                {isThinking && (
-                  <span className="ml-0.5 inline-block h-3 w-[3px] translate-y-0.5 rounded-full bg-ink align-middle" />
-                )}
+                <StreamingCursor active={isThinking} className="text-ink-2" />
               </div>
 
               {/* 悬浮复制按钮 */}

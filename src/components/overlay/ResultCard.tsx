@@ -6,6 +6,7 @@ import { TabItem } from '@/components/overlay/TabBar';
 import { LoadingState } from '@/components/overlay/LoadingState';
 import { ThinkingBlock } from '@/components/overlay/ThinkingBlock';
 import { MarkdownContent } from '@/components/overlay/MarkdownContent';
+import { StreamingCursor } from '@/components/overlay/StreamingCursor';
 import { PromptBar } from '@/components/overlay/PromptBar';
 import { ResponseToolbar } from '@/components/overlay/ResponseToolbar';
 import { UserBubble } from '@/components/overlay/UserBubble';
@@ -869,9 +870,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                             codeBlockWrap={apiCard?.codeBlockWrap}
                             codeBlockLineNumbers={apiCard?.codeBlockLineNumbers}
                           />
-                          {isLoading && isLast && !turnIsThinking && (
-                            <span className="ml-0.5 inline-block h-3.5 w-[3px] translate-y-0.5 rounded-full bg-primary align-middle animate-pulse" />
-                          )}
+                          <StreamingCursor
+                            active={isLoading && isLast && !turnIsThinking}
+                            className="text-primary"
+                          />
                         </div>
                       )}
 

@@ -549,11 +549,13 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               type="button"
               onClick={toggleThinkingMode}
               className={cn(
-                'flex h-6.5 items-center gap-1 rounded-md px-1.5 text-[12px] font-medium transition-all duration-150 cursor-pointer border',
+                'flex size-6.5 items-center justify-center rounded-md transition-all duration-150 cursor-pointer border',
                 thinkingMode === 'deep'
                   ? 'bg-purple-500/10 border-purple-500/30 text-purple-600 dark:text-purple-400 font-semibold shadow-xs'
                   : 'bg-zinc-100/90 dark:bg-zinc-800/90 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100'
               )}
+              aria-label={isZh ? '深度思考' : 'Reasoning'}
+              aria-pressed={thinkingMode === 'deep'}
               title={
                 thinkingMode === 'deep'
                   ? (isZh ? '当前模式: 深度思考 (点击切换为极速模式)' : 'Current mode: Reasoning (Click for Fast)')
@@ -561,15 +563,9 @@ export const PromptBar: React.FC<PromptBarProps> = ({
               }
             >
               {thinkingMode === 'deep' ? (
-                <>
-                  <Brain size={12} className="shrink-0 text-purple-500 animate-pulse" />
-                  <span>{isZh ? '深度思考' : 'Reasoning'}</span>
-                </>
+                <Brain size={14} className="shrink-0 text-purple-500" />
               ) : (
-                <>
-                  <Zap size={12} className="shrink-0 text-amber-500 fill-amber-500" />
-                  <span>{isZh ? '极速' : 'Fast'}</span>
-                </>
+                <Zap size={14} className="shrink-0 text-amber-500 fill-amber-500" />
               )}
             </button>
           </div>
