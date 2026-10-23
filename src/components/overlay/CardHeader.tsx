@@ -6,14 +6,14 @@ import { WindowsCaptionControls } from '@/components/WindowsCaptionControls';
 import { TabBar, TabItem } from '@/components/overlay/TabBar';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useUiTheme } from '@/themes/ThemeProvider';
-import { Pin, RotateCcw, Plus, MessageSquare } from 'lucide-react';
+import { Pin, Plus, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────────────────────────────────
  * Mac 风格卡片头部导航栏
  * 左侧：Mac 交通灯三色圆点
  * 中间：自适应多标签栏 (TabBar) 或 动作图标+标题
- * 右侧：操作工具组 + 会话历史 + 重置尺寸 + 钉住 (Pin) 按钮
+ * 右侧：操作工具组 + 会话历史 + 钉住 (Pin) 按钮
  * ───────────────────────────────────────────────────────── */
 
 export interface CardHeaderProps {
@@ -23,7 +23,6 @@ export interface CardHeaderProps {
   tools?: React.ReactNode;
   isPinned: boolean;
   isMaximized?: boolean;
-  sessionCount?: number;
   tabs?: TabItem[];
   activeTabId?: string;
   onSelectTab?: (tabId: string) => void;
@@ -38,7 +37,6 @@ export interface CardHeaderProps {
   onToggleMaximize?: () => void;
   onClose: () => void;
   onMinimize?: () => void;
-  onResetSize?: () => void;
 }
 
 export const CardHeader: React.FC<CardHeaderProps> = ({
@@ -48,7 +46,6 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   tools,
   isPinned,
   isMaximized = false,
-  sessionCount,
   tabs,
   activeTabId,
   onSelectTab,
@@ -63,7 +60,6 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   onToggleMaximize,
   onClose,
   onMinimize,
-  onResetSize,
 }) => {
   const { t, resolvedLanguage } = useTranslation();
   const { handleMouseDown } = useWindowDrag();
@@ -136,7 +132,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
         </div>
       )}
 
-      {/* 右侧：工具按钮组 + 会话历史 + 重置尺寸 + 钉住 (Pin) 按钮 */}
+      {/* 右侧：工具按钮组 + 会话历史 + 钉住 (Pin) 按钮 */}
       <div data-tauri-drag-region className="flex shrink-0 items-center gap-1">
         {tools}
 
@@ -146,25 +142,10 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
             type="button"
             onClick={onToggleSessions}
             onMouseDown={(e) => e.stopPropagation()}
-            className="flex size-6 items-center justify-center rounded-md text-zinc-500 transition-colors duration-150 hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer relative"
+            className="flex size-6 items-center justify-center rounded-md text-zinc-500 transition-colors duration-150 hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer"
             title={t('card.historySessions')}
           >
             <MessageSquare size={13} strokeWidth={1.8} />
-            {sessionCount !== undefined && sessionCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 flex size-2 rounded-full bg-blue-500" />
-            )}
-          </button>
-        )}
-
-        {onResetSize && (
-          <button
-            type="button"
-            onClick={onResetSize}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="flex size-6 items-center justify-center rounded-md text-zinc-500 transition-colors duration-150 hover:bg-zinc-200/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 cursor-pointer"
-            title={resolvedLanguage === 'zh' ? '恢复默认卡片尺寸 (600 × 900)' : 'Reset Default Size (600 × 900)'}
-          >
-            <RotateCcw size={12} />
           </button>
         )}
 

@@ -719,7 +719,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       <CardHeader
         icon={action.icon}
         title={action.name}
-        sessionCount={chatSessions.sessions.length}
         tabs={tabs}
         activeTabId={activeTabId}
         onSelectTab={handleSelectTab}
@@ -753,7 +752,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         onToggleMaximize={handleToggleMaximize}
         onClose={onClose}
         onMinimize={onClose}
-        onResetSize={onResetSize}
       />
 
       {/* 2. 正文与对话流内容区 */}
