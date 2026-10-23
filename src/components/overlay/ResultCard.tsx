@@ -24,7 +24,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { AlertCircle, RotateCcw, Copy, Check, Brain, FileText, Wand2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { parseThinkingAndMain } from '@/lib/thinkingParser';
-import { splitTranscript, splitTurnChunk } from '@/lib/chatTranscript';
+import { getContextUsage, splitTranscript, splitTurnChunk } from '@/lib/chatTranscript';
 import { collectLinksFromRoot, linksEqual, type LinkInfo } from '@/lib/links';
 import type { ThinkingMode } from '@/lib/reasoning';
 
@@ -149,6 +149,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   const { copied, copy } = useCopyFeedback(2000);
   const [followUpInput, setFollowUpInput] = useState(initialInput || '');
+  const contextUsage = useMemo(
+    () => getContextUsage(streamText, selectedText, followUpInput, apiCard?.contextTurns ?? 5),
+    [streamText, selectedText, followUpInput, apiCard?.contextTurns]
+  );
   const [isThinkingOpen, setIsThinkingOpen] = useState(apiCard?.thinkingDefaultOpen ?? true);
   const [isMaximized, setIsMaximized] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; visible: boolean }>({
@@ -941,6 +945,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         availableModels={availableModels}
         thinkingMode={thinkingMode}
         sendKeyShortcut={apiCard?.sendKeyShortcut}
+        contextUsage={contextUsage}
         onProviderChange={onProviderChange}
         onModelChange={onModelChange}
         onThinkingModeChange={onThinkingModeChange}

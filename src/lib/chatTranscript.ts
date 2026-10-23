@@ -65,6 +65,32 @@ export function stripInternalMarkers(text: string): string {
 
 /** 构造发送给模型的历史上下文 */
 export function buildHistoryContext(streamText: string, maxTurns: number): string {
+  if (maxTurns <= 0) return '';
   const parts = splitTranscript(streamText);
   return stripInternalMarkers(parts.slice(-maxTurns).join(FOLLOW_UP_MARKER));
+}
+
+export interface ContextUsage {
+  estimatedTokens: number;
+  usedTurns: number;
+  maxTurns: number;
+}
+
+/** 内容长度估算，非服务商计费 token 数；不推断未知的模型窗口大小。 */
+export function getContextUsage(
+  streamText: string,
+  selectedText: string,
+  draft: string,
+  maxTurns: number
+): ContextUsage {
+  const history = buildHistoryContext(streamText, maxTurns);
+  const content = [selectedText, history, draft.trim()].filter(Boolean).join('\n\n');
+  let tokenEstimate = 0;
+  for (const char of content) {
+    tokenEstimate += char.codePointAt(0)! <= 0x7f ? 0.25 : 1;
+  }
+  const usedTurns = maxTurns > 0
+    ? Math.min(splitTranscript(streamText).filter((part) => part.trim()).length, maxTurns)
+    : 0;
+  return { estimatedTokens: Math.ceil(tokenEstimate), usedTurns, maxTurns };
 }

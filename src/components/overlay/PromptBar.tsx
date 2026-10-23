@@ -21,6 +21,8 @@ import { DynamicIcon } from '@/components/Icons';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 import { ReasoningControl } from '@/components/overlay/ReasoningControl';
+import { ContextMeter } from '@/components/overlay/ContextMeter';
+import type { ContextUsage } from '@/lib/chatTranscript';
 import { isDeepSeekProvider, type ThinkingMode } from '@/lib/reasoning';
 
 export interface ActionChip {
@@ -104,6 +106,7 @@ export interface PromptBarProps {
   availableModels?: string[];
   thinkingMode?: ThinkingMode;
   sendKeyShortcut?: 'Enter' | 'Ctrl+Enter';
+  contextUsage?: ContextUsage;
   onProviderChange?: (providerId: string) => void;
   onModelChange?: (model: string) => void;
   onThinkingModeChange?: (mode: ThinkingMode) => void;
@@ -126,6 +129,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   availableModels: _availableModels = [],
   thinkingMode = 'quick',
   sendKeyShortcut = 'Enter',
+  contextUsage,
   onProviderChange,
   onModelChange,
   onThinkingModeChange,
@@ -549,7 +553,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
           </div>
 
           {/* 右侧操作组：圆形发送/停止按钮 */}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            {contextUsage && <ContextMeter usage={contextUsage} isZh={isZh} />}
             {isLoading ? (
               <button
                 type="button"

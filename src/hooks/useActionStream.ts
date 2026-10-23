@@ -460,9 +460,7 @@ export function useActionStream({
 
       const precedingParts = parts.slice(0, -1);
       const maxTurns = config?.apiCard?.contextTurns ?? 5;
-      const recentHistory = stripInternalMarkers(
-        precedingParts.slice(-maxTurns).join(FOLLOW_UP_MARKER)
-      );
+      const recentHistory = buildHistoryContext(precedingParts.join(FOLLOW_UP_MARKER), maxTurns);
 
       // 重置 streamText 为去掉最新轮 assistant 内容的状态
       const baseStreamText = precedingParts.join(FOLLOW_UP_MARKER) + createFollowUpChunk(latestPrompt);
