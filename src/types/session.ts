@@ -71,6 +71,9 @@ export interface ChatMessageItem {
 /** 上下文用量投影；只有模块计算，视图仅负责展示。 */
 export interface ContextUsage {
   estimatedTokens: number;
+  selectionTokens: number;
+  historyTokens: number;
+  draftTokens: number;
   usedTurns: number;
   maxTurns: number;
 }

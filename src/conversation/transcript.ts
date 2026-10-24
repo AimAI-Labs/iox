@@ -16,10 +16,22 @@ export function historyContext(turns: ConversationTurn[], maxTurns: number): str
 
 export function contextUsage(conversation: Conversation, draft: string, maxTurns: number): ContextUsage {
   const history = historyContext(conversation.turns, maxTurns);
-  const content = [conversation.selectedText, history, draft.trim()].filter(Boolean).join('\n\n');
+  const selectionTokens = estimateTokens(conversation.selectedText);
+  const historyTokens = estimateTokens(history);
+  const draftTokens = estimateTokens(draft.trim());
+  return {
+    estimatedTokens: selectionTokens + historyTokens + draftTokens,
+    selectionTokens, historyTokens, draftTokens,
+    usedTurns: Math.max(0, Math.min(conversation.turns.length, Math.floor(maxTurns))),
+    maxTurns,
+  };
+}
+
+/** 按来源分别估算并取整，确保明细之和等于展示总数。 */
+function estimateTokens(content: string): number {
   let tokens = 0;
   for (const char of content) tokens += char.codePointAt(0)! <= 0x7f ? 0.25 : 1;
-  return { estimatedTokens: Math.ceil(tokens), usedTurns: Math.max(0, Math.min(conversation.turns.length, Math.floor(maxTurns))), maxTurns };
+  return Math.ceil(tokens);
 }
 
 export function exportMarkdown(conversation: Conversation): string {
