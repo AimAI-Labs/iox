@@ -1,4 +1,7 @@
-//! Read actual Explorer/desktop selection through Shell COM, without clipboard access.
+//! 文件拖放输入 adapter：直接用 Shell COM 读取 Explorer/桌面选区，不碰剪贴板。
+//!
+//! 输入是否被接纳、窗口形态与显示位置由 `overlay` 协调 module 决定；本 module
+//! 只维护自己的拖拽会话与代次，不反向依赖文本输入 adapter。
 use crate::file_drag::{DragDwell, FileDragSession, FileMenuLayout};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -88,7 +91,7 @@ fn enabled(app: &AppHandle) -> bool {
         state.config.try_snapshot().is_some_and(|config| {
             config.general.auto_popup_on_file_selection
                 && config.actions.iter().any(|action| action.enabled && action.action_type == "web")
-                && crate::selection::is_modifier_satisfied(&config.general.trigger_modifier)
+                && crate::trigger::modifier_satisfied(&config.general.trigger_modifier)
                 && !config
                     .blacklist
                     .iter()
@@ -163,7 +166,7 @@ pub fn mouse_down(app: &AppHandle, point: (i32, i32), inside_overlay: bool) {
         std::thread::sleep(Duration::from_millis(50));
         if !is_current(generation, target)
             || !pointer().is_some_and(|(_, held)| held)
-            || pinned_card(&app)
+            || !crate::overlay::can_accept_input(&app)
         {
             return;
         }
@@ -202,7 +205,7 @@ pub fn mouse_down(app: &AppHandle, point: (i32, i32), inside_overlay: bool) {
                 let _ = app.run_on_main_thread(move || {
                     if !is_current(generation, target)
                         || !enabled(&main_app)
-                        || pinned_card(&main_app)
+                        || !crate::overlay::can_accept_input(&main_app)
                         || !pointer().is_some_and(|(_, held)| held)
                     {
                         return;
@@ -212,8 +215,6 @@ pub fn mouse_down(app: &AppHandle, point: (i32, i32), inside_overlay: bool) {
                     } else {
                         return;
                     }
-                    crate::selection::cancel_pending_hide();
-                    crate::overlay_state::set_overlay_bubble_mode(true);
                     let count = main_app.state::<crate::AppState>()
                         .config
                         .snapshot()
@@ -234,9 +235,8 @@ pub fn mouse_down(app: &AppHandle, point: (i32, i32), inside_overlay: bool) {
                             layout,
                         },
                     );
-                    crate::window_manager::show_overlay_at(
-                        &main_app, position.0, position.1, width, height,
-                    );
+                    // 菜单几何已按 DPI 收敛，交给协调 module 作废旧关闭并显示。
+                    crate::overlay::present_bubble(&main_app, position, (width, height));
                 });
                 return;
             }
@@ -256,7 +256,7 @@ pub fn mouse_up(app: &AppHandle, point: (i32, i32)) -> bool {
     if !from_shell {
         return false;
     }
-    if !crate::selection::is_point_inside_window(app, "overlay", point.0, point.1) {
+    if !crate::window_manager::is_point_inside_window(app, "overlay", point.0, point.1) {
         dismiss_menu(app);
     } else {
         // Cancel a worker which has not displayed a menu, but retain its drop session.
@@ -335,12 +335,6 @@ pub fn handle_drag_drop(window: &tauri::Window, event: &tauri::DragDropEvent) {
         }
         _ => {}
     }
-}
-
-fn pinned_card(app: &AppHandle) -> bool {
-    crate::overlay_state::is_overlay_pinned()
-        && !crate::overlay_state::is_overlay_bubble_mode()
-        && crate::selection::is_overlay_visible(app)
 }
 
 fn is_current(generation: u64, target: ShellTarget) -> bool {

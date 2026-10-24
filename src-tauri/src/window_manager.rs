@@ -365,80 +365,126 @@ pub fn show_overlay_at(
     }
 }
 
-/// 调整悬浮窗尺寸（从气泡态切换到卡片态，或卡片态折叠/重置）
-pub fn resize_overlay_window(
-    window: &WebviewWindow,
+/// 检查指定屏幕物理坐标 (x, y) 是否落在指定窗口的可见且可命中区域内
+pub fn is_point_inside_window(app: &AppHandle, label: &str, x: i32, y: i32) -> bool {
+    if let Some(window) = app.get_webview_window(label) {
+        if let Ok(hwnd) = window.hwnd() {
+            unsafe {
+                let hwnd_raw = hwnd.0 as HWND;
+                if IsWindowVisible(hwnd_raw) != 0 {
+                    let mut rect: RECT = std::mem::zeroed();
+                    if GetWindowRect(hwnd_raw, &mut rect) != 0 {
+                        return x >= rect.left
+                            && x < rect.right
+                            && y >= rect.top
+                            && y < rect.bottom
+                            && window_region_contains(hwnd_raw, x - rect.left, y - rect.top);
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// 检查指定屏幕物理坐标 (x, y) 是否落在 Overlay 或 Floating Ball 窗口内
+pub fn is_point_inside_overlay(app: &AppHandle, x: i32, y: i32) -> bool {
+    is_point_inside_window(app, "overlay", x, y)
+        || is_point_inside_window(app, "floating_ball", x, y)
+}
+
+/// Overlay 窗口当前是否在屏幕上可见（形态政策只看原生真相，不看记忆状态）
+pub fn overlay_is_visible(app: &AppHandle) -> bool {
+    app.get_webview_window("overlay")
+        .and_then(|window| window.hwnd().ok())
+        .is_some_and(|hwnd| unsafe { IsWindowVisible(hwnd.0 as HWND) != 0 })
+}
+
+/// 原生隐藏 Overlay 窗口
+pub fn hide_overlay(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("overlay") {
+        if let Ok(hwnd) = window.hwnd() {
+            // SAFETY: 窗口由本进程持有；隐藏不改变焦点、所有权或几何。
+            unsafe {
+                ShowWindow(hwnd.0 as HWND, SW_HIDE);
+            }
+        }
+        let _ = window.hide();
+    }
+}
+
+/// 原生调整 Overlay 尺寸与激活样式（气泡态保持无激活，卡片态按需获取输入焦点）
+pub fn resize_overlay(
+    app: &AppHandle,
     width: i32,
     height: i32,
     allow_focus: bool,
-) {
+) -> Result<(), String> {
+    let window = app
+        .get_webview_window("overlay")
+        .ok_or_else(|| "Overlay window not found".to_string())?;
     let scale_factor = window.scale_factor().unwrap_or(1.0);
     let phys_width = (width as f64 * scale_factor).round() as i32;
     let phys_height = (height as f64 * scale_factor).round() as i32;
 
-    if let Ok(hwnd) = window.hwnd() {
-        let hwnd_raw = hwnd.0 as HWND;
-        if allow_focus {
-            remove_no_activate_style(hwnd_raw);
+    let Ok(hwnd) = window.hwnd() else {
+        return Ok(());
+    };
+    let hwnd_raw = hwnd.0 as HWND;
+    if allow_focus {
+        remove_no_activate_style(hwnd_raw);
+    } else {
+        apply_no_activate_style(hwnd_raw);
+    }
+
+    // SAFETY: hwnd_raw 属于本次调用取得的存活窗口；读取矩形与 SetWindowPos 均不改所有权。
+    unsafe {
+        let mut rect: RECT = std::mem::zeroed();
+        if GetWindowRect(hwnd_raw, &mut rect) == 0 {
+            return Ok(());
+        }
+        if rect.right - rect.left == phys_width
+            && rect.bottom - rect.top == phys_height
+            && !allow_focus
+        {
+            return Ok(());
+        }
+
+        // 获取当前屏幕工作区，防止 600x900px 大卡片在屏幕边缘展开时溢出
+        let work_area = get_screen_work_area(rect.left, rect.top);
+        let mut target_x = rect.left;
+        let mut target_y = rect.top;
+
+        if target_x + phys_width > work_area.2 - 8 {
+            target_x = (work_area.2 - phys_width - 8).max(work_area.0 + 8);
+        }
+        if target_y + phys_height > work_area.3 - 8 {
+            target_y = (work_area.3 - phys_height - 8).max(work_area.1 + 8);
+        }
+        if target_x < work_area.0 + 8 {
+            target_x = work_area.0 + 8;
+        }
+        if target_y < work_area.1 + 8 {
+            target_y = work_area.1 + 8;
+        }
+
+        let flags = if allow_focus {
+            SWP_SHOWWINDOW
         } else {
-            apply_no_activate_style(hwnd_raw);
-        }
+            SWP_NOACTIVATE | SWP_SHOWWINDOW
+        };
 
-        unsafe {
-            let mut rect: RECT = std::mem::zeroed();
-            if GetWindowRect(hwnd_raw, &mut rect) != 0 {
-                let current_width = rect.right - rect.left;
-                let current_height = rect.bottom - rect.top;
-                if current_width == phys_width && current_height == phys_height && !allow_focus {
-                    return;
-                }
-
-                // 获取当前屏幕工作区，防止 600x900px 大卡片在屏幕边缘展开时溢出
-                let work_area = get_screen_work_area(rect.left, rect.top);
-                let mut target_x = rect.left;
-                let mut target_y = rect.top;
-
-                if target_x + phys_width > work_area.2 - 8 {
-                    target_x = (work_area.2 - phys_width - 8).max(work_area.0 + 8);
-                }
-                if target_y + phys_height > work_area.3 - 8 {
-                    target_y = (work_area.3 - phys_height - 8).max(work_area.1 + 8);
-                }
-                if target_x < work_area.0 + 8 {
-                    target_x = work_area.0 + 8;
-                }
-                if target_y < work_area.1 + 8 {
-                    target_y = work_area.1 + 8;
-                }
-
-                let flags = if allow_focus {
-                    SWP_SHOWWINDOW
-                } else {
-                    SWP_NOACTIVATE | SWP_SHOWWINDOW
-                };
-
-                SetWindowPos(
-                    hwnd_raw,
-                    HWND_TOPMOST,
-                    target_x,
-                    target_y,
-                    phys_width,
-                    phys_height,
-                    flags,
-                );
-            }
-        }
+        SetWindowPos(
+            hwnd_raw,
+            HWND_TOPMOST,
+            target_x,
+            target_y,
+            phys_width,
+            phys_height,
+            flags,
+        );
     }
-}
-
-/// 隐藏悬浮窗
-pub fn hide_overlay_window(window: &WebviewWindow) {
-    if let Ok(hwnd) = window.hwnd() {
-        unsafe {
-            ShowWindow(hwnd.0 as HWND, SW_HIDE);
-        }
-    }
-    let _ = window.hide();
+    Ok(())
 }
 
 /// 保留自由位置，仅在距侧边 24 逻辑像素以内吸附；球体大小已按 DPI 缩放。
@@ -698,13 +744,13 @@ pub fn run_floating_ball_drag_loop(window: &WebviewWindow) -> (i32, i32) {
     (0, 0)
 }
 
-/// 在独立阻塞线程中执行 120FPS 物理光标硬件级实时拖拽循环（0 IPC 开销，彻底消除卡顿）
+/// 在独立阻塞线程中执行 120FPS 物理光标硬件级实时拖拽循环（0 IPC 开销，彻底消除卡顿）。
+/// 「正在拖动」标记由协调 module 在调用前后持有，这里只搬运原生窗口。
 pub fn run_overlay_drag_loop(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("overlay") {
         if let Ok(hwnd) = window.hwnd() {
             let hwnd_raw = hwnd.0 as HWND;
             unsafe {
-                crate::overlay_state::set_dragging_overlay(true);
                 let mut cursor_start: POINT = std::mem::zeroed();
                 let mut win_rect: RECT = std::mem::zeroed();
 
@@ -731,7 +777,6 @@ pub fn run_overlay_drag_loop(app: &AppHandle) {
                     }
                 }
                 thread::sleep(Duration::from_millis(40));
-                crate::overlay_state::set_dragging_overlay(false);
             }
         }
     }

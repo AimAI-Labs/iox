@@ -20,7 +20,7 @@ export function useOverlayState(config: AppConfig | null) {
   const { updateWindowSize, handleResetCardSize, executeGracefulHide, cancelCloseTimer,
     handlePinToggle, handleClose } = useOverlayLifecycle({
     actions: config?.actions, iconOnly: config?.general.iconOnlyBubble, apiCard: config?.apiCard,
-    isPinned: state.isPinned, currentMode: state.mode,
+    isPinned: state.isPinned,
     setIsPinned: (isPinned) => dispatch({ type: 'SET_PINNED', isPinned }),
     setIsClosing: (isClosing) => dispatch({ type: 'SET_CLOSING', isClosing }),
     onHideComplete: () => { workspace.reset(); dispatch({ type: 'HIDE_COMPLETE' }); },

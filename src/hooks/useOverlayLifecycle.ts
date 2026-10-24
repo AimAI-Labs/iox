@@ -9,7 +9,6 @@ interface UseOverlayLifecycleProps {
   iconOnly?: boolean;
   apiCard?: ApiCardConfig;
   isPinned: boolean;
-  currentMode: OverlayMode;
   setIsPinned: (pinned: boolean) => void;
   setIsClosing: (closing: boolean) => void;
   onHideComplete: () => void;
@@ -21,7 +20,6 @@ export function useOverlayLifecycle({
   iconOnly = false,
   apiCard,
   isPinned,
-  currentMode,
   setIsPinned,
   setIsClosing,
   onHideComplete,
@@ -29,8 +27,6 @@ export function useOverlayLifecycle({
 }: UseOverlayLifecycleProps) {
   const isPinnedRef = useRef<boolean>(isPinned);
   isPinnedRef.current = isPinned;
-  const currentModeRef = useRef<OverlayMode>(currentMode);
-  currentModeRef.current = currentMode;
   const actionsRef = useRef<ActionConfig[] | undefined>(actions);
   actionsRef.current = actions;
   const iconOnlyRef = useRef<boolean>(iconOnly);
@@ -40,31 +36,29 @@ export function useOverlayLifecycle({
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeGenerationRef = useRef(0);
 
-  // 调整窗口尺寸并同步模式到 Rust 端
+  // 提交形态与尺寸：形态政策与原生几何由同一个命令消费，避免两者交错
   const updateWindowSize = useCallback(
     async (
       newMode: OverlayMode,
       allowFocus = false,
       customSize?: { width: number; height: number }
     ) => {
-      currentModeRef.current = newMode;
-      // 同步模式到 Rust 端，供键盘钩子判断消失逻辑
-      invoke('set_overlay_mode', { mode: newMode }).catch(() => {});
       if (newMode === 'bubble') {
         const width = calculateBubbleWidth(actionsRef.current, iconOnlyRef.current);
-        await invoke('resize_overlay', { width, height: 46, allowFocus: false });
-      } else {
-        const defaultCardSize = apiCardRef.current?.cardSize || [600, 900];
-        const width = customSize?.width || defaultCardSize[0] || 600;
-        const height = customSize?.height || defaultCardSize[1] || 900;
-        const shouldFocus = allowFocus || (apiCardRef.current?.autoFocusInput ?? false);
-        await invoke('resize_overlay', { width, height, allowFocus: shouldFocus });
+        await invoke('layout_overlay', { mode: 'bubble', width, height: 46, allowFocus: false });
+        return;
+      }
 
-        // 若配置了展开时自动 Pin 固定，自动同步钉住状态
-        if (apiCardRef.current?.autoPinOnOpen && !isPinnedRef.current) {
-          setIsPinned(true);
-          invoke('set_pin_state', { pinned: true }).catch(() => {});
-        }
+      const defaultCardSize = apiCardRef.current?.cardSize || [600, 900];
+      const width = customSize?.width || defaultCardSize[0] || 600;
+      const height = customSize?.height || defaultCardSize[1] || 900;
+      const shouldFocus = allowFocus || (apiCardRef.current?.autoFocusInput ?? false);
+      await invoke('layout_overlay', { mode: 'card', width, height, allowFocus: shouldFocus });
+
+      // 若配置了展开时自动 Pin 固定，自动同步钉住状态
+      if (apiCardRef.current?.autoPinOnOpen && !isPinnedRef.current) {
+        setIsPinned(true);
+        invoke('set_pin_state', { pinned: true }).catch(() => {});
       }
     },
     [setIsPinned]
@@ -83,24 +77,21 @@ export function useOverlayLifecycle({
     invoke('set_pin_state', { pinned: isPinned }).catch(() => {});
   }
 
-  // 执行平滑退场动画并隐藏窗口 (force = true 时允许主动关闭固定窗口)
-  const executeGracefulHide = useCallback(
-    (force = false) => {
-      // 关键修复：钉住 (Pin) 仅对 Card 态生效！Bubble 气泡态永远允许退场隐藏
-      if (isPinnedRef.current && currentModeRef.current === 'card' && !force) return;
-      onHideStart?.();
-      setIsClosing(true);
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current);
-      }
-      const generation = ++closeGenerationRef.current;
-      closeTimerRef.current = setTimeout(async () => {
-        await invoke('hide_overlay');
-        if (closeGenerationRef.current === generation) onHideComplete();
-      }, 100);
-    },
-    [setIsClosing, onHideComplete, onHideStart]
-  );
+  // 执行平滑退场动画并隐藏窗口。
+  // 「是否允许退场」由调用方决定：原生退场请求已由后端 overlay 政策过滤，
+  // 前端只在气泡态或未固定卡片上发起主动关闭，这里不再复制 pin/形态规则。
+  const executeGracefulHide = useCallback(() => {
+    onHideStart?.();
+    setIsClosing(true);
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+    }
+    const generation = ++closeGenerationRef.current;
+    closeTimerRef.current = setTimeout(async () => {
+      await invoke('hide_overlay');
+      if (closeGenerationRef.current === generation) onHideComplete();
+    }, 100);
+  }, [setIsClosing, onHideComplete, onHideStart]);
 
   // 取消退场定时器（当新划词触发时调用）
   const cancelCloseTimer = useCallback(() => {
@@ -118,10 +109,10 @@ export function useOverlayLifecycle({
     invoke('set_pin_state', { pinned: next }).catch(() => {});
   }, [setIsPinned]);
 
-  // 主动关闭悬浮窗（强制隐藏；钉住偏好由 localStorage 记忆保留，
-  // 隐藏后的残留 Pin 不会拦截后续划词——后端以「钉住 && 可见 && 卡片态」判定零打扰）
+  // 用户主动关闭悬浮窗（允许越过 pin；钉住偏好由 localStorage 记忆保留，
+  // 隐藏后的残留 pin 不会拦截后续划词——后端只保护「钉住且可见的卡片」）
   const handleClose = useCallback(async () => {
-    executeGracefulHide(true);
+    executeGracefulHide();
   }, [executeGracefulHide]);
 
   return {

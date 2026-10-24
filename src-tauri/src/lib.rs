@@ -6,10 +6,11 @@ pub mod config;
 pub mod file_selection;
 mod file_drag;
 pub mod link_metadata;
-pub mod overlay_state;
+pub mod overlay;
 pub mod picker;
 pub mod selection;
 pub mod site_presets;
+pub mod trigger;
 pub mod tray;
 pub mod window_manager;
 
@@ -226,19 +227,22 @@ fn cancel_action(
     state.ai_manager.cancel(&action_id, &request_id)
 }
 
+/// 前端唯一的形态与几何入口：形态政策与原生尺寸在一次调用中提交，避免两者交错
 #[tauri::command]
-fn resize_overlay(
+fn layout_overlay(
     app: AppHandle,
+    mode: String,
     width: i32,
     height: i32,
     allow_focus: Option<bool>,
 ) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("overlay") {
-        window_manager::resize_overlay_window(&window, width, height, allow_focus.unwrap_or(false));
-        Ok(())
-    } else {
-        Err("Overlay window not found".to_string())
-    }
+    overlay::apply_layout(
+        &app,
+        overlay::Mode::from_label(&mode),
+        width,
+        height,
+        allow_focus.unwrap_or(false),
+    )
 }
 
 #[tauri::command]
@@ -312,33 +316,17 @@ fn toggle_maximize_main_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn hide_overlay(app: AppHandle) -> Result<(), String> {
-    file_selection::cancel_pending();
-    overlay_state::set_overlay_bubble_mode(true);
+fn hide_overlay(app: AppHandle) {
+    // 主动关闭先作废文件拖放会话，再结束本次悬浮窗会话。
     // 刻意不复位 Pin 状态：钉住是跨会话的用户偏好（由前端 localStorage 记忆），
-    // 主动关闭仅结束当前窗口会话；隐藏后的残留 pin 不会拦截后续划词
-    // （selection.rs 已用「钉住 && 可见 && 卡片态」组合条件防死锁）
-    if let Some(window) = app.get_webview_window("overlay") {
-        window_manager::hide_overlay_window(&window);
-        Ok(())
-    } else {
-        Err("Overlay window not found".to_string())
-    }
+    // 隐藏后的残留 pin 不会拦截后续划词（协调 module 只保护「钉住且可见的卡片」）。
+    file_selection::cancel_pending();
+    overlay::close(&app);
 }
 
 #[tauri::command]
 fn set_pin_state(pinned: bool) {
-    overlay_state::set_overlay_pinned(pinned);
-}
-
-#[tauri::command]
-fn set_drag_state(dragging: bool) {
-    overlay_state::set_dragging_overlay(dragging);
-}
-
-#[tauri::command]
-fn set_overlay_mode(mode: String) {
-    overlay_state::set_overlay_bubble_mode(mode == "bubble");
+    overlay::set_pinned(pinned);
 }
 
 #[tauri::command]
@@ -363,9 +351,7 @@ fn save_api_card_size(
 
 #[tauri::command]
 fn start_overlay_dragging(app: AppHandle) {
-    tauri::async_runtime::spawn_blocking(move || {
-        window_manager::run_overlay_drag_loop(&app);
-    });
+    tauri::async_runtime::spawn_blocking(move || overlay::drag(&app));
 }
 
 #[tauri::command]
@@ -701,7 +687,7 @@ pub fn run() {
             trigger_web_action,
             trigger_web_file_action,
             cancel_action,
-            resize_overlay,
+            layout_overlay,
             toggle_maximize_overlay,
             hide_overlay,
             show_main_window,
@@ -714,8 +700,6 @@ pub fn run() {
             reload_web_webview,
             open_in_browser,
             set_pin_state,
-            set_drag_state,
-            set_overlay_mode,
             start_overlay_dragging,
             get_web_hub_state,
             switch_web_hub_tab,

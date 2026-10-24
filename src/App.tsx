@@ -1,13 +1,11 @@
 import { useEffect, useState, Suspense, lazy, type ReactNode } from 'react';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { invoke } from '@tauri-apps/api/core';
 import { useConfig } from '@/hooks/useConfig';
-import { useTheme, broadcastThemeChange } from '@/hooks/useTheme';
-import { useOverlayState } from '@/hooks/useOverlayState';
+import { useTheme } from '@/hooks/useTheme';
 import { I18nProvider } from '@/hooks/useTranslation';
 import { ThemeProvider } from '@/themes/ThemeProvider';
-import { BubbleBar, ResultCard, FloatingBall } from '@/components/overlay';
-import { FileSelectionMenu } from '@/components/overlay/FileSelectionMenu';
+import { FloatingBall } from '@/components/overlay';
+import { OverlaySurface } from '@/components/overlay/OverlaySurface';
 import { Toaster } from 'sonner';
 import './App.css';
 
@@ -31,8 +29,6 @@ export function App() {
     }
   }, []);
 
-  const overlayState = useOverlayState(config);
-
   // 统一应用与监听主题及透明度
   useTheme(config?.general.theme, config?.general.overlayOpacity);
 
@@ -40,76 +36,6 @@ export function App() {
   const withTheme = (node: ReactNode) => (
     <ThemeProvider style={config?.general.uiStyle}>{node}</ThemeProvider>
   );
-
-  const handleOpenSettings = async (tab?: string) => {
-    try {
-      overlayState.handleClose();
-      const targetTab = typeof tab === 'string' ? tab : undefined;
-      await invoke('show_main_window', { targetTab });
-    } catch (e) {
-      console.error('Failed to open settings window:', e);
-    }
-  };
-
-  // 全局 Esc 键与鼠标侧键监听
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && windowLabel === 'overlay') {
-        if (overlayState.mode === 'bubble' || !overlayState.isPinned) {
-          overlayState.handleClose();
-        }
-      }
-    };
-
-    const handleMouseDown = (e: MouseEvent) => {
-      // 3: 鼠标后退侧键, 4: 鼠标前进侧键
-      if ((e.button === 3 || e.button === 4) && windowLabel === 'overlay') {
-        if (overlayState.mode === 'bubble' || !overlayState.isPinned) {
-          overlayState.handleClose();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('auxclick', handleMouseDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('auxclick', handleMouseDown);
-    };
-  }, [windowLabel, overlayState]);
-
-  // 监听 Overlay 在 Card 模式下的手动拖拽缩放，防抖自动记忆尺寸
-  useEffect(() => {
-    if (windowLabel !== 'overlay') return;
-
-    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    const handleResize = () => {
-      if (overlayState.mode !== 'card') return;
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(async () => {
-        try {
-          const win = getCurrentWebviewWindow();
-          const size = await win.innerSize();
-          const scale = await win.scaleFactor();
-          const w = Math.round(size.width / scale);
-          const h = Math.round(size.height / scale);
-          if (w >= 360 && h >= 300) {
-            await invoke('save_api_card_size', { width: w, height: h });
-          }
-        } catch {
-          // ignore
-        }
-      }, 300);
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [windowLabel, overlayState.mode]);
 
   if (loading || !config) {
     if (windowLabel === 'overlay' || windowLabel === 'floating_ball') {
@@ -149,83 +75,16 @@ export function App() {
     );
   }
 
-  // 2. Overlay 悬浮窗视图 (保持同步直出渲染，零时延)
+  // 2. Overlay 悬浮窗视图：生命周期 hook 只在 overlay 窗口内建立
   if (windowLabel === 'overlay') {
-    if (!overlayState.visible) {
-      return null;
-    }
-
     return withTheme(
       <I18nProvider languageSetting={config.general.language}>
-        <div className="overlay-root">
-          {overlayState.mode === 'bubble' ? (
-            overlayState.selectedFiles.length ? <FileSelectionMenu
-              key={overlayState.animKey}
-              files={overlayState.selectedFiles}
-              dragId={overlayState.fileDragId!}
-              layout={overlayState.fileMenuLayout!}
-              actions={config.actions}
-              isClosing={overlayState.isClosing}
-              onClose={overlayState.handleClose}
-            /> :
-            <BubbleBar
-              key={overlayState.animKey}
-              actions={config.actions}
-              selectedText={overlayState.selectedText}
-              isClosing={overlayState.isClosing}
-              iconOnly={config.general.iconOnlyBubble}
-              onActionClick={overlayState.handleTriggerAction}
-              onActionDoubleClick={overlayState.handleTriggerQuoteAction}
-              onActionContextMenu={overlayState.handleTriggerActionWithoutText}
-              onOpenSettings={() => handleOpenSettings()}
-            />
-          ) : overlayState.conversation ? (
-            <ResultCard
-              conversation={overlayState.conversation!}
-              tabs={overlayState.tabs}
-              activeTabId={overlayState.activeTabId!}
-              chatSessions={overlayState.chatSessions}
-              providers={config.providers}
-              isPinned={overlayState.isPinned}
-              isClosing={overlayState.isClosing}
-              apiCard={config.apiCard}
-              theme={config.general.theme}
-              onThemeChange={(newTheme) => {
-                updateConfig({
-                  ...config,
-                  general: {
-                    ...config.general,
-                    theme: newTheme,
-                  },
-                });
-                broadcastThemeChange(newTheme, config.general.overlayOpacity);
-              }}
-              onProviderChange={overlayState.handleProviderChange}
-              onModelChange={overlayState.handleModelChange}
-              onThinkingModeChange={overlayState.handleThinkingModeChange}
-              onSendFollowUp={overlayState.handleSendFollowUp}
-              onEditMessage={overlayState.handleEditMessage}
-              onRegenerateCurrentTurn={overlayState.handleRegenerateCurrentTurn}
-              onNewChat={overlayState.handleNewChat}
-              onSelectTab={overlayState.handleSelectTab}
-              onCloseTab={overlayState.handleCloseTab}
-              onCloseOtherTabs={overlayState.handleCloseOtherTabs}
-              onCloseLeftTabs={overlayState.handleCloseLeftTabs}
-              onCloseRightTabs={overlayState.handleCloseRightTabs}
-              onExportMarkdown={overlayState.handleExportMarkdown}
-              onOpenSettings={() => handleOpenSettings('api_card')}
-              onCancel={overlayState.handleCancel}
-              onPinToggle={overlayState.handlePinToggle}
-              onClose={overlayState.handleClose}
-              onResetSize={overlayState.handleResetCardSize}
-            />
-          ) : null}
-        </div>
+        <OverlaySurface config={config} updateConfig={updateConfig} />
       </I18nProvider>
     );
   }
 
-  // 2. Settings 设置面板视图 (主窗口异步载入)
+  // 3. Settings 设置面板视图 (主窗口异步载入)
   return withTheme(
     <I18nProvider languageSetting={config.general.language}>
       <Toaster

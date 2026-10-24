@@ -1,4 +1,11 @@
-use crate::overlay_state::*;
+//! 文本划词输入 adapter。
+//!
+//! 同时托管全局 WH_MOUSE_LL / WH_KEYBOARD_LL 输入源：鼠标按下/抬起先分发给
+//! 文件输入 adapter，再按文本划词的点击分类决定是否取词。形态、可见性与退场
+//! 政策一律交给 `overlay` 协调 module，本 module 不自行组合 pin / mode 条件。
+
+use crate::trigger;
+use crate::{overlay, window_manager};
 use arboard::Clipboard;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -14,19 +21,13 @@ use windows::Win32::UI::Accessibility::{
 };
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber;
-use windows_sys::Win32::System::Threading::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 static HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
 static SELECTION_SEQ: AtomicU64 = AtomicU64::new(0);
-static HIDE_SEQ: AtomicU64 = AtomicU64::new(0);
 static CLIPBOARD_LOCK: Mutex<()> = Mutex::new(());
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
-
-pub fn cancel_pending_hide() {
-    HIDE_SEQ.fetch_add(1, Ordering::SeqCst);
-}
 
 pub fn set_app_handle(handle: AppHandle) {
     let _ = APP_HANDLE.set(handle);
@@ -52,30 +53,6 @@ static CLICK_STATE: Mutex<ClickState> = Mutex::new(ClickState {
 
 const IOX_EXTRA_INFO: usize = 0x494F58; // "IOX"
 const LLKHF_INJECTED_FLAG: u32 = 0x00000010;
-
-/// 检查指定屏幕物理坐标 (x, y) 是否落在指定窗口内
-pub fn is_point_inside_window(app: &AppHandle, label: &str, x: i32, y: i32) -> bool {
-    if let Some(window) = app.get_webview_window(label) {
-        if let Ok(hwnd) = window.hwnd() {
-            unsafe {
-                let hwnd_raw = hwnd.0 as HWND;
-                if IsWindowVisible(hwnd_raw) != 0 {
-                    let mut rect: RECT = std::mem::zeroed();
-                    if GetWindowRect(hwnd_raw, &mut rect) != 0 {
-                        return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom
-                            && crate::window_manager::window_region_contains(hwnd_raw, x - rect.left, y - rect.top);
-                    }
-                }
-            }
-        }
-    }
-    false
-}
-
-/// 检查指定屏幕物理坐标 (x, y) 是否落在 Overlay 或 Floating Ball 窗口内
-pub fn is_point_inside_overlay(app: &AppHandle, x: i32, y: i32) -> bool {
-    is_point_inside_window(app, "overlay", x, y) || is_point_inside_window(app, "floating_ball", x, y)
-}
 
 /// 检查屏幕物理坐标 (x, y) 是否位于目标窗口的 Client（工作区/客户区）内
 /// 用于精准过滤标题栏拖拽（HTCAPTION）、边框缩放（HTLEFT..HTBOTTOMRIGHT）、滚动条拖动（HTVSCROLL）等非选词交互
@@ -111,60 +88,6 @@ pub fn is_point_in_client_area(x: i32, y: i32) -> bool {
     }
 }
 
-/// 检查 Overlay 窗口当前是否在屏幕上处于可见显示状态
-pub fn is_overlay_visible(app: &AppHandle) -> bool {
-    if let Some(window) = app.get_webview_window("overlay") {
-        if let Ok(hwnd) = window.hwnd() {
-            unsafe {
-                let hwnd_raw = hwnd.0 as HWND;
-                return IsWindowVisible(hwnd_raw) != 0;
-            }
-        }
-    }
-    false
-}
-
-/// 尝试隐藏未固定的 Overlay 窗口（若处于 Card 态且被钉住则不隐藏；Bubble 模式下即使处于钉住偏好也必须隐藏）
-pub fn hide_overlay_if_unpinned(app: &AppHandle) {
-    if is_overlay_pinned() && !is_overlay_bubble_mode() {
-        return;
-    }
-    if let Some(window) = app.get_webview_window("overlay") {
-        if let Ok(hwnd) = window.hwnd() {
-            unsafe {
-                let hwnd_raw = hwnd.0 as HWND;
-                if IsWindowVisible(hwnd_raw) != 0 {
-                    ShowWindow(hwnd_raw, SW_HIDE);
-                }
-            }
-        }
-        let _ = window.hide();
-    }
-}
-
-/// 优雅请求隐藏 Overlay（向前端广播退场动画事件，并设置 280ms 延时兜底，带 HIDE_SEQ 防抖）
-pub fn request_hide_overlay_gracefully(app: &AppHandle) {
-    if is_overlay_pinned() && !is_overlay_bubble_mode() {
-        return;
-    }
-    if !is_overlay_visible(app) {
-        return;
-    }
-    let seq = HIDE_SEQ.fetch_add(1, Ordering::SeqCst) + 1;
-    // 向前端广播退场动画事件
-    let _ = app.emit("request-overlay-hide", ());
-
-    // 启动 280ms 延时兜底线程，确保在前端未响应时依然安全隐藏
-    let app_handle = app.clone();
-    thread::spawn(move || {
-        thread::sleep(Duration::from_millis(280));
-        // 若期间有新的选词任务触发，自动取消兜底隐藏
-        if HIDE_SEQ.load(Ordering::SeqCst) == seq {
-            hide_overlay_if_unpinned(&app_handle);
-        }
-    });
-}
-
 /// 计算鼠标两点之间的欧氏位移距离
 pub fn calc_drag_distance(p1: (i32, i32), p2: (i32, i32)) -> f64 {
     let dx = (p2.0 - p1.0) as f64;
@@ -185,70 +108,6 @@ pub fn is_text_valid(text: &str, min_len: usize) -> bool {
     }
     // 计算有效字符数（忽略纯空白）
     trimmed.chars().count() >= min_len
-}
-
-/// 检查触发修饰键是否满足条件
-pub fn is_modifier_satisfied(modifier: &str) -> bool {
-    match modifier.to_lowercase().as_str() {
-        "ctrl" => unsafe {
-            (GetAsyncKeyState(VK_CONTROL as i32) as u16 & 0x8000) != 0
-        },
-        "alt" => unsafe {
-            (GetAsyncKeyState(VK_MENU as i32) as u16 & 0x8000) != 0
-        },
-        "shift" => unsafe {
-            (GetAsyncKeyState(VK_SHIFT as i32) as u16 & 0x8000) != 0
-        },
-        _ => true, // "none" 或其他值默认无修饰键要求
-    }
-}
-
-/// 获取当前前台窗口所属的进程文件名（如 "notepad.exe", "chrome.exe"）
-pub fn get_foreground_process_name() -> Option<String> {
-    unsafe {
-        let hwnd = GetForegroundWindow();
-        if hwnd.is_null() {
-            return None;
-        }
-
-        let mut pid: u32 = 0;
-        GetWindowThreadProcessId(hwnd, &mut pid);
-        if pid == 0 {
-            return None;
-        }
-
-        let h_proc = OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION,
-            0,
-            pid,
-        );
-
-        if h_proc.is_null() {
-            return None;
-        }
-
-        let mut buffer = [0u16; 1024];
-        let mut size = buffer.len() as u32;
-
-        let ok = QueryFullProcessImageNameW(
-            h_proc,
-            0,
-            buffer.as_mut_ptr(),
-            &mut size,
-        );
-
-        CloseHandle(h_proc);
-
-        if ok != 0 && size > 0 {
-            let full_path = String::from_utf16_lossy(&buffer[..size as usize]);
-            let file_name = std::path::Path::new(&full_path)
-                .file_name()
-                .and_then(|f| f.to_str())
-                .map(|s| s.to_string());
-            return file_name;
-        }
-        None
-    }
 }
 
 /// 终端中的 Ctrl+C 可能给整个开发进程树发送中断，不能用来探测选区。
@@ -274,7 +133,7 @@ pub fn simulate_ctrl_c() -> bool {
         let mut class_buffer = [0u16; 256];
         let class_len = GetClassNameW(hwnd, class_buffer.as_mut_ptr(), class_buffer.len() as i32);
         let window_class = String::from_utf16_lossy(&class_buffer[..class_len.max(0) as usize]);
-        let process_name = get_foreground_process_name().unwrap_or_default();
+        let process_name = trigger::foreground_process_name().unwrap_or_default();
         if !can_simulate_copy(&window_class, &process_name) {
             return false;
         }
@@ -511,7 +370,9 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
             let app_handle = APP_HANDLE.get().cloned();
 
             if msg == WM_LBUTTONDOWN {
-                let inside_overlay = app_handle.as_ref().is_some_and(|app| is_point_inside_overlay(app, x, y));
+                let inside_overlay = app_handle
+                    .as_ref()
+                    .is_some_and(|app| window_manager::is_point_inside_overlay(app, x, y));
                 SELECTION_SEQ.fetch_add(1, Ordering::SeqCst);
                 if let Some(ref handle) = app_handle {
                     crate::file_selection::mouse_down(handle, (x, y), inside_overlay);
@@ -536,11 +397,11 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                     }
                 }
 
-                // 若在悬浮窗外部按下左键，且悬浮窗非固定：
-                // 若处于双击中途，则智能拦截即时隐藏广播，避免双击时“先闪退再弹出”
+                // 在悬浮窗外部按下左键即视为退场意图；双击中途拦截，
+                // 避免双击时「先闪退再弹出」。是否真的退场由协调 module 判定。
                 if let Some(ref handle) = app_handle {
-                    if is_overlay_visible(handle) && !is_point_inside_overlay(handle, x, y) && !is_potential_dbl_click {
-                        request_hide_overlay_gracefully(handle);
+                    if !inside_overlay && !is_potential_dbl_click {
+                        overlay::request_dismissal(handle);
                     }
                 }
             } else if msg == WM_RBUTTONDOWN
@@ -552,15 +413,12 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
             {
                 SELECTION_SEQ.fetch_add(1, Ordering::SeqCst);
                 crate::file_selection::cancel_pending();
-                // 右键、中键、滚轮滚动或鼠标侧键点击时平滑请求隐藏
+                // 侧键无论在悬浮窗内外都退场（胶囊条不消费侧键），
+                // 右键、中键与滚轮仅在悬浮窗外部时退场。
                 if let Some(ref handle) = app_handle {
-                    if is_overlay_visible(handle) {
-                        let is_xbutton = msg == WM_XBUTTONDOWN || msg == WM_NCXBUTTONDOWN;
-                        // 侧键触发时，无论是在悬浮窗内部还是外部均应隐藏（胶囊条不消费侧键）
-                        // 右键/中键/滚轮则在悬浮窗外部时平滑隐藏
-                        if is_xbutton || !is_point_inside_overlay(handle, x, y) {
-                            request_hide_overlay_gracefully(handle);
-                        }
+                    let is_xbutton = msg == WM_XBUTTONDOWN || msg == WM_NCXBUTTONDOWN;
+                    if is_xbutton || !window_manager::is_point_inside_overlay(handle, x, y) {
+                        overlay::request_dismissal(handle);
                     }
                 }
             } else if msg == WM_LBUTTONUP {
@@ -617,17 +475,17 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
                 }
 
                 if let Some(ref handle) = app_handle {
-                    if !is_dragging_overlay() && crate::file_selection::mouse_up(handle, (x, y)) {
+                    if !overlay::is_dragging() && crate::file_selection::mouse_up(handle, (x, y)) {
                         return;
                     }
                 }
 
-                if (is_drag || is_double_or_triple) && !is_dragging_overlay() {
+                if (is_drag || is_double_or_triple) && !overlay::is_dragging() {
                     // 若按下或抬起落在悬浮窗内部，属于悬浮窗内部文本选择/交互，不触发全局选词取词
                     let inside_overlay = if let Some(ref handle) = app_handle {
-                        let is_p2_inside = is_point_inside_overlay(handle, x, y);
+                        let is_p2_inside = window_manager::is_point_inside_overlay(handle, x, y);
                         let is_p1_inside = match start_point {
-                            Some(p1) => is_point_inside_overlay(handle, p1.0, p1.1),
+                            Some(p1) => window_manager::is_point_inside_overlay(handle, p1.0, p1.1),
                             None => false,
                         };
                         is_p1_inside || is_p2_inside
@@ -649,7 +507,7 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
 
 /// 键盘低级钩子回调
 /// - Bubble 模式下：任意按键都优雅隐藏胶囊条
-/// - Card 模式下：仅 Esc 键触发隐藏
+/// - Card 模式下：仅 Esc 键触发隐藏（由 `overlay::dismiss_on_key` 判定）
 unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     let _ = std::panic::catch_unwind(|| {
         if n_code >= 0 && l_param != 0 {
@@ -672,21 +530,9 @@ unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_par
                         let _ = handle.emit_to("floating_ball", "floating-ball-dismiss", ());
                     }
                 }
-                let should_hide = if is_overlay_bubble_mode() {
-                    // Bubble 模式下，任意按键都触发隐藏
-                    true
-                } else {
-                    // Card 模式下，仅 Esc 键触发隐藏
-                    vk == VK_ESCAPE
-                };
-
-                if should_hide {
-                    let app_handle = APP_HANDLE.get().cloned();
-                    if let Some(ref handle) = app_handle {
-                        if is_overlay_visible(&handle) {
-                            request_hide_overlay_gracefully(&handle);
-                        }
-                    }
+                // 气泡态任意按键退场，卡片态只有 Esc：形态政策由协调 module 判定。
+                if let Some(handle) = APP_HANDLE.get() {
+                    overlay::dismiss_on_key(handle, vk == VK_ESCAPE);
                 }
             }
         }
@@ -709,11 +555,9 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
             let app_handle = APP_HANDLE.get().cloned();
             let Some(handle) = app_handle else { return };
 
-            // 仅当「钉住 && 可见 && 卡片态」时零打扰放弃本次取词：
-            // - 钉住的卡片不因新划词被打扰（不覆盖内容、不移动窗口）
-            // - 气泡态即使处于钉住偏好也允许新划词刷新（气泡是瞬态查询入口）
-            // - 窗口隐藏后的残留钉住状态（如重启恢复的记忆）不得拦截划词，避免死锁
-            if is_overlay_pinned() && is_overlay_visible(&handle) && !is_overlay_bubble_mode() {
+            // 钉住且可见的卡片不因新划词被打扰（不覆盖内容、不移动窗口）；
+            // 气泡态即使带着 pin 偏好也允许刷新，隐藏后的残留 pin 不拦截划词。
+            if !overlay::can_accept_input(&handle) {
                 return;
             }
 
@@ -740,16 +584,12 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
                 return;
             }
 
-            if !is_modifier_satisfied(&modifier) {
+            if !trigger::modifier_satisfied(&modifier) {
                 return;
             }
 
-            if let Some(proc_name) = get_foreground_process_name() {
-                if proc_name.eq_ignore_ascii_case("iox.exe")
-                    || blacklist.iter().any(|b: &String| b.eq_ignore_ascii_case(&proc_name))
-                {
-                    return;
-                }
+            if trigger::foreground_blocked(&blacklist) {
+                return;
             }
 
             // 划词手势（双击选中、单击拖动选中）只是让宿主程序选中文字，
@@ -772,14 +612,10 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
                 }
 
                 if is_text_valid(&text, min_len) {
-                    // 取词期间状态可能变化（如卡片刚被钉住、或气泡已被关闭）：
-                    // 仅拦截「钉住且可见的卡片」，气泡态允许新划词正常接管
-                    if is_overlay_pinned() && is_overlay_visible(&handle) && !is_overlay_bubble_mode() {
+                    // 取词期间形态可能变化（例如卡片刚被钉住）：交给协调 module 复核。
+                    if !overlay::can_accept_input(&handle) {
                         return;
                     }
-
-                    // 取消任何待处理的隐藏操作
-                    HIDE_SEQ.fetch_add(1, Ordering::SeqCst);
 
                     // 触发全局划词事件
                     #[derive(serde::Serialize, Clone)]
@@ -797,11 +633,11 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
                     };
 
                     let _ = handle.emit("selection-triggered", payload);
-                    
-                    // 动态计算胶囊气泡所需物理宽度并调度窗口定位与展示
-                    crate::overlay_state::set_overlay_bubble_mode(true);
-                    let bubble_width = crate::window_manager::calculate_bubble_bar_width(&actions, icon_only);
-                    crate::window_manager::show_overlay_at(&handle, cursor_pos.0, cursor_pos.1, bubble_width, 46);
+
+                    // 动态计算胶囊气泡所需物理宽度，由协调 module 作废旧关闭并显示
+                    let bubble_width =
+                        window_manager::calculate_bubble_bar_width(&actions, icon_only);
+                    overlay::present_bubble(&handle, cursor_pos, (bubble_width, 46));
                 }
             }
         });
@@ -893,14 +729,6 @@ mod tests {
         assert!(is_text_valid("a", 1));
         assert!(!is_text_valid("a", 2));
         assert!(is_text_valid("Hello World", 2));
-    }
-
-    #[test]
-    fn test_pin_state() {
-        set_overlay_pinned(true);
-        assert!(is_overlay_pinned());
-        set_overlay_pinned(false);
-        assert!(!is_overlay_pinned());
     }
 }
 
