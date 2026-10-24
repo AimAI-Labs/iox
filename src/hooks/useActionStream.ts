@@ -14,21 +14,7 @@ import {
   stripInternalMarkers,
 } from '@/lib/chatTranscript';
 import { getThinkingRequestOptions, type ThinkingMode } from '@/lib/reasoning';
-
-interface StreamTokenPayload {
-  actionId: string;
-  token: string;
-}
-
-interface StreamDonePayload {
-  actionId: string;
-  canceled?: boolean;
-}
-
-interface StreamErrorPayload {
-  actionId: string;
-  error: string;
-}
+import { createActionStreamClient, type ActionStreamClient } from '@/lib/actionStreamClient';
 
 interface UseActionStreamProps {
   config: AppConfig | null;
@@ -87,52 +73,41 @@ export function useActionStream({
   updateWindowSize,
   executeGracefulHide,
 }: UseActionStreamProps) {
-  const activeActionRef = useRef<ActionConfig | null>(activeAction);
-  activeActionRef.current = activeAction;
-
-  // 监听流式事件
-  // 回调经 ref 转发：调用方传入的多为内联函数，若直接作为 effect 依赖，
-  // 每个 token 触发的重渲染都会重新订阅；而 listen/unlisten 均为异步，
-  // 注册与注销存在竞态，会残留重复监听器导致同一 token 被追加多次。
   const streamHandlersRef = useRef({ onAppendToken, onStreamDone, onStreamError });
   streamHandlersRef.current = { onAppendToken, onStreamDone, onStreamError };
+  const clientRef = useRef<ActionStreamClient | null>(null);
+
+  const getStreamClient = useCallback(() => {
+    if (!clientRef.current) {
+      clientRef.current = createActionStreamClient({
+        invoke,
+        listen,
+        createRequestId: () => crypto.randomUUID(),
+        onToken: (token) => streamHandlersRef.current.onAppendToken(token),
+        onDone: () => streamHandlersRef.current.onStreamDone(),
+        onError: (error) => streamHandlersRef.current.onStreamError(error),
+      });
+    }
+    return clientRef.current;
+  }, []);
 
   useEffect(() => {
-    let disposed = false;
-    const unlisteners: Array<() => void> = [];
-
-    const subscribe = <T extends { actionId: string }>(
-      eventName: string,
-      handler: (payload: T) => void
-    ) => {
-      listen<T>(eventName, (event) => {
-        if (disposed) return;
-        const action = activeActionRef.current;
-        if (action && event.payload?.actionId === action.id) {
-          handler(event.payload);
-        }
-      })
-        .then((unlisten) => {
-          if (disposed) unlisten();
-          else unlisteners.push(unlisten);
-        })
-        .catch((err) => console.warn(`Failed to listen to ${eventName}:`, err));
-    };
-
-    subscribe<StreamTokenPayload>('action-stream-token', (payload) =>
-      streamHandlersRef.current.onAppendToken(payload.token)
-    );
-    subscribe<StreamDonePayload>('action-stream-done', () =>
-      streamHandlersRef.current.onStreamDone()
-    );
-    subscribe<StreamErrorPayload>('action-stream-error', (payload) =>
-      streamHandlersRef.current.onStreamError(payload.error)
-    );
-
+    const client = getStreamClient();
+    // A failed subscription is reported when a request is attempted.
+    void client.connect().catch(() => {});
     return () => {
-      disposed = true;
-      unlisteners.forEach((unlisten) => unlisten());
+      client.dispose();
+      if (clientRef.current === client) clientRef.current = null;
     };
+  }, [getStreamClient]);
+
+  useEffect(() => {
+    const client = clientRef.current;
+    if (client && client.activeActionId !== activeAction?.id) void client.detach(false);
+  }, [activeAction?.id]);
+
+  const handleDetachStream = useCallback(() => {
+    void clientRef.current?.detach();
   }, []);
 
   const getThinkingOptions = useCallback(
@@ -148,6 +123,7 @@ export function useActionStream({
     async (action: ActionConfig) => {
       // 1. 快捷复制模式
       if (action.actionType === 'copy') {
+        void clientRef.current?.detach(false);
         if (selectedText) {
           try {
             await navigator.clipboard.writeText(selectedText);
@@ -163,6 +139,7 @@ export function useActionStream({
 
       // 2. Web 官网原生浮窗模式
       if (action.actionType === 'web') {
+        void clientRef.current?.detach(false);
         if (action.copyToClipboard && selectedText) {
           try {
             await navigator.clipboard.writeText(selectedText);
@@ -191,28 +168,24 @@ export function useActionStream({
       const defaultModel = provider?.defaultModel || provider?.models[0] || '';
 
       onStartAction(action, defaultModel);
-      await updateWindowSize('card', true);
 
       if (!defaultModel || defaultModel.trim() === '') {
+        void clientRef.current?.detach(clientRef.current.activeActionId === action.id);
         onSetError('⚠️ 当前服务商尚未配置可用模型，请前往「设置 -> 模型服务商」获取或添加可用模型。');
         onSetLoading(false);
+        await updateWindowSize('card', true);
         return;
       }
 
       const thinkingOptions = getThinkingOptions(action.providerId);
 
-      try {
-        await invoke('trigger_api_action', {
-          actionId: action.id,
-          text: selectedText,
-          modelOverride: defaultModel,
-          promptOverride: action.promptTemplate,
-          ...thinkingOptions,
-        });
-      } catch (err) {
-        onSetError(String(err));
-        onSetLoading(false);
-      }
+      await getStreamClient().start({
+        actionId: action.id,
+        text: selectedText,
+        modelOverride: defaultModel,
+        promptOverride: action.promptTemplate,
+        ...thinkingOptions,
+      }, () => updateWindowSize('card', true));
     },
     [
       config?.providers,
@@ -225,6 +198,7 @@ export function useActionStream({
       onStartAction,
       onSetError,
       onSetLoading,
+      getStreamClient,
     ]
   );
 
@@ -235,6 +209,7 @@ export function useActionStream({
       if (action.actionType === 'copy') {
         return;
       }
+      void clientRef.current?.detach(clientRef.current.activeActionId === action.id);
 
       // 2. Web 官网原生浮窗模式
       if (action.actionType === 'web') {
@@ -284,6 +259,8 @@ export function useActionStream({
   // 2. API 动作：展开本地流式卡片并预填引用，光标聚焦末尾，不自动请求
   const handleTriggerQuoteAction = useCallback(
     async (action: ActionConfig) => {
+      if (action.actionType === 'copy') return;
+      void clientRef.current?.detach(clientRef.current.activeActionId === action.id);
       // 1. Web 官网模式
       if (action.actionType === 'web') {
         const formattedQuote = formatQuoteText(selectedText);
@@ -364,18 +341,13 @@ export function useActionStream({
 
       const thinkingOptions = getThinkingOptions();
 
-      try {
-        await invoke('trigger_api_action', {
-          actionId: activeAction.id,
-          text: followUpCombined,
-          modelOverride: selectedModel,
-          promptOverride: '{text}',
-          ...thinkingOptions,
-        });
-      } catch (err) {
-        onSetError(String(err));
-        onSetLoading(false);
-      }
+      await getStreamClient().start({
+        actionId: activeAction.id,
+        text: followUpCombined,
+        modelOverride: selectedModel,
+        promptOverride: '{text}',
+        ...thinkingOptions,
+      });
     },
     [
       activeAction,
@@ -388,6 +360,7 @@ export function useActionStream({
       onSetStreamText,
       onSetLoading,
       onSetError,
+      getStreamClient,
     ]
   );
 
@@ -444,18 +417,13 @@ export function useActionStream({
       // 第一轮回答重新生成
       onSetStreamText('');
 
-      try {
-        await invoke('trigger_api_action', {
-          actionId: activeAction.id,
-          text: selectedText,
-          modelOverride: selectedModel,
-          promptOverride: activeAction.promptTemplate,
-          ...thinkingOptions,
-        });
-      } catch (err) {
-        onSetError(String(err));
-        onSetLoading(false);
-      }
+      await getStreamClient().start({
+        actionId: activeAction.id,
+        text: selectedText,
+        modelOverride: selectedModel,
+        promptOverride: activeAction.promptTemplate,
+        ...thinkingOptions,
+      });
     } else {
       // 多轮追问：保留前 N-1 轮历史，仅重置最新一轮
       const lastPart = parts[parts.length - 1];
@@ -471,18 +439,13 @@ export function useActionStream({
 
       const followUpCombined = buildFollowUpPrompt(recentHistory, selectedText, latestPrompt);
 
-      try {
-        await invoke('trigger_api_action', {
-          actionId: activeAction.id,
-          text: followUpCombined,
-          modelOverride: selectedModel,
-          promptOverride: '{text}',
-          ...thinkingOptions,
-        });
-      } catch (err) {
-        onSetError(String(err));
-        onSetLoading(false);
-      }
+      await getStreamClient().start({
+        actionId: activeAction.id,
+        text: followUpCombined,
+        modelOverride: selectedModel,
+        promptOverride: '{text}',
+        ...thinkingOptions,
+      });
     }
   }, [
     activeAction,
@@ -495,6 +458,7 @@ export function useActionStream({
     onSetStreamText,
     onSetLoading,
     onSetError,
+    getStreamClient,
   ]);
 
   // 原位编辑：保留上方历史，替换当前问题并移除原回答及后续轮次。
@@ -516,31 +480,20 @@ export function useActionStream({
     onSetError(null);
 
     const recentHistory = buildHistoryContext(precedingHistory, config?.apiCard?.contextTurns ?? 5);
-    try {
-      await invoke('trigger_api_action', {
-        actionId: activeAction.id,
-        text: turnIndex === 0 ? editedPrompt : buildFollowUpPrompt(recentHistory, selectedText, editedPrompt),
-        modelOverride: selectedModel,
-        promptOverride: turnIndex === 0 ? activeAction.promptTemplate : '{text}',
-        ...getThinkingOptions(),
-      });
-    } catch (err) {
-      onSetError(String(err));
-      onSetLoading(false);
-    }
+    await getStreamClient().start({
+      actionId: activeAction.id,
+      text: turnIndex === 0 ? editedPrompt : buildFollowUpPrompt(recentHistory, selectedText, editedPrompt),
+      modelOverride: selectedModel,
+      promptOverride: turnIndex === 0 ? activeAction.promptTemplate : '{text}',
+      ...getThinkingOptions(),
+    });
     return true;
   }, [activeAction, isLoading, streamText, selectedText, selectedModel, config?.apiCard?.contextTurns,
-    onSetSelectedText, onSetStreamText, onSetLoading, onSetError, getThinkingOptions]);
+    onSetSelectedText, onSetStreamText, onSetLoading, onSetError, getThinkingOptions, getStreamClient]);
 
   // 开启新会话 (彻底清空追问历史与选中文本，终止在途请求)
   const handleNewChat = useCallback(async () => {
-    if (activeAction) {
-      try {
-        await invoke('cancel_action', { actionId: activeAction.id });
-      } catch {
-        // ignore
-      }
-    }
+    handleDetachStream();
     if (onNewChatDispatch) {
       onNewChatDispatch();
     } else {
@@ -548,7 +501,7 @@ export function useActionStream({
       onSetLoading(false);
       onSetError(null);
     }
-  }, [activeAction, onNewChatDispatch, onSetStreamText, onSetLoading, onSetError]);
+  }, [handleDetachStream, onNewChatDispatch, onSetStreamText, onSetLoading, onSetError]);
 
   // 导出完整对话为 Markdown
   const handleExportMarkdown = useCallback(async () => {
@@ -568,6 +521,7 @@ export function useActionStream({
   // 恢复历史会话内容
   const handleRestoreSession = useCallback(
     (sessionText: string, model?: string, providerId?: string) => {
+      handleDetachStream();
       onSetStreamText(sessionText);
       if (model) onSetModel(model);
       if (providerId) {
@@ -576,16 +530,13 @@ export function useActionStream({
       onSetLoading(false);
       onSetError(null);
     },
-    [onSetStreamText, onSetModel, onSetProvider, onSetLoading, onSetError]
+    [handleDetachStream, onSetStreamText, onSetModel, onSetProvider, onSetLoading, onSetError]
   );
 
   // 停止生成
   const handleCancel = useCallback(async () => {
-    if (activeAction) {
-      await invoke('cancel_action', { actionId: activeAction.id });
-      onSetLoading(false);
-    }
-  }, [activeAction, onSetLoading]);
+    await clientRef.current?.cancel();
+  }, []);
 
   return {
     handleTriggerAction,
@@ -601,5 +552,6 @@ export function useActionStream({
     handleRestoreSession,
     handleExportMarkdown,
     handleCancel,
+    handleDetachStream,
   };
 }

@@ -13,6 +13,7 @@ interface UseOverlayLifecycleProps {
   setIsPinned: (pinned: boolean) => void;
   setIsClosing: (closing: boolean) => void;
   onHideComplete: () => void;
+  onHideStart?: () => void;
 }
 
 export function useOverlayLifecycle({
@@ -24,6 +25,7 @@ export function useOverlayLifecycle({
   setIsPinned,
   setIsClosing,
   onHideComplete,
+  onHideStart,
 }: UseOverlayLifecycleProps) {
   const isPinnedRef = useRef<boolean>(isPinned);
   isPinnedRef.current = isPinned;
@@ -86,6 +88,7 @@ export function useOverlayLifecycle({
     (force = false) => {
       // 关键修复：钉住 (Pin) 仅对 Card 态生效！Bubble 气泡态永远允许退场隐藏
       if (isPinnedRef.current && currentModeRef.current === 'card' && !force) return;
+      onHideStart?.();
       setIsClosing(true);
       if (closeTimerRef.current) {
         clearTimeout(closeTimerRef.current);
@@ -96,7 +99,7 @@ export function useOverlayLifecycle({
         if (closeGenerationRef.current === generation) onHideComplete();
       }, 100);
     },
-    [setIsClosing, onHideComplete]
+    [setIsClosing, onHideComplete, onHideStart]
   );
 
   // 取消退场定时器（当新划词触发时调用）

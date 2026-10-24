@@ -1,5 +1,6 @@
 export const THINKING_LEVELS = ['quick', 'low', 'deep', 'max'] as const;
 export type ThinkingMode = (typeof THINKING_LEVELS)[number];
+export type ReasoningEffort = 'low' | 'high' | 'max';
 
 type Provider = { id: string; baseUrl: string };
 
@@ -10,7 +11,10 @@ export function isDeepSeekProvider(provider?: Provider): boolean {
   ));
 }
 
-export function getThinkingRequestOptions(mode: ThinkingMode, provider?: Provider) {
+export function getThinkingRequestOptions(mode: ThinkingMode, provider?: Provider): {
+  thinkingEnabled: boolean;
+  reasoningEffort?: ReasoningEffort;
+} {
   if (mode === 'quick' || !isDeepSeekProvider(provider)) return { thinkingEnabled: false };
   return {
     thinkingEnabled: true,

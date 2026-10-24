@@ -15,7 +15,7 @@ pub mod window_manager;
 
 use ai::AiManager;
 use config::AppConfig;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct AppState {
@@ -147,6 +147,7 @@ fn trigger_api_action(
     app: AppHandle,
     state: State<AppState>,
     action_id: String,
+    request_id: String,
     text: String,
     model_override: Option<String>,
     prompt_override: Option<String>,
@@ -185,13 +186,20 @@ fn trigger_api_action(
     };
 
     let user_prompt = ai::render_prompt_template(&prompt_template, &text);
-    let ai_manager = state.ai_manager.clone();
+    // Register before spawning so an accepted request can always be canceled immediately.
+    let request = state.ai_manager.begin(
+        action_id,
+        request_id,
+        Arc::new(move |event| {
+            if let Err(error) = app.emit(event.name(), &event) {
+                eprintln!("AI stream event submission failed: {error}");
+            }
+        }),
+    )?;
 
     tauri::async_runtime::spawn(async move {
         ai::execute_stream_request(
-            app,
-            ai_manager,
-            action_id,
+            request,
             provider,
             model,
             None,
@@ -206,11 +214,12 @@ fn trigger_api_action(
 }
 
 #[tauri::command]
-fn cancel_action(state: State<AppState>, action_id: String) {
-    let ai_manager = state.ai_manager.clone();
-    tauri::async_runtime::spawn(async move {
-        ai_manager.cancel(&action_id).await;
-    });
+fn cancel_action(
+    state: State<AppState>,
+    action_id: String,
+    request_id: String,
+) -> Result<bool, String> {
+    state.ai_manager.cancel(&action_id, &request_id)
 }
 
 #[tauri::command]

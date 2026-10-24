@@ -58,7 +58,7 @@ function mountBall(t, overrides = {}) {
   } });
   const exports = {};
   vm.runInNewContext(outputText, {
-    exports, console, setTimeout, clearTimeout,
+    exports, console, setTimeout, clearTimeout, crypto: globalThis.crypto,
     requestAnimationFrame: (callback) => setTimeout(() => callback(0), 16),
     cancelAnimationFrame: clearTimeout,
     window: {
@@ -463,4 +463,20 @@ test('reentry waits for a committing native collapse before starting another exp
   assert.equal(ball.find('menu'), undefined);
   await ball.advance(220);
   assert.ok(ball.find('menu'));
+});
+
+test('each direct API action has a unique execution identity', async (t) => {
+  const ball = mountBall(t, { reducedMotion: true });
+  await ball.render();
+  for (let count = 0; count < 2; count++) {
+    ball.tree.props.onMouseEnter();
+    await ball.advance(220);
+    await ball.find('menu').props.onTriggerAction({ id: 'api-action', actionType: 'api' });
+    await ball.render();
+  }
+  const requests = ball.requests.filter((request) => request.command === 'trigger_api_action');
+  assert.equal(requests.length, 2);
+  assert.equal(typeof requests[0].args.requestId, 'string');
+  assert.ok(requests[0].args.requestId.length > 0);
+  assert.notEqual(requests[0].args.requestId, requests[1].args.requestId);
 });

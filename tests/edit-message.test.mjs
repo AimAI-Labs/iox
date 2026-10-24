@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import vm from 'node:vm';
 import ts from 'typescript';
+import { mountActionStream } from './helpers/action-stream-hook.mjs';
 
 async function loadModule(path) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -11,43 +11,18 @@ async function loadModule(path) {
 }
 
 const transcript = await loadModule('../src/lib/chatTranscript.ts');
-const reasoning = await loadModule('../src/lib/reasoning.ts');
-const hookSource = readFileSync(new URL('../src/hooks/useActionStream.ts', import.meta.url), 'utf8');
-const hookJs = ts.transpileModule(hookSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
 
 function setup(overrides = {}, rejectRequest = false) {
-  const calls = [];
-  const updates = {};
-  const exports = {};
-  const modules = {
-    react: { useCallback: (fn) => fn, useRef: (current) => ({ current }), useEffect: () => {} },
-    '@tauri-apps/api/core': { invoke: async (command, args) => {
-      calls.push({ command, args });
-      if (rejectRequest) throw new Error('request failed');
-    } },
-    '@tauri-apps/api/event': { listen: () => {} },
-    '@/lib/reasoning': reasoning,
-    '@/lib/chatTranscript': transcript,
-    '@/lib/formatQuote': { formatQuoteText: (text) => text },
-  };
-  vm.runInNewContext(hookJs, { exports, require: (id) => {
-    assert.ok(modules[id], `Unexpected import: ${id}`);
-    return modules[id];
-  } });
   const streamText = 'first answer' + transcript.createFollowUpChunk('old question') +
     'old answer' + transcript.createFollowUpChunk('later question') + 'later answer';
-  const hook = exports.useActionStream({
+  const mounted = mountActionStream({
     config: { apiCard: { contextTurns: 5 }, providers: [{ id: 'deepseek', baseUrl: 'https://api.deepseek.com' }] },
     activeAction: { id: 'test', providerId: 'deepseek', promptTemplate: 'Translate: {text}' },
     selectedModel: 'test-model', selectedText: 'original selection', streamText,
     thinkingMode: 'deep', isLoading: false,
-    onSetStreamText: (value) => { updates.streamText = value; },
-    onSetSelectedText: (value) => { updates.selectedText = value; },
-    onSetLoading: (value) => { updates.isLoading = value; },
-    onSetError: (value) => { updates.error = value; },
     ...overrides,
-  });
-  return { hook, calls, updates, streamText };
+  }, { invoke: () => { if (rejectRequest) throw new Error('request failed'); } });
+  return { hook: mounted.hook, calls: mounted.calls, updates: mounted.updates, streamText };
 }
 
 test('editing an earlier question preserves preceding history and replaces everything below it', async () => {

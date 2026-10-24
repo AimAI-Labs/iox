@@ -328,6 +328,7 @@ export const FloatingBall: React.FC<FloatingBallProps> = ({ config }) => {
     try {
       await invoke(action.actionType === 'api' ? 'trigger_api_action' : 'trigger_web_action', {
         actionId: action.id, text,
+        ...(action.actionType === 'api' ? { requestId: crypto.randomUUID() } : {}),
       });
     } catch (error) {
       console.error('Failed to trigger floating ball action:', error);

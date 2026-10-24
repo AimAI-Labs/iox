@@ -1,10 +1,8 @@
-use super::AiManager;
+use super::requests::{Outcome, RequestHandle};
 use crate::config::ProviderConfig;
 use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
-use tokio_util::sync::CancellationToken;
 
 /// DeepSeek 官方支持的推理强度；旧调用未指定时沿用 high。
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -82,14 +80,9 @@ struct StreamResponse {
     choices: Option<Vec<StreamChoice>>,
 }
 
-/// 异步执行 OpenAI 兼容协议流式请求
-///
-/// 当 `thinking_enabled` 为 true 时，请求体中附带 DeepSeek 深度思考参数，
-/// 并将 `reasoning_content` 包裹为 `<think>...</think>` 标签发送给前端。
-pub async fn execute_stream_request(
-    app: AppHandle,
-    ai_manager: AiManager,
-    action_id: String,
+/// Executes an already accepted request. All output and termination belong to its handle.
+pub(crate) async fn execute_stream_request(
+    request: RequestHandle,
     provider: ProviderConfig,
     model: String,
     system_prompt: Option<String>,
@@ -97,33 +90,48 @@ pub async fn execute_stream_request(
     thinking_enabled: bool,
     reasoning_effort: Option<ReasoningEffort>,
 ) {
-    let cancel_token = CancellationToken::new();
-    ai_manager
-        .register_token(action_id.clone(), cancel_token.clone())
-        .await;
+    let outcome = send_request(
+        &request,
+        provider,
+        model,
+        system_prompt,
+        user_prompt,
+        thinking_enabled,
+        reasoning_effort,
+    )
+    .await;
+    request.finish(outcome);
+}
 
+async fn send_request(
+    request: &RequestHandle,
+    provider: ProviderConfig,
+    model: String,
+    system_prompt: Option<String>,
+    user_prompt: String,
+    thinking_enabled: bool,
+    reasoning_effort: Option<ReasoningEffort>,
+) -> Outcome {
     let mut messages = Vec::new();
-    // 深度思考模式下 DeepSeek 不支持 system prompt，需跳过
+    // DeepSeek thinking mode does not accept a system prompt.
     if !thinking_enabled {
         if let Some(sys) = system_prompt {
             if !sys.trim().is_empty() {
                 messages.push(ChatMessage {
-                    role: "system".to_string(),
+                    role: "system".into(),
                     content: sys,
                 });
             }
         }
     }
     messages.push(ChatMessage {
-        role: "user".to_string(),
+        role: "user".into(),
         content: user_prompt,
     });
-
     let is_deepseek = provider.id.to_lowercase().contains("deepseek")
         || provider.base_url.to_lowercase().contains("deepseek");
     let (thinking, reasoning_effort) =
         thinking_parameters(is_deepseek, thinking_enabled, reasoning_effort);
-
     let request_body = ChatCompletionRequest {
         model,
         messages,
@@ -131,22 +139,13 @@ pub async fn execute_stream_request(
         thinking,
         reasoning_effort,
     };
-
-    let client = reqwest::Client::builder()
+    let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
-        .build();
-
-    let client = match client {
-        Ok(c) => c,
-        Err(e) => {
-            let _ = app.emit(
-                "action-stream-error",
-                serde_json::json!({ "actionId": action_id, "error": format!("Client error: {}", e) }),
-            );
-            return;
-        }
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => return Outcome::Failed(format!("Client error: {error}")),
     };
-
     let endpoint = if provider.base_url.ends_with("/chat/completions") {
         provider.base_url.clone()
     } else {
@@ -155,7 +154,6 @@ pub async fn execute_stream_request(
             provider.base_url.trim_end_matches('/')
         )
     };
-
     let mut req = client.post(&endpoint).json(&request_body);
     if !provider.api_key.trim().is_empty() {
         req = req.header(
@@ -163,145 +161,200 @@ pub async fn execute_stream_request(
             format!("Bearer {}", provider.api_key.trim()),
         );
     }
-
-    let response = tokio::select! {
-        _ = cancel_token.cancelled() => {
-            let _ = app.emit("action-stream-done", serde_json::json!({ "actionId": action_id, "canceled": true }));
-            return;
-        }
-        res = req.send() => {
-            match res {
-                Ok(r) => r,
-                Err(e) => {
-                    let _ = app.emit(
-                        "action-stream-error",
-                        serde_json::json!({ "actionId": action_id, "error": format!("Network error: {}", e) }),
-                    );
-                    return;
-                }
-            }
-        }
+    let response = match cancellable(request, async {
+        req.send()
+            .await
+            .map_err(|error| format!("Network error: {error}"))
+    })
+    .await
+    {
+        Ok(response) => response,
+        Err(outcome) => return outcome,
     };
-
     if !response.status().is_success() {
         let status = response.status();
-        let error_text = response.text().await.unwrap_or_default();
-        let _ = app.emit(
-            "action-stream-error",
-            serde_json::json!({ "actionId": action_id, "error": format!("HTTP {}: {}", status, error_text) }),
-        );
-        return;
+        // Reading a failed response body may also block; cancellation must cover it.
+        return match cancellable(request, async {
+            response
+                .text()
+                .await
+                .map_err(|error| format!("HTTP {status}: failed reading response: {error}"))
+        })
+        .await
+        {
+            Ok(body) => Outcome::Failed(format!("HTTP {status}: {body}")),
+            Err(outcome) => outcome,
+        };
     }
+    let stream = response.bytes_stream().eventsource().map(|item| {
+        item.map(|event| event.data)
+            .map_err(|error| format!("SSE parse error: {error}"))
+    });
+    read_sse(request, stream).await
+}
 
-    let mut stream = response.bytes_stream().eventsource();
-    // 首字超时：若 30s 内未收到任何 SSE 事件，视为服务端无响应，主动报错解锁前端 loading
-    let first_byte_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+/// The two HTTP waits use the same cancellation seam, including error-body reads.
+async fn cancellable<T>(
+    request: &RequestHandle,
+    future: impl std::future::Future<Output = Result<T, String>>,
+) -> Result<T, Outcome> {
+    tokio::select! {
+        biased;
+        _ = request.cancellation().cancelled() => Err(Outcome::Canceled),
+        result = future => result.map_err(Outcome::Failed),
+    }
+}
+
+async fn read_sse(
+    request: &RequestHandle,
+    stream: impl futures_util::Stream<Item = Result<String, String>>,
+) -> Outcome {
+    futures_util::pin_mut!(stream);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
     let mut received_any = false;
-    // 追踪是否已发送过 <think> 开标签（用于 reasoning_content → <think> 包裹）
-    let mut reasoning_started = false;
-
     loop {
         tokio::select! {
-            _ = tokio::time::sleep_until(first_byte_deadline), if !received_any => {
-                // 首字超时：服务端接受连接后长时间未返回任何 SSE 事件
-                let _ = app.emit(
-                    "action-stream-error",
-                    serde_json::json!({
-                        "actionId": action_id,
-                        "error": "首字等待超时（30s），服务端未返回任何数据。请检查网络或 API 端点是否支持流式输出。"
-                    }),
-                );
-                break;
+            biased;
+            _ = request.cancellation().cancelled() => return Outcome::Canceled,
+            _ = tokio::time::sleep_until(deadline), if !received_any => {
+                return Outcome::Failed("首字等待超时（30s），服务端未返回任何数据。请检查网络或 API 端点是否支持流式输出。".into());
             }
-            _ = cancel_token.cancelled() => {
-                // 如果在推理过程中被取消，先闭合 <think> 标签
-                if reasoning_started {
-                    let _ = app.emit("action-stream-token", serde_json::json!({
-                        "actionId": action_id,
-                        "token": "</think>"
-                    }));
-                }
-                let _ = app.emit("action-stream-done", serde_json::json!({ "actionId": action_id, "canceled": true }));
-                break;
-            }
-            item = stream.next() => {
-                match item {
-                    Some(Ok(event)) => {
-                        received_any = true;
-                        if event.data == "[DONE]" {
-                            // 流结束时如果仍在推理中，闭合标签
-                            if reasoning_started {
-                                let _ = app.emit("action-stream-token", serde_json::json!({
-                                    "actionId": action_id,
-                                    "token": "</think>"
-                                }));
-                            }
-                            let _ = app.emit("action-stream-done", serde_json::json!({ "actionId": action_id }));
-                            break;
-                        }
-                        if let Ok(parsed) = serde_json::from_str::<StreamResponse>(&event.data) {
-                            if let Some(choices) = parsed.choices {
-                                for choice in choices {
-                                    if let Some(delta) = choice.delta {
-                                        // 处理 reasoning_content (DeepSeek 思维链)
-                                        if let Some(reasoning) = delta.reasoning_content {
-                                            if !reasoning_started {
-                                                reasoning_started = true;
-                                                let _ = app.emit("action-stream-token", serde_json::json!({
-                                                    "actionId": action_id,
-                                                    "token": "<think>"
-                                                }));
-                                            }
-                                            let _ = app.emit("action-stream-token", serde_json::json!({
-                                                "actionId": action_id,
-                                                "token": reasoning
-                                            }));
-                                        }
-                                        // 处理正文 content
-                                        if let Some(content) = delta.content {
-                                            // 从推理切换到正文时，闭合 <think> 标签
-                                            if reasoning_started {
-                                                reasoning_started = false;
-                                                let _ = app.emit("action-stream-token", serde_json::json!({
-                                                    "actionId": action_id,
-                                                    "token": "</think>"
-                                                }));
-                                            }
-                                            let _ = app.emit("action-stream-token", serde_json::json!({
-                                                "actionId": action_id,
-                                                "token": content
-                                            }));
-                                        }
-                                    }
-                                }
+            item = stream.next() => match item {
+                Some(Ok(data)) => {
+                    received_any = true;
+                    if data == "[DONE]" { return Outcome::Completed; }
+                    if let Ok(parsed) = serde_json::from_str::<StreamResponse>(&data) {
+                        for choice in parsed.choices.into_iter().flatten() {
+                            if let Some(delta) = choice.delta {
+                                if let Some(reasoning) = delta.reasoning_content { request.reasoning(&reasoning); }
+                                if let Some(content) = delta.content { request.content(&content); }
                             }
                         }
                     }
-                    Some(Err(e)) => {
-                        if reasoning_started {
-                            let _ = app.emit("action-stream-token", serde_json::json!({
-                                "actionId": action_id,
-                                "token": "</think>"
-                            }));
-                        }
-                        let _ = app.emit("action-stream-error", serde_json::json!({
-                            "actionId": action_id,
-                            "error": format!("SSE parse error: {}", e)
-                        }));
-                        break;
-                    }
-                    None => {
-                        if reasoning_started {
-                            let _ = app.emit("action-stream-token", serde_json::json!({
-                                "actionId": action_id,
-                                "token": "</think>"
-                            }));
-                        }
-                        let _ = app.emit("action-stream-done", serde_json::json!({ "actionId": action_id }));
-                        break;
-                    }
                 }
+                Some(Err(error)) => return Outcome::Failed(error),
+                None => return Outcome::Completed,
             }
+        }
+    }
+}
+#[cfg(test)]
+mod driver_tests {
+    use super::super::requests::{tests::recording, EventData};
+    use super::*;
+    use futures_util::stream;
+
+    #[tokio::test]
+    async fn done_eof_and_sse_error_finish_once_after_closing_reasoning() {
+        for ending in [
+            Some(Ok("[DONE]".to_string())),
+            None,
+            Some(Err("broken SSE".to_string())),
+        ] {
+            let (manager, events, sink) = recording();
+            let request = manager.begin("a".into(), "r".into(), sink).unwrap();
+            let reasoning =
+                Ok(r#"{"choices":[{"delta":{"reasoning_content":"why"}}]}"#.to_string());
+            let input = stream::iter(std::iter::once(reasoning).chain(ending));
+            let outcome = read_sse(&request, input).await;
+            request.finish(outcome);
+            assert!(!request.finish(Outcome::Completed));
+            assert!(!request.content("late"));
+            let events = events.lock().unwrap();
+            assert_eq!(events.len(), 4);
+            assert_eq!(
+                events[2].data,
+                EventData::Token {
+                    token: "</think>".into()
+                }
+            );
+            assert!(!matches!(events[3].data, EventData::Token { .. }));
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn first_event_timeout_and_cancel_close_reasoning_without_late_tokens() {
+        for cancel in [false, true] {
+            let (manager, events, sink) = recording();
+            let request = manager.begin("a".into(), "r".into(), sink).unwrap();
+            request.reasoning("why");
+            let pending = read_sse(&request, stream::pending());
+            tokio::pin!(pending);
+            assert!(futures_util::poll!(&mut pending).is_pending());
+            if cancel {
+                assert!(manager.cancel("a", "r").unwrap());
+            } else {
+                tokio::time::advance(std::time::Duration::from_secs(30)).await;
+            }
+            request.finish(pending.await);
+            let events = events.lock().unwrap();
+            assert_eq!(events.len(), 4);
+            assert_eq!(
+                events[2].data,
+                EventData::Token {
+                    token: "</think>".into()
+                }
+            );
+            assert_eq!(
+                matches!(events[3].data, EventData::Done { canceled: true }),
+                cancel
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn cancel_interrupts_pending_send_and_error_body_reads() {
+        for phase in ["send", "error body"] {
+            let (manager, events, sink) = recording();
+            let request = manager.begin("a".into(), phase.into(), sink).unwrap();
+            let waiting = cancellable(&request, std::future::pending::<Result<(), String>>());
+            tokio::pin!(waiting);
+            assert!(futures_util::poll!(&mut waiting).is_pending());
+            manager.cancel("a", phase).unwrap();
+            assert!(matches!(waiting.await, Err(Outcome::Canceled)));
+            assert!(!request.finish(Outcome::Canceled));
+            assert_eq!(events.lock().unwrap().len(), 1);
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn first_event_deadline_stops_after_receiving_an_sse_event() {
+        let (manager, events, sink) = recording();
+        let request = manager.begin("a".into(), "r".into(), sink).unwrap();
+        let input = stream::iter([Ok(r#"{"choices":[{"delta":{"content":"hello"}}]}"#.into())])
+            .chain(stream::pending());
+        let waiting = read_sse(&request, input);
+        tokio::pin!(waiting);
+        assert!(futures_util::poll!(&mut waiting).is_pending());
+        tokio::time::advance(std::time::Duration::from_secs(31)).await;
+        assert!(futures_util::poll!(&mut waiting).is_pending());
+        assert_eq!(events.lock().unwrap().len(), 1);
+        manager.cancel("a", "r").unwrap();
+        assert!(matches!(waiting.await, Outcome::Canceled));
+    }
+
+    #[tokio::test]
+    async fn controlled_network_http_and_request_timeout_failures_are_terminal_errors() {
+        for message in [
+            "Network error: refused",
+            "HTTP 401: denied",
+            "Network error: operation timed out",
+        ] {
+            let (manager, events, sink) = recording();
+            let request = manager.begin("a".into(), "r".into(), sink).unwrap();
+            let result = cancellable(
+                &request,
+                std::future::ready(Err::<(), _>(message.to_string())),
+            )
+            .await;
+            request.finish(result.err().unwrap());
+            assert!(!request.finish(Outcome::Completed));
+            assert_eq!(
+                events.lock().unwrap()[0].data,
+                EventData::Error {
+                    error: message.into()
+                }
+            );
         }
     }
 }

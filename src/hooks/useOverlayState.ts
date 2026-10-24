@@ -34,13 +34,20 @@ export function useOverlayState(config: AppConfig | null) {
     setIsPinned: (pinned) => dispatch({ type: 'SET_PINNED', isPinned: pinned }),
     setIsClosing: (closing) => dispatch({ type: 'SET_CLOSING', isClosing: closing }),
     onHideComplete: () => dispatch({ type: 'HIDE_COMPLETE' }),
+    onHideStart: () => handleDetachStream(),
   });
 
   // 2. 选词触发与退场事件监听
   useSelectionEvents({
     isPinned: state.isPinned,
-    onSelectionTriggered: (text) => dispatch({ type: 'SELECTION_TRIGGERED', text }),
-    onFilesSelected: (files, dragId, layout) => dispatch({ type: 'FILES_SELECTED', files, dragId, layout }),
+    onSelectionTriggered: (text) => {
+      handleDetachStream();
+      dispatch({ type: 'SELECTION_TRIGGERED', text });
+    },
+    onFilesSelected: (files, dragId, layout) => {
+      handleDetachStream();
+      dispatch({ type: 'FILES_SELECTED', files, dragId, layout });
+    },
     onRequestHide: executeGracefulHide,
     cancelCloseTimer,
     updateWindowSize,
@@ -61,6 +68,7 @@ export function useOverlayState(config: AppConfig | null) {
     handleRestoreSession,
     handleExportMarkdown,
     handleCancel,
+    handleDetachStream,
   } = useActionStream({
     config,
     selectedText: state.selectedText,
