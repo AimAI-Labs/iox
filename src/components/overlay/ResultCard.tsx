@@ -36,7 +36,6 @@ import { cn } from '@/lib/utils';
 import { parseThinkingAndMain } from '@/lib/thinkingParser';
 import { contextUsage as getContextUsage } from '@/conversation/transcript';
 import { collectLinksFromRoot, linksEqual, type LinkInfo } from '@/lib/links';
-import { isProviderSelectable } from '@/lib/provider';
 import type { ThinkingMode } from '@/lib/reasoning';
 
 /* ─────────────────────────────────────────────────────────
@@ -282,12 +281,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     }, 50);
   }, [quoteMenu.text]);
 
-  // 底部模型切换器只展示已启用的服务商配置；停用只收窄可选来源，不阻断已绑定动作的执行
-  const enabledProviders = useMemo(
-    () => providers.filter(isProviderSelectable),
-    [providers]
-  );
-  const provider = enabledProviders.find((p) => p.id === action.providerId);
+  // 当前绑定账号仍可读取；PromptBar 自行过滤模型选择器中的停用来源。
+  const provider = providers.find((p) => p.id === action.providerId);
   const availableModels = provider?.models || [];
 
   // 最大化切换
@@ -730,7 +725,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         isLoading={isLoading}
         disabled={Boolean(error)}
         title={action.name || 'AI'}
-        providers={enabledProviders}
+        providers={providers}
         selectedProviderId={action.providerId}
         selectedModel={selectedModel}
         availableModels={availableModels}

@@ -1,3 +1,4 @@
+pub mod balance;
 pub mod file_upload;
 pub mod models;
 pub mod requests;

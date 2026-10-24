@@ -5,6 +5,68 @@
 @tailwind components;
 @tailwind utilities;
 
+.balance-pill {
+  display: flex;
+  align-items: center;
+  height: 25px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--inset);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.balance-pill-amount,
+.balance-pill-refresh { display: flex; align-items: center; justify-content: center; height: 100%; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; }
+.balance-pill-amount { gap: 5px; min-width: 58px; max-width: 160px; padding: 0 8px; }
+.balance-pill-amount > svg { flex-shrink: 0; opacity: .7; }
+.balance-pill-amount > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.balance-pill-amount > small { font-size: 9px; opacity: .7; }
+.balance-pill-refresh { width: 23px; flex-shrink: 0; border-left: 1px solid var(--line); color: var(--ink-2); }
+.balance-pill button:hover:not(:disabled) { background: var(--hover-2); color: var(--ink); }
+.balance-pill button:focus-visible { outline: 2px solid #529cff; outline-offset: -2px; border-radius: 999px; }
+.balance-pill-refresh:disabled { cursor: default; opacity: .5; }
+.balance-pill[data-warning="true"] { color: #a7680a; border-color: rgb(190 131 29 / 28%); }
+.dark .balance-pill[data-warning="true"] { color: #e5bc6a; border-color: rgb(229 188 106 / 25%); }
+.balance-pill-stale { flex-shrink: 0; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+.balance-refresh-spinning { animation: balance-refresh-spin 900ms linear infinite; }
+@keyframes balance-refresh-spin { to { transform: rotate(360deg); } }
+
+.balance-popover { width: 288px; max-height: calc(100vh - 16px); overflow-y: auto; border-radius: var(--ui-popover-radius); }
+.balance-popover > div { border-radius: var(--ui-popover-radius); padding: 16px; }
+.balance-details { color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; }
+.balance-details header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.balance-details header > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.balance-details header > strong { flex-shrink: 0; color: var(--ink-2); font-size: 11px; font-weight: 400; }
+.balance-status { margin-top: 7px; color: #18866b; font-size: 11px; }
+.dark .balance-status { color: #34cba0; }
+.balance-status[data-warning="true"] { color: #a7680a; }
+.dark .balance-status[data-warning="true"] { color: #e5bc6a; }
+.balance-currency { margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--line); }
+.balance-total { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.balance-total > span { color: var(--ink-2); }
+.balance-total small { margin-left: 4px; font-size: 9px; color: var(--ink-3); }
+.balance-total > strong { font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
+.balance-currency dl { display: grid; gap: 7px; margin-top: 13px; font-size: 11px; }
+.balance-currency dl > div { display: flex; justify-content: space-between; gap: 12px; }
+.balance-currency dt { display: flex; align-items: center; gap: 7px; color: var(--ink-2); }
+.balance-currency dt::before { content: ''; width: 6px; height: 6px; border-radius: 2px; background: #34cba0; }
+.balance-currency dl > div:last-child dt::before { background: #529cff; }
+.balance-currency dd { font-weight: 500; }
+.balance-details footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 10px; }
+.balance-schedule { margin-top: 5px; color: var(--ink-2); font-size: 10px; }
+.balance-stale-note { margin-top: 12px; color: var(--ink-2); font-size: 10px; }
+.prompt-toolbar > :first-child { min-width: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .balance-refresh-spinning { animation: none; }
+  .balance-popover.floating-pop { animation: none; }
+  .balance-pill button { transition: none; }
+}
+
 .context-meter-trigger,
 .context-usage-popover {
   --context-selection: #438ff3;

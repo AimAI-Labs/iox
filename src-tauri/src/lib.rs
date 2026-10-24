@@ -484,6 +484,30 @@ async fn fetch_provider_models(
     ai::fetch_provider_models(base_url, api_key).await
 }
 
+#[tauri::command]
+async fn fetch_provider_balance(
+    state: State<'_, AppState>,
+    provider_id: String,
+    expected_base_url: String,
+    expected_api_key: String,
+) -> Result<ai::balance::ProviderBalance, ai::balance::BalanceError> {
+    let provider = state
+        .config
+        .snapshot()
+        .providers
+        .into_iter()
+        .find(|provider| provider.id == provider_id)
+        .ok_or(ai::balance::BalanceError::ProviderMissing)?;
+    // 广播抵达前的旧前端快照不能把新账号的余额缓存到旧账号下。
+    ai::balance::verify_account(
+        &provider.base_url,
+        &provider.api_key,
+        &expected_base_url,
+        &expected_api_key,
+    )?;
+    ai::balance::fetch_provider_balance(&provider.base_url, &provider.api_key).await
+}
+
 /// 悬浮球开关的唯一提交入口：设置页、托盘与命令共用。
 pub(crate) fn set_floating_ball_visible(
     store: &config::ConfigStore,
@@ -714,6 +738,7 @@ pub fn run() {
             start_window_picker,
             cancel_window_picker,
             fetch_provider_models,
+            fetch_provider_balance,
             init_floating_ball,
             snap_floating_ball,
             start_floating_ball_dragging,

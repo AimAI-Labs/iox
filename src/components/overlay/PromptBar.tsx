@@ -22,6 +22,8 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 import { ReasoningControl } from '@/components/overlay/ReasoningControl';
 import { ContextMeter } from '@/components/overlay/ContextMeter';
+import { BalancePill } from '@/components/overlay/BalancePill';
+import { isProviderSelectable } from '@/lib/provider';
 import type { ContextUsage } from '@/types/session';
 import { isDeepSeekProvider, type ThinkingMode } from '@/lib/reasoning';
 
@@ -139,11 +141,12 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
   const actionChips = getActionChips(isZh);
+  const selectableProviders = providers.filter(isProviderSelectable);
 
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showCascaderMenu, setShowCascaderMenu] = useState(false);
   const [activeCascaderProviderId, setActiveCascaderProviderId] = useState<string>(
-    selectedProviderId || providers[0]?.id || ''
+    selectedProviderId || selectableProviders[0]?.id || ''
   );
   const [customHeight, setCustomHeight] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -269,9 +272,9 @@ export const PromptBar: React.FC<PromptBarProps> = ({
 
   // 获取当前在级联面板中高亮的服务商对象及其模型列表
   const cascaderProvider =
-    providers.find((p) => p.id === activeCascaderProviderId) ||
-    currentProvider ||
-    providers[0];
+    selectableProviders.find((p) => p.id === activeCascaderProviderId) ||
+    selectableProviders.find((p) => p.id === selectedProviderId) ||
+    selectableProviders[0];
   const cascaderModels = cascaderProvider?.models || [];
 
   const handleSelectModel = (providerId: string, modelName: string) => {
@@ -347,7 +350,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
         </div>
 
         {/* 底部工具行 */}
-        <div className="mt-2 flex items-center justify-between">
+        <div className="prompt-toolbar mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           {/* 左侧操作组：+ 快捷菜单、[服务商图标 / 模型选择] 双列级联芯片、⚡极速/🧠深度思考切换 */}
           <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
             {/* 1. + 快捷提示词菜单容器 */}
@@ -389,7 +392,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
             </div>
 
             {/* 2. 供应商与模型双列级联选择芯片容器 (严格在按钮上方展示浮层) */}
-            {providers.length > 0 && (
+            {selectableProviders.length > 0 && (
               <div className="relative" ref={cascaderContainerRef}>
                 <button
                   type="button"
@@ -428,7 +431,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
                         {t('settings.sidebar.providers')}
                       </div>
                       <div className="max-h-56 overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
-                        {providers.map((p) => {
+                        {selectableProviders.map((p) => {
                           const isActive = p.id === cascaderProvider?.id;
                           const isSelected = p.id === selectedProviderId;
                           return (
@@ -553,7 +556,8 @@ export const PromptBar: React.FC<PromptBarProps> = ({
           </div>
 
           {/* 右侧操作组：圆形发送/停止按钮 */}
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <BalancePill provider={currentProvider} isZh={isZh} />
             {contextUsage && <ContextMeter usage={contextUsage} isZh={isZh} />}
             {isLoading ? (
               <button
