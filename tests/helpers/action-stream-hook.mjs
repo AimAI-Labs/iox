@@ -13,6 +13,7 @@ async function moduleAt(path) {
 }
 const client = await moduleAt('../../src/lib/actionStreamClient.ts');
 const reasoning = await moduleAt('../../src/lib/reasoning.ts');
+const provider = await moduleAt('../../src/lib/provider.ts');
 const source = readFileSync(new URL('../../src/hooks/useActionStream.ts', import.meta.url), 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
 
@@ -54,6 +55,7 @@ export function mountActionStream(overrides = {}, transport = {}) {
     } },
     '@/lib/actionStreamClient': client,
     '@/lib/reasoning': reasoning,
+    '@/lib/provider': provider,
     '@/conversation/transcript': conversationTranscript,
     '@/lib/formatQuote': { formatQuoteText: (text) => text },
   };

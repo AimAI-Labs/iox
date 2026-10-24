@@ -107,6 +107,28 @@ test('API execution updates the workspace owner instead of a parallel view snaps
   assert.equal(h.workspace.getSnapshot().active.turns[0].answer, 'owned answer');
 });
 
+test('a bound disabled provider still runs and resolves its first listed model', async (t) => {
+  const config = { providers: [
+    { id: 'provider', models: ['model'], defaultModel: 'model', enabled: true },
+    { id: 'off', models: ['off-model'], defaultModel: '', enabled: false },
+  ] };
+  const h = mountActionStream({ config }); t.after(h.unmount);
+  await h.hook.handleTriggerAction({ ...h.action, providerId: 'off' });
+  const request = h.calls.find((call) => call.command === 'trigger_api_action').args;
+  assert.equal(request.providerOverride, 'off');
+  assert.equal(request.modelOverride, 'off-model');
+});
+
+test('the provider switcher only offers enabled entries', async (t) => {
+  const config = { providers: [
+    { id: 'provider', models: ['model'], defaultModel: 'model', enabled: true },
+    { id: 'off', models: ['off-model'], defaultModel: 'off-model', enabled: false },
+  ] };
+  const h = mountActionStream({ config }); t.after(h.unmount);
+  h.hook.handleProviderChange('off');
+  assert.equal(h.workspace.getSnapshot().active.action.providerId, 'provider');
+});
+
 test('switching and closing tabs cancels their execution and cannot deliver into another tab', async (t) => {
   const h = mountActionStream(); t.after(h.unmount);
   await h.hook.handleTriggerAction(h.action);

@@ -18,6 +18,7 @@ export function mountConversationView(props) {
  if(name==='react')return {...react,default:react};
  if(name==='@/conversation/transcript')return transcript;
  if(name==='@/lib/thinkingParser')return thinking;
+ if(name==='@/lib/provider')return providerRules;
  if(name==='@/lib/links')return {collectLinksFromRoot:()=>[],linksEqual:()=>true};
  if(name==='@/lib/utils')return {cn:(...x)=>x.filter(Boolean).join(' ')};
  if(name==='@/hooks/useCopyFeedback')return {useCopyFeedback:()=>({copied:false,copy(text){copied.push(text);}})};
@@ -28,6 +29,7 @@ export function mountConversationView(props) {
  throw new Error(name);
  }});return exports;};
  const thinking=load('src/lib/thinkingParser.ts');
+ const providerRules=load('src/lib/provider.ts');
  const {ResultCard}=load('src/components/overlay/ResultCard.tsx');
  function render(patch={}){props={...props,...patch};let n=0;do{dirty=false;cursor=0;tree=ResultCard(props);effects.splice(0).forEach(fn=>fn());assert.ok(++n<20,'render loop');}while(dirty);return tree;}
  render();return {render,copied,get tree(){return tree;}};

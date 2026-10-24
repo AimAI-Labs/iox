@@ -149,15 +149,19 @@ fn resolve_api_request_config(
         .cloned()
         .ok_or_else(|| format!("Provider '{}' not found", provider_id))?;
 
-    // Explicit selection must never silently fall back to the action's provider.
-    // Omitted overrides retain legacy behavior, including existing disabled providers.
-    if provider_override.is_some() && !provider.enabled {
-        return Err(format!("Provider '{}' is disabled", provider_id));
-    }
-
+    // 显式选择绝不会静默回退到动作的服务商；缺省覆盖沿用动作绑定。
+    // `enabled` 只是前端选择器的可选来源，不是执行许可：已绑定的服务商即使停用也照常请求。
+    //
+    // 模型回退顺序：显式覆盖 → 服务商默认模型 → 模型列表首项。
+    // 空值不算一次明确选择，继续沿回退链查找；全空则拒绝，绝不向服务商发送空模型。
     let model = model_override
-        .or_else(|| Some(provider.default_model.clone()))
-        .unwrap_or_else(|| "default".to_string());
+        .as_deref()
+        .into_iter()
+        .chain([provider.default_model.as_str()])
+        .chain(provider.models.first().map(String::as_str))
+        .find(|model| !model.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| format!("服务商 '{}' 未配置可用模型", provider_id))?;
 
     let template = prompt_override
         .or_else(|| action.prompt_template.clone())
@@ -762,13 +766,21 @@ mod api_request_config_tests {
         }
     }
 
+    fn resolve(
+        config: &AppConfig,
+        provider: Option<&str>,
+        model: Option<&str>,
+    ) -> Result<(ProviderConfig, String, String), String> {
+        resolve_api_request_config(
+            config, &config.actions[0].id, provider, model.map(str::to_string), None,
+        )
+    }
+
     #[test]
     fn provider_override_selects_actual_transport_without_changing_global_config() {
         let config = fixture();
         let before = serde_json::to_value(&config).unwrap();
-        let (provider, model, prompt) = resolve_api_request_config(
-            &config, &config.actions[0].id, Some("selected"), None, None,
-        ).unwrap();
+        let (provider, model, prompt) = resolve(&config, Some("selected"), None).unwrap();
         assert_eq!(provider.id, "selected");
         assert_eq!(provider.base_url, "https://selected.example/v1");
         assert!(provider.api_key == "test-only-selected-key");
@@ -778,43 +790,59 @@ mod api_request_config_tests {
     }
 
     #[test]
-    fn provider_override_missing_or_disabled_does_not_fall_back() {
+    fn unknown_provider_override_does_not_fall_back_to_the_action_provider() {
         let config = fixture();
-        for (id, expected) in [("missing", "not found"), ("disabled", "disabled")] {
-            let result = resolve_api_request_config(
-                &config, &config.actions[0].id, Some(id), None, None,
-            );
-            assert!(matches!(result, Err(error) if error.contains(expected)));
-        }
+        let result = resolve(&config, Some("missing"), None);
+        assert!(matches!(result, Err(error) if error.contains("not found")));
     }
 
     #[test]
-    fn provider_override_absent_preserves_original_defaults_and_disabled_behavior() {
+    fn disabled_provider_still_executes_because_it_only_filters_selectors() {
+        let config = fixture();
+
+        let (provider, model, _) = resolve(&config, Some("disabled"), None).unwrap();
+        assert_eq!(provider.id, "disabled");
+        assert_eq!(model, "disabled-model");
+
+        let mut bound = config.clone();
+        bound.actions[0].provider_id = Some("disabled".into());
+        let (provider, model, _) = resolve(&bound, None, None).unwrap();
+        assert_eq!(provider.id, "disabled");
+        assert_eq!(model, "disabled-model");
+    }
+
+    #[test]
+    fn action_without_provider_is_rejected() {
         let mut config = fixture();
-        config.providers[0].enabled = false;
-        let (provider, model, prompt) = resolve_api_request_config(
-            &config, &config.actions[0].id, None, None, None,
-        ).unwrap();
-        assert_eq!(provider.id, "original");
-        assert_eq!(model, "original-model");
-        assert_eq!(prompt, "Explain {text}");
         config.actions[0].provider_id = None;
-        assert!(resolve_api_request_config(
-            &config, &config.actions[0].id, None, None, None,
-        ).is_err());
+        assert!(resolve(&config, None, None).is_err());
     }
 
     #[test]
-    fn provider_override_preserves_explicit_model_and_prompt_including_empty_values() {
+    fn model_falls_back_to_the_first_listed_model_and_never_stays_empty() {
+        let mut config = fixture();
+        config.providers[0].default_model.clear();
+
+        assert_eq!(resolve(&config, None, None).unwrap().1, "original-model");
+        assert_eq!(resolve(&config, None, Some("")).unwrap().1, "original-model");
+        assert_eq!(resolve(&config, None, Some("picked-model")).unwrap().1, "picked-model");
+
+        config.providers[0].models.clear();
+        let error = resolve(&config, None, None).unwrap_err();
+        assert!(error.contains("未配置可用模型"), "{error}");
+    }
+
+    #[test]
+    fn explicit_prompt_override_is_preserved_including_empty_value() {
         let config = fixture();
-        for (model, prompt) in [("custom-model", "Custom {text}"), ("", "")] {
-            let (provider, actual_model, actual_prompt) = resolve_api_request_config(
+        for prompt in ["Custom {text}", ""] {
+            let (provider, model, actual) = resolve_api_request_config(
                 &config, &config.actions[0].id, Some("selected"),
-                Some(model.into()), Some(prompt.into()),
+                Some("custom-model".into()), Some(prompt.into()),
             ).unwrap();
             assert_eq!(provider.id, "selected");
-            assert_eq!(actual_model, model);
-            assert_eq!(actual_prompt, prompt);
+            assert_eq!(model, "custom-model");
+            assert_eq!(actual, prompt);
         }
     }
 }

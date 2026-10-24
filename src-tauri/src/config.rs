@@ -190,7 +190,8 @@ pub struct ProviderConfig {
     pub api_key: String,
     pub models: Vec<String>,
     pub default_model: String,
-    /// 旧配置没有该字段时默认启用
+    /// 旧配置没有该字段时默认启用。停用只收窄前端选择器的可选来源，
+    /// 不是执行许可，已绑定该服务商的动作仍照常请求。
     #[serde(default = "default_provider_enabled")]
     pub enabled: bool,
 }

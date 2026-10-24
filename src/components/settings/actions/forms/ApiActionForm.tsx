@@ -3,6 +3,7 @@ import { ActionConfig, ProviderConfig } from "@/types/config";
 import { Input, Textarea, Label, Select } from "@/components/ui";
 import { Box, Code } from "lucide-react";
 import { useTranslation } from "@/hooks/useTranslation";
+import { resolveProviderModel } from "@/lib/provider";
 
 interface ApiActionFormProps {
   action: ActionConfig;
@@ -19,7 +20,6 @@ export const ApiActionForm: React.FC<ApiActionFormProps> = ({
   const isZh = resolvedLanguage === 'zh';
 
   const currentProvider = providers.find((p) => p.id === action.providerId);
-  const models = currentProvider?.models || [];
 
   return (
     <div className="space-y-3 pt-1">
@@ -44,7 +44,7 @@ export const ApiActionForm: React.FC<ApiActionFormProps> = ({
           <Input
             type="text"
             readOnly
-            value={currentProvider?.defaultModel || (models.length > 0 ? models[0] : (isZh ? "未选择服务商" : "No provider selected"))}
+            value={resolveProviderModel(currentProvider) || (isZh ? "未选择服务商" : "No provider selected")}
             className="text-xs bg-muted/30 font-mono cursor-default text-muted-foreground"
           />
         </div>

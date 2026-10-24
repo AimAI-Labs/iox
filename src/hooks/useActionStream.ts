@@ -9,6 +9,7 @@ import { exportMarkdown } from '@/conversation/transcript';
 import { formatQuoteText } from '@/lib/formatQuote';
 import { getThinkingRequestOptions, type ThinkingMode } from '@/lib/reasoning';
 import { createActionStreamClient, type ActionStreamClient } from '@/lib/actionStreamClient';
+import { isProviderSelectable, resolveProviderModel } from '@/lib/provider';
 
 interface UseActionStreamProps {
   config: AppConfig | null;
@@ -57,10 +58,9 @@ export function useActionStream({ config, workspace, selectionText, isPinned, on
     }, prepare, plan.generationId);
   }, [config?.providers, getStreamClient]);
 
-  const defaultModel = (action: ActionConfig) => {
-    const provider = config?.providers.find((p) => p.id === action.providerId);
-    return provider?.defaultModel || provider?.models[0] || '';
-  };
+  // 动作绑定的服务商即使已停用也照常执行；停用只影响选择器可见性。
+  const defaultModel = (action: ActionConfig) =>
+    resolveProviderModel(config?.providers.find((p) => p.id === action.providerId));
   const reportMissingModel = () => workspace.reportError('⚠️ 当前未配置可用模型，请在下方切换服务商或前往设置添加模型。');
 
   async function triggerWeb(action: ActionConfig, text: string, autoSubmitOverride?: boolean) {
@@ -150,8 +150,8 @@ export function useActionStream({ config, workspace, selectionText, isPinned, on
     if (hasModel()) await send(workspace.regenerate(maxTurns()));
   };
   const handleProviderChange = (id: string) => {
-    const provider = config?.providers.find((p) => p.id === id && p.enabled !== false);
-    if (provider) workspace.chooseProvider(id, provider.defaultModel || provider.models[0] || '');
+    const provider = config?.providers.find((p) => p.id === id && isProviderSelectable(p));
+    if (provider) workspace.chooseProvider(id, resolveProviderModel(provider));
   };
   const handleModelChange = (model: string) => workspace.chooseModel(model);
   const handleThinkingModeChange = (mode: ThinkingMode) => workspace.chooseThinkingMode(mode);

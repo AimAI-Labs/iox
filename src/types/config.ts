@@ -34,7 +34,7 @@ export interface ProviderConfig {
   apiKey: string;
   models: string[];
   defaultModel: string;
-  /** 是否启用；旧配置缺省时视为启用 */
+  /** 是否作为可选来源出现在选择器中；旧配置缺省时视为启用。停用不阻断已绑定动作的执行。 */
   enabled?: boolean;
 }
 
