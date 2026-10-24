@@ -119,6 +119,8 @@ pub struct GeneralConfig {
     #[serde(default = "default_web_window_mode")]
     pub web_window_mode: String,  // "multi_window" | "tabbed"
     #[serde(default)]
+    pub web_headless_mode: bool,
+    #[serde(default)]
     pub auto_copy_on_web_action: bool,
     #[serde(default = "default_overlay_opacity")]
     pub overlay_opacity: u32,
@@ -162,6 +164,7 @@ impl Default for GeneralConfig {
             ui_style: default_ui_style(),
             auto_start: false,
             web_window_mode: "multi_window".to_string(),
+            web_headless_mode: false,
             auto_copy_on_web_action: false,
             overlay_opacity: 90,
             web_window_size: (860.0, 640.0),
@@ -1346,6 +1349,20 @@ mod tests {
         assert_eq!(deserialized.api_card.card_size, (600.0, 900.0));
         assert_eq!(config.providers.len(), deserialized.providers.len());
         assert_eq!(config.actions.len(), deserialized.actions.len());
+    }
+
+    #[test]
+    fn web_headless_mode_is_opt_in_and_round_trips() {
+        let mut raw = serde_json::to_value(GeneralConfig::default()).unwrap();
+        raw.as_object_mut().unwrap().remove("webHeadlessMode");
+        let legacy: GeneralConfig = serde_json::from_value(raw.clone()).unwrap();
+        assert!(!legacy.web_headless_mode);
+        for enabled in [true, false] {
+            raw["webHeadlessMode"] = serde_json::json!(enabled);
+            let config: GeneralConfig = serde_json::from_value(raw.clone()).unwrap();
+            assert_eq!(config.web_headless_mode, enabled);
+            assert_eq!(serde_json::to_value(config).unwrap()["webHeadlessMode"], enabled);
+        }
     }
 
     #[test]

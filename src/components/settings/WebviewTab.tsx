@@ -127,6 +127,23 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
 
           <Separator />
 
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label className="text-xs text-foreground font-medium">
+                {t('settings.web.headlessMode')}
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                {t('settings.web.headlessModeDesc')}
+              </p>
+            </div>
+            <Switch
+              checked={general.webHeadlessMode}
+              onCheckedChange={(checked) => onUpdateGeneral({ webHeadlessMode: checked })}
+            />
+          </div>
+
+          <Separator />
+
           {/* Auto Copy On Web Action */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">

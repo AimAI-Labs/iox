@@ -13,6 +13,7 @@ pub mod site_presets;
 pub mod trigger;
 pub mod tray;
 pub mod window_manager;
+mod web_chrome;
 
 use ai::AiManager;
 use config::AppConfig;
@@ -24,6 +25,7 @@ pub struct AppState {
     pub ai_manager: AiManager,
     pub web_hub_state: Mutex<ai::WebHubState>,
     pub web_injections: Mutex<std::collections::HashMap<String, tokio_util::sync::CancellationToken>>,
+    pub web_chrome: web_chrome::WebChromeState,
 }
 
 /// 配置提交成功后的发布 adapter：先广播已提交快照，再应用原生窗口效果。
@@ -400,7 +402,7 @@ fn minimize_web_window(app: AppHandle, label: String) -> Result<(), String> {
 fn toggle_maximize_web_window(app: AppHandle, label: String) -> Result<(), String> {
     if let Some(window) = app.get_window(&label) {
         if window.is_maximized().unwrap_or(false) {
-            let _ = window.unminimize();
+            let _ = window.unmaximize();
         } else {
             let _ = window.maximize();
         }
@@ -661,6 +663,7 @@ pub fn run() {
                 ai_manager: AiManager::new(),
                 web_hub_state: Mutex::new(ai::WebHubState::default()),
                 web_injections: Mutex::new(std::collections::HashMap::new()),
+                web_chrome: web_chrome::WebChromeState::new(initial_config.general.web_headless_mode),
             });
 
             // 首帧前应用持久化的界面样式，避免窗口显示后再切换装饰
@@ -726,6 +729,9 @@ pub fn run() {
             minimize_web_window,
             toggle_maximize_web_window,
             reload_web_webview,
+            web_chrome::get_web_chrome,
+            web_chrome::layout_web_menu,
+            web_chrome::open_web_page_in_browser,
             open_in_browser,
             set_pin_state,
             start_overlay_dragging,

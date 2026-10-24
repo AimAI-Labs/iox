@@ -126,3 +126,18 @@ test('values outside the contract are rejected', () => {
 
   assert.equal(rejected.success, false);
 });
+
+test('Web headless mode is opt-in for existing configs and survives serialization', () => {
+  const general = { ...fixture.general };
+  delete general.webHeadlessMode;
+  assert.equal(parseOrFail({ ...fixture, general }).general.webHeadlessMode, false);
+
+  for (const enabled of [true, false]) {
+    const config = parseOrFail({ ...fixture, general: { ...general, webHeadlessMode: enabled } });
+    assert.equal(parseOrFail(JSON.parse(JSON.stringify(config))).general.webHeadlessMode, enabled);
+  }
+  assert.equal(fixture.general.webHeadlessMode, false);
+  assert.equal(appConfigSchema.safeParse({
+    ...fixture, general: { ...general, webHeadlessMode: 'true' },
+  }).success, false);
+});

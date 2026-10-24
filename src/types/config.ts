@@ -60,6 +60,7 @@ export const generalConfigSchema = z.object({
   uiStyle: uiStyleSchema.default('classic'),
   autoStart: z.boolean(),
   webWindowMode: webWindowModeSchema.default('multi_window'),
+  webHeadlessMode: z.boolean().default(false),
   autoCopyOnWebAction: z.boolean().default(false),
   overlayOpacity: z.number().int().nonnegative().default(DEFAULT_OVERLAY_OPACITY),
   webWindowSize: sizePairSchema(DEFAULT_WEB_WINDOW_SIZE),

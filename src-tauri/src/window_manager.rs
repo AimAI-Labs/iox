@@ -59,6 +59,8 @@ pub fn apply_ui_style(app: &AppHandle, style: &str, theme: &str) {
         if is_style_exempt(&label) {
             continue;
         }
+        let native = native
+            && !(crate::web_chrome::is_web_window(&label) && crate::web_chrome::headless(app));
         apply_window_ui_style(&window, native, window_theme);
     }
 }
@@ -81,10 +83,20 @@ pub fn apply_config_effects(
     previous: &crate::config::AppConfig,
     current: &crate::config::AppConfig,
 ) {
-    if previous.general.ui_style != current.general.ui_style {
+    let headless_changed = previous.general.web_headless_mode != current.general.web_headless_mode;
+    if headless_changed {
+        app.state::<crate::AppState>()
+            .web_chrome
+            .set_headless(current.general.web_headless_mode);
+    }
+    if previous.general.ui_style != current.general.ui_style || headless_changed {
         apply_ui_style(app, &current.general.ui_style, &current.general.theme);
     } else if previous.general.theme != current.general.theme {
         sync_window_theme(app, &current.general.theme);
+    }
+
+    if headless_changed || previous.general.ui_style != current.general.ui_style {
+        crate::web_chrome::layout_all(app);
     }
 
     if previous.general.enable_floating_ball != current.general.enable_floating_ball {
@@ -105,6 +117,74 @@ pub fn apply_window_ui_style(window: &tauri::Window, native: bool, theme: Option
     if let Ok(hwnd) = window.hwnd() {
         apply_main_window_native_style(hwnd.0 as _);
     }
+}
+
+/// Run against the exact WRY container owned by this WebView, never another sibling view.
+fn with_web_child(view: &tauri::Webview, update: impl FnOnce(HWND) + Send + 'static) {
+    let Ok(parent) = view.window().hwnd() else {
+        return;
+    };
+    let parent = parent.0 as isize;
+    let _ = view.with_webview(move |platform| {
+        // with_webview runs on the UI thread; the controller owns its parent container.
+        // Validate that it is still a child of our window before using the borrowed HWND.
+        unsafe {
+            let mut child = Default::default();
+            if platform.controller().ParentWindow(&mut child).is_ok() {
+                let child = child.0 as HWND;
+                if !child.is_null() && GetParent(child) == parent as HWND {
+                    update(child);
+                }
+            }
+        }
+    });
+}
+
+pub fn raise_web_toolbar(view: &tauri::Webview) {
+    with_web_child(view, |child| {
+        // The validated child HWND is borrowed on the UI thread. Raising the local toolbar
+        // only changes sibling order and does not activate the window or the remote page.
+        unsafe {
+            SetWindowPos(
+                child,
+                HWND_TOP,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        }
+    });
+}
+
+pub fn set_web_content_round(view: &tauri::Webview, radius: Option<i32>) {
+    with_web_child(view, move |child| {
+        // This exact content container clips all its descendants. On success Windows takes
+        // ownership of the region; on failure we must release it. None also clears old clips.
+        unsafe {
+            let Some(radius) = radius.filter(|radius| *radius > 0) else {
+                SetWindowRgn(child, std::ptr::null_mut(), 1);
+                return;
+            };
+            let mut rect: RECT = std::mem::zeroed();
+            if GetClientRect(child, &mut rect) == 0 {
+                return;
+            }
+            let diameter = radius * 2;
+            let region = CreateRoundRectRgn(
+                0,
+                -diameter,
+                rect.right + 1,
+                rect.bottom + 1,
+                diameter,
+                diameter,
+            );
+            if !region.is_null() && SetWindowRgn(child, region, 1) == 0 {
+                DeleteObject(region as _);
+            }
+        }
+    });
 }
 
 /// 为主设置窗口与浮窗启用 Windows 11/10 原生 DWM 硬件级抗锯齿圆角与亚克力材质。
@@ -158,80 +238,6 @@ pub fn bring_window_to_foreground(hwnd: HWND) {
             }
         }
         SetActiveWindow(hwnd);
-    }
-}
-
-/// 为外部 Content Webview 的 child HWND 设置底部圆角物理裁切（仅裁切 child webview，绝不影响主窗口 DWM 帧）
-pub fn apply_content_webview_bottom_round(parent_hwnd: HWND, radius: i32) {
-    // Windows 原生标题栏样式使用直角边框，无需对子 Webview 做圆角裁切
-    if is_native_chrome() || radius <= 0 {
-        remove_content_webview_round(parent_hwnd);
-        return;
-    }
-    unsafe {
-        let mut children: Vec<HWND> = Vec::new();
-        unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
-            let list = &mut *(lparam as *mut Vec<HWND>);
-            list.push(hwnd);
-            1
-        }
-        EnumChildWindows(
-            parent_hwnd,
-            Some(enum_proc),
-            &mut children as *mut _ as isize,
-        );
-
-        let mut parent_rect: RECT = std::mem::zeroed();
-        GetWindowRect(parent_hwnd, &mut parent_rect);
-
-        for child in children {
-            let mut child_rect: RECT = std::mem::zeroed();
-            GetWindowRect(child, &mut child_rect);
-
-            let width = child_rect.right - child_rect.left;
-            let height = child_rect.bottom - child_rect.top;
-
-            // 仅对 content webview 的 HWND 进行底部圆角裁切（高度大于 50px 且位于窗口下方）
-            if height > 50 && child_rect.top > parent_rect.top + 20 {
-                let diameter = radius * 2;
-                // 创建从 -diameter 到 height 的圆角区域：顶部为直角平齐，仅底部两侧产生圆角
-                let hrgn = CreateRoundRectRgn(0, -diameter, width + 1, height + 1, diameter, diameter);
-                if !hrgn.is_null() {
-                    if SetWindowRgn(child, hrgn, 1) == 0 {
-                        DeleteObject(hrgn as _);
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// 移除 content webview 的 Region 限制（还原为直角矩形，如最大化状态）
-pub fn remove_content_webview_round(parent_hwnd: HWND) {
-    unsafe {
-        let mut children: Vec<HWND> = Vec::new();
-        unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
-            let list = &mut *(lparam as *mut Vec<HWND>);
-            list.push(hwnd);
-            1
-        }
-        EnumChildWindows(
-            parent_hwnd,
-            Some(enum_proc),
-            &mut children as *mut _ as isize,
-        );
-
-        let mut parent_rect: RECT = std::mem::zeroed();
-        GetWindowRect(parent_hwnd, &mut parent_rect);
-
-        for child in children {
-            let mut child_rect: RECT = std::mem::zeroed();
-            GetWindowRect(child, &mut child_rect);
-            let height = child_rect.bottom - child_rect.top;
-            if height > 50 && child_rect.top > parent_rect.top + 20 {
-                SetWindowRgn(child, std::ptr::null_mut(), 1);
-            }
-        }
     }
 }
 

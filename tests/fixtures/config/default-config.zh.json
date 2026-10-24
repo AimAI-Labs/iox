@@ -10,6 +10,7 @@
     "uiStyle": "classic",
     "autoStart": false,
     "webWindowMode": "multi_window",
+    "webHeadlessMode": false,
     "autoCopyOnWebAction": false,
     "overlayOpacity": 90,
     "webWindowSize": [

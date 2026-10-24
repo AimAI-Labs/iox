@@ -5,14 +5,35 @@ import { MacTitleBar } from '@/components/MacTitleBar';
 import { RotateCw, ExternalLink, Settings, MessagesSquare } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { HubTabBar } from './HubTabBar';
+import { WebFloatingMenu } from './WebFloatingMenu';
+import { useWebChrome } from '@/hooks/useWebChrome';
+import { useTranslation } from '@/hooks/useTranslation';
+import type { ActionConfig } from '@/types/config';
 
 interface WebTitleBarProps {
   label?: string;
   title?: string;
   url?: string;
+  actions?: ActionConfig[];
 }
 
-export const WebTitleBar: React.FC<WebTitleBarProps> = ({
+export const WebTitleBar: React.FC<WebTitleBarProps> = (props) => {
+  const { layout, update, failed } = useWebChrome();
+  const { t } = useTranslation();
+  const params = new URLSearchParams(window.location.search);
+  const label = props.label || params.get('label') || 'web_win';
+  if (!layout) {
+    return failed ? <button type="button" className="web-menu-trigger" title={t('settings.web.menu.failed')}
+      onClick={() => window.location.reload()} aria-label={t('settings.web.menu.retry')}><RotateCw size={16} /></button> : null;
+  }
+  if (layout.headless) {
+    return <WebFloatingMenu windowLabel={label} title={props.title || params.get('title') || 'IOX Web Hub'}
+      actions={props.actions ?? []} layout={layout.menu} update={update} failed={failed} />;
+  }
+  return label === 'web_hub' || label === 'web_hub_bar' ? <HubTabBar /> : <SingleWebTitleBar {...props} />;
+};
+
+const SingleWebTitleBar: React.FC<WebTitleBarProps> = ({
   label: propLabel,
   title: propTitle,
   url: propUrl,
@@ -21,11 +42,6 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = ({
   const windowLabel = propLabel || urlParams.get('label') || 'web_win';
   const displayTitle = propTitle || urlParams.get('title') || 'Web 官网浮窗';
   const targetUrl = propUrl || urlParams.get('url') || '';
-
-  // 如果是统一单窗口多标签模式 Hub，渲染专属的 HubTabBar
-  if (windowLabel === 'web_hub' || windowLabel === 'web_hub_bar') {
-    return <HubTabBar />;
-  }
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 

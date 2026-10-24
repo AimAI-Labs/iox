@@ -510,6 +510,7 @@ fn execute_multi_window_action(
             }
         }
         let _ = window.set_title(&action.name);
+        crate::web_chrome::layout_window(&window);
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
@@ -519,9 +520,14 @@ fn execute_multi_window_action(
     let (saved_w, saved_h) = config.general.web_window_size;
     let initial_width = if saved_w >= 520.0 { saved_w } else { 860.0 };
     let initial_height = if saved_h >= 400.0 { saved_h } else { 640.0 };
-    let titlebar_height = 38.0;
+    let titlebar_height = if config.general.web_headless_mode {
+        0.0
+    } else {
+        crate::web_chrome::TITLEBAR_HEIGHT
+    };
     let native_chrome =
-        crate::window_manager::ui_style_policy(&config.general.ui_style).native_chrome;
+        crate::window_manager::ui_style_policy(&config.general.ui_style).native_chrome
+            && !config.general.web_headless_mode;
 
     let window = WindowBuilder::new(app, &label)
         .title(&action.name)
@@ -553,11 +559,11 @@ fn execute_multi_window_action(
     let bar_builder = WebviewBuilder::new(&bar_label, WebviewUrl::App(bar_path.into()))
         .transparent(true);
 
-    let titlebar_wv = window
+    let _titlebar_wv = window
         .add_child(
             bar_builder,
             tauri::LogicalPosition::new(0.0, 0.0),
-            tauri::LogicalSize::new(initial_width, titlebar_height),
+            tauri::LogicalSize::new(initial_width, titlebar_height.max(1.0)),
         )
         .map_err(|e| format!("Failed to create titlebar webview: {}", e))?;
 
@@ -591,20 +597,12 @@ fn execute_multi_window_action(
         )
         .map_err(|e| format!("Failed to create content webview: {}", e))?;
 
-    let scale = window.scale_factor().unwrap_or(1.0);
-    if let Ok(hwnd) = window.hwnd() {
-        let radius = (12.0 * scale).round() as i32;
-        crate::window_manager::apply_content_webview_bottom_round(hwnd.0 as _, radius);
-    }
-
     if attachment_origin.is_none() {
         if let Some(script) = injection_script {
             schedule_injection(&content_wv, &script, &[800, 1800, 3500, 6000]);
         }
     }
 
-    let titlebar_clone = titlebar_wv.clone();
-    let content_clone = content_wv.clone();
     let window_clone = window.clone();
     let app_handle = app.clone();
 
@@ -633,39 +631,14 @@ fn execute_multi_window_action(
                 }
                 let _ = window_clone.hide();
             }
-            tauri::WindowEvent::Resized(physical_size) => {
-                let scale = window_clone.scale_factor().unwrap_or(1.0);
-                let bar_physical_h = (38.0 * scale).round() as u32;
-                let content_physical_h = physical_size.height.saturating_sub(bar_physical_h);
-
-                let is_maximized = window_clone.is_maximized().unwrap_or(false);
-                if let Ok(hwnd) = window_clone.hwnd() {
-                    let hwnd_raw = hwnd.0 as _;
-                    if is_maximized {
-                        crate::window_manager::remove_content_webview_round(hwnd_raw);
-                    } else {
-                        let r = (12.0 * scale).round() as i32;
-                        crate::window_manager::apply_content_webview_bottom_round(hwnd_raw, r);
-                    }
-                }
-
-                let _ = titlebar_clone.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
-                    physical_size.width,
-                    bar_physical_h,
-                )));
-                let _ = content_clone.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
-                    physical_size.width,
-                    content_physical_h,
-                )));
-                let _ = content_clone.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
-                    0,
-                    bar_physical_h as i32,
-                )));
+            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+                crate::web_chrome::layout_window(&window_clone);
             }
             _ => {}
         }
     });
 
+    crate::web_chrome::layout_window(&window);
     let _ = window.show();
     let _ = window.set_focus();
 
@@ -702,16 +675,21 @@ fn execute_tabbed_hub_action(
     let (saved_w, saved_h) = config.general.web_window_size;
     let initial_width = if saved_w >= 520.0 { saved_w } else { 860.0 };
     let initial_height = if saved_h >= 400.0 { saved_h } else { 640.0 };
-    let titlebar_height = 38.0;
+    let titlebar_height = if config.general.web_headless_mode {
+        0.0
+    } else {
+        crate::web_chrome::TITLEBAR_HEIGHT
+    };
     let native_chrome =
-        crate::window_manager::ui_style_policy(&config.general.ui_style).native_chrome;
+        crate::window_manager::ui_style_policy(&config.general.ui_style).native_chrome
+            && !config.general.web_headless_mode;
 
     let init_script = build_initialization_script(&config.general.theme, None);
 
     // 1. 如果 web_hub 窗口已存在
     if let Some(window) = app.get_window(window_label) {
         let scale = window.scale_factor().unwrap_or(1.0);
-        let bar_physical_h = (38.0 * scale).round() as u32;
+        let bar_physical_h = (titlebar_height * scale).round() as u32;
         let window_size = window.inner_size().unwrap_or(tauri::PhysicalSize::new(
             (initial_width * scale).round() as u32,
             (initial_height * scale).round() as u32,
@@ -774,6 +752,7 @@ fn execute_tabbed_hub_action(
             let _ = switch_web_hub_tab(app, &state, &action.id);
         }
 
+        crate::web_chrome::layout_window(&window);
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
@@ -806,11 +785,11 @@ fn execute_tabbed_hub_action(
     let bar_builder = WebviewBuilder::new(bar_label, WebviewUrl::App(bar_path.into()))
         .transparent(true);
 
-    let titlebar_wv = window
+    let _titlebar_wv = window
         .add_child(
             bar_builder,
             tauri::LogicalPosition::new(0.0, 0.0),
-            tauri::LogicalSize::new(initial_width, titlebar_height),
+            tauri::LogicalSize::new(initial_width, titlebar_height.max(1.0)),
         )
         .map_err(|e| format!("Failed to create hub titlebar webview: {}", e))?;
 
@@ -844,12 +823,6 @@ fn execute_tabbed_hub_action(
         )
         .map_err(|e| format!("Failed to create hub initial tab content webview: {}", e))?;
 
-    let scale = window.scale_factor().unwrap_or(1.0);
-    if let Ok(hwnd) = window.hwnd() {
-        let radius = (12.0 * scale).round() as i32;
-        crate::window_manager::apply_content_webview_bottom_round(hwnd.0 as _, radius);
-    }
-
     if attachment_origin.is_none() {
         if let Some(script) = injection_script {
             schedule_injection(&content_wv, &script, &[800, 1800, 3500, 6000]);
@@ -866,7 +839,6 @@ fn execute_tabbed_hub_action(
     }
 
     // 窗口尺寸与多 Webview 协同自适应监听
-    let titlebar_clone = titlebar_wv.clone();
     let window_clone = window.clone();
     let app_handle = app.clone();
 
@@ -895,53 +867,14 @@ fn execute_tabbed_hub_action(
                 }
                 let _ = window_clone.hide();
             }
-            tauri::WindowEvent::Resized(physical_size) => {
-                let scale = window_clone.scale_factor().unwrap_or(1.0);
-                let bar_physical_h = (38.0 * scale).round() as u32;
-                let content_physical_h = physical_size.height.saturating_sub(bar_physical_h);
-
-                let is_maximized = window_clone.is_maximized().unwrap_or(false);
-                if let Ok(hwnd) = window_clone.hwnd() {
-                    let hwnd_raw = hwnd.0 as _;
-                    if is_maximized {
-                        crate::window_manager::remove_content_webview_round(hwnd_raw);
-                    } else {
-                        let r = (12.0 * scale).round() as i32;
-                        crate::window_manager::apply_content_webview_bottom_round(hwnd_raw, r);
-                    }
-                }
-
-                let _ = titlebar_clone.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
-                    physical_size.width,
-                    bar_physical_h,
-                )));
-
-                // 同步调整当前 active tab 的尺寸
-                if let Some(state) = app_handle.try_state::<AppState>() {
-                    if let Ok(hub_state) = state.web_hub_state.lock() {
-                        if let Some(ref active_id) = hub_state.active_tab_id {
-                            let sanitized_id: String = active_id.chars()
-                                .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
-                                .collect();
-                            let tab_label = format!("web_hub_tab_{}", sanitized_id);
-                            if let Some(active_wv) = app_handle.get_webview(&tab_label) {
-                                let _ = active_wv.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
-                                    physical_size.width,
-                                    content_physical_h,
-                                )));
-                                let _ = active_wv.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
-                                    0,
-                                    bar_physical_h as i32,
-                                )));
-                            }
-                        }
-                    }
-                }
+            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+                crate::web_chrome::layout_window(&window_clone);
             }
             _ => {}
         }
     });
 
+    crate::web_chrome::layout_window(&window);
     let _ = window.show();
     let _ = window.set_focus();
 
@@ -955,37 +888,10 @@ pub fn switch_web_hub_tab(app: &AppHandle, state: &AppState, action_id: &str) ->
         return Err(format!("Tab with action_id '{}' not found", action_id));
     }
     hub_state.active_tab_id = Some(action_id.to_string());
-    let current_active = hub_state.active_tab_id.clone();
-    let tabs = hub_state.tabs.clone();
     drop(hub_state);
 
     if let Some(window) = app.get_window("web_hub") {
-        let scale = window.scale_factor().unwrap_or(1.0);
-        let bar_physical_h = (38.0 * scale).round() as u32;
-        if let Ok(size) = window.inner_size() {
-            let content_physical_h = size.height.saturating_sub(bar_physical_h);
-            for tab in &tabs {
-                let sanitized_id: String = tab.action_id.chars()
-                    .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
-                    .collect();
-                let tab_label = format!("web_hub_tab_{}", sanitized_id);
-                if let Some(wv) = app.get_webview(&tab_label) {
-                    if Some(&tab.action_id) == current_active.as_ref() {
-                        let _ = wv.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(0, bar_physical_h as i32)));
-                        let _ = wv.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(size.width, content_physical_h)));
-                    } else {
-                        let _ = wv.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(-20000, -20000)));
-                    }
-                }
-            }
-            if let Ok(hwnd) = window.hwnd() {
-                let is_maximized = window.is_maximized().unwrap_or(false);
-                if !is_maximized {
-                    let r = (12.0 * scale).round() as i32;
-                    crate::window_manager::apply_content_webview_bottom_round(hwnd.0 as _, r);
-                }
-            }
-        }
+        crate::web_chrome::layout_window(&window);
     }
 
     let hub_state_snapshot = state.web_hub_state.lock().unwrap().clone();

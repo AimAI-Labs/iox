@@ -57,7 +57,7 @@ export function App() {
     return withTheme(
       <I18nProvider languageSetting={config.general.language}>
         <Suspense fallback={null}>
-          <WebTitleBar />
+          <WebTitleBar actions={config.actions} />
         </Suspense>
       </I18nProvider>
     );
