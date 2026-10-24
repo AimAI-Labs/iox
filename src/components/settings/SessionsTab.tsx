@@ -17,6 +17,8 @@ import { MarkdownContent } from '@/components/overlay/MarkdownContent';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
+import { SessionStorageAlert } from '@/components/SessionStorageAlert';
+import type { SessionStorageError } from '@/types/session';
 
 function formatFullTime(timestamp: number): string {
   if (!timestamp) return '';
@@ -36,6 +38,8 @@ export const SessionsTab: React.FC = () => {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [storageError, setStorageError] = useState<SessionStorageError>(null);
   const { copied, copy } = useCopyFeedback(2000);
 
   const fetchSessions = useCallback(async () => {
@@ -43,10 +47,13 @@ export const SessionsTab: React.FC = () => {
       setLoading(true);
       const data = await invoke<ChatSessionData[]>('get_all_full_chat_sessions');
       setSessions(data || []);
+      setHistoryLoaded(true);
+      setStorageError((previous) => previous === 'load' ? null : previous);
       if (data && data.length > 0 && !selectedSessionId) {
         setSelectedSessionId(data[0].id);
       }
     } catch (err) {
+      setStorageError('load');
       console.warn('Failed to load full sessions:', err);
     } finally {
       setLoading(false);
@@ -61,6 +68,7 @@ export const SessionsTab: React.FC = () => {
     e.stopPropagation();
     try {
       await invoke('delete_chat_session', { id });
+      setStorageError((previous) => previous === 'delete' ? null : previous);
       setSessions((prev) => {
         const next = prev.filter((s) => s.id !== id);
         if (selectedSessionId === id) {
@@ -69,6 +77,7 @@ export const SessionsTab: React.FC = () => {
         return next;
       });
     } catch (err) {
+      setStorageError('delete');
       console.error('Failed to delete session:', err);
     }
   };
@@ -77,9 +86,11 @@ export const SessionsTab: React.FC = () => {
     if (!window.confirm(isZh ? '确定要清空所有历史对话记录吗？此操作不可恢复。' : 'Are you sure you want to clear all history records? This cannot be undone.')) return;
     try {
       await invoke('clear_all_chat_sessions');
+      setStorageError((previous) => previous === 'clear' ? null : previous);
       setSessions([]);
       setSelectedSessionId(null);
     } catch (err) {
+      setStorageError('clear');
       console.error('Failed to clear sessions:', err);
     }
   };
@@ -107,6 +118,7 @@ export const SessionsTab: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full overflow-hidden space-y-4">
+      <SessionStorageAlert error={storageError} />
       {/* 顶部操作工具行 */}
       <div className="flex shrink-0 items-center justify-between gap-3 bg-white/40 dark:bg-zinc-900/40 p-3 rounded-xl border border-black/5 dark:border-white/5">
         <div className="relative flex-1 max-w-sm">
@@ -159,7 +171,7 @@ export const SessionsTab: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
             {loading ? (
               <div className="py-12 text-center text-xs text-zinc-400">{isZh ? "正在加载会话..." : "Loading sessions..."}</div>
-            ) : filteredSessions.length === 0 ? (
+            ) : !historyLoaded ? null : filteredSessions.length === 0 ? (
               <div className="py-12 text-center text-xs text-zinc-400 space-y-1">
                 <MessageSquare size={24} className="mx-auto opacity-30" />
                 <p>{t('sessions.noSessions')}</p>

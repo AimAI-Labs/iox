@@ -24,3 +24,5 @@ export interface SessionMeta {
   model: string;
   updatedAt: number;
 }
+
+export type SessionStorageError = 'load' | 'save' | 'delete' | 'clear' | null;

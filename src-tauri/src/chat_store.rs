@@ -1,18 +1,14 @@
 use serde::{Deserialize, Serialize};
-use std::fs::{self, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// 串行化会话文件的读改写，避免并发保存互相覆盖
-static SESSION_STORE_LOCK: Mutex<()> = Mutex::new(());
+mod jsonl;
+#[cfg(test)]
+mod tests;
 
-fn lock_session_store() -> Result<std::sync::MutexGuard<'static, ()>, String> {
-    SESSION_STORE_LOCK
-        .lock()
-        .map_err(|_| "会话存储锁异常".to_string())
-}
+// Every production command uses this same process-local lock.
+static SESSION_STORE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,15 +44,6 @@ pub struct SessionMeta {
     pub updated_at: u64,
 }
 
-/// 获取与 config.json 同目录的 sessions.jsonl 路径
-fn get_sessions_file_path() -> PathBuf {
-    let path = crate::config::AppConfig::sessions_path();
-    if let Some(dir) = path.parent() {
-        let _ = fs::create_dir_all(dir);
-    }
-    path
-}
-
 fn current_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -71,60 +58,6 @@ fn generate_session_id() -> String {
         .unwrap_or_default()
         .subsec_nanos();
     format!("sess_{}_{:08x}", ts, nanos)
-}
-
-/// 内部辅助：从 JSONL 文件中加载全部完整会话
-fn load_all_sessions_from_jsonl() -> Vec<ChatSessionData> {
-    let path = get_sessions_file_path();
-    if !path.exists() {
-        return Vec::new();
-    }
-
-    let file = match fs::File::open(&path) {
-        Ok(f) => f,
-        Err(_) => return Vec::new(),
-    };
-
-    let reader = BufReader::new(file);
-    let mut sessions = Vec::new();
-
-    for line in reader.lines().flatten() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        if let Ok(session) = serde_json::from_str::<ChatSessionData>(trimmed) {
-            sessions.push(session);
-        }
-    }
-
-    // 按最后更新时间倒序排序
-    sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    sessions
-}
-
-/// 内部辅助：将全部会话批量写回 JSONL 文件（上限 200 条）
-fn write_all_sessions_to_jsonl(mut sessions: Vec<ChatSessionData>) -> Result<(), String> {
-    sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    if sessions.len() > 200 {
-        sessions.truncate(200);
-    }
-
-    let path = get_sessions_file_path();
-    let mut file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(&path)
-        .map_err(|e| e.to_string())?;
-
-    for session in sessions {
-        if let Ok(line) = serde_json::to_string(&session) {
-            writeln!(file, "{}", line).map_err(|e| e.to_string())?;
-        }
-    }
-
-    Ok(())
 }
 
 /// 修复旧版本写入的“--- **追问：** ...”标题
@@ -152,56 +85,6 @@ fn repair_legacy_title(session: &mut ChatSessionData) -> bool {
 
     session.title = title;
     true
-}
-
-/// 获取所有会话元数据列表
-#[tauri::command]
-pub fn list_chat_sessions() -> Result<Vec<SessionMeta>, String> {
-    let _guard = lock_session_store()?;
-    let mut sessions = load_all_sessions_from_jsonl();
-    let original_count = sessions.len();
-
-    dedupe_sessions_by_content(&mut sessions);
-
-    let mut changed = sessions.len() != original_count;
-    for session in &mut sessions {
-        changed |= repair_legacy_title(session);
-    }
-
-    let metas = sessions
-        .iter()
-        .map(|s| SessionMeta {
-            id: s.id.clone(),
-            title: s.title.clone(),
-            action_id: s.action_id.clone(),
-            model: s.model.clone(),
-            updated_at: s.updated_at,
-        })
-        .collect();
-
-    if changed {
-        let _ = write_all_sessions_to_jsonl(sessions);
-    }
-
-    Ok(metas)
-}
-
-/// 获取所有完整会话列表（供设置面板查看和搜索）
-#[tauri::command]
-pub fn get_all_full_chat_sessions() -> Result<Vec<ChatSessionData>, String> {
-    let _guard = lock_session_store()?;
-    Ok(load_all_sessions_from_jsonl())
-}
-
-/// 读取单个会话完整数据
-#[tauri::command]
-pub fn get_chat_session(id: String) -> Result<ChatSessionData, String> {
-    let _guard = lock_session_store()?;
-    let sessions = load_all_sessions_from_jsonl();
-    sessions
-        .into_iter()
-        .find(|s| s.id == id)
-        .ok_or_else(|| format!("Session '{}' not found", id))
 }
 
 /// 合并内容完全相同的重复会话：
@@ -281,11 +164,7 @@ fn upsert_session(sessions: &mut Vec<ChatSessionData>, mut session: ChatSessionD
     id
 }
 
-/// 保存或更新会话数据到 JSONL，返回最终使用的会话 ID。
-#[tauri::command]
-pub fn save_chat_session(mut session: ChatSessionData) -> Result<String, String> {
-    let _guard = lock_session_store()?;
-
+fn prepare_session(session: &mut ChatSessionData) {
     if session.id.is_empty() {
         session.id = generate_session_id();
     }
@@ -304,128 +183,144 @@ pub fn save_chat_session(mut session: ChatSessionData) -> Result<String, String>
         } else {
             "新对话"
         };
-        session.title = snippet.chars().take(28).collect::<String>().replace('\n', " ");
+        session.title = snippet
+            .chars()
+            .take(28)
+            .collect::<String>()
+            .replace('\n', " ");
     }
 
     // 空标题回退后也尝试修复旧格式追问标记
-    repair_legacy_title(&mut session);
-
-    let mut sessions = load_all_sessions_from_jsonl();
-    dedupe_sessions_by_content(&mut sessions);
-
-    let canonical_id = upsert_session(&mut sessions, session);
-    write_all_sessions_to_jsonl(sessions)?;
-
-    Ok(canonical_id)
+    repair_legacy_title(session);
 }
 
-/// 删除指定会话
-#[tauri::command]
-pub fn delete_chat_session(id: String) -> Result<(), String> {
-    let _guard = lock_session_store()?;
-    let mut sessions = load_all_sessions_from_jsonl();
-    sessions.retain(|s| s.id != id);
-    write_all_sessions_to_jsonl(sessions)
+/// Owns the complete read/normalize/change/commit transaction.
+struct SessionStore<'a> {
+    path: PathBuf,
+    lock: &'a Mutex<()>,
+    io: &'a dyn jsonl::Io,
 }
 
-/// 清空所有历史会话
-#[tauri::command]
-pub fn clear_all_chat_sessions() -> Result<(), String> {
-    let _guard = lock_session_store()?;
-    let path = get_sessions_file_path();
-    if path.exists() {
-        let _ = fs::write(&path, "");
-    }
-    Ok(())
-}
-
-/// 在 Windows 资源管理器中打开会话存储目录
-#[tauri::command]
-pub fn open_sessions_directory() -> Result<String, String> {
-    let path = get_sessions_file_path();
-    let dir = path.parent().unwrap_or(&path);
-    let dir_str = dir.to_string_lossy().to_string();
-    let _ = open::that(dir);
-    Ok(dir_str)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sample(id: &str, stream: &str, created_at: u64, updated_at: u64) -> ChatSessionData {
-        ChatSessionData {
-            id: id.to_string(),
-            title: "test".to_string(),
-            action_id: "act".to_string(),
-            provider_id: None,
-            model: "model".to_string(),
-            selected_text: String::new(),
-            stream_text: stream.to_string(),
-            messages: Vec::new(),
-            created_at,
-            updated_at,
+impl<'a> SessionStore<'a> {
+    fn new(path: PathBuf, lock: &'a Mutex<()>) -> Self {
+        Self {
+            path,
+            lock,
+            io: &jsonl::FileIo,
         }
     }
 
-    #[test]
-    fn dedupe_keeps_newest_and_earliest_creation_time() {
-        let mut sessions = vec![
-            sample("new", "same content", 200, 300),
-            sample("old", "same content", 100, 200),
-        ];
-
+    fn snapshot(&self) -> Result<Vec<ChatSessionData>, String> {
+        let mut sessions = jsonl::read(&self.path, self.io)?;
+        sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         dedupe_sessions_by_content(&mut sessions);
-
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0].id, "new");
-        assert_eq!(sessions[0].created_at, 100);
+        for session in &mut sessions {
+            repair_legacy_title(session);
+        }
+        Ok(sessions)
     }
 
-    #[test]
-    fn upsert_reuses_existing_id_for_identical_content() {
-        let mut sessions = vec![sample("existing", "hello", 100, 200)];
-
-        let canonical = upsert_session(&mut sessions, sample("fresh", "hello", 300, 300));
-
-        assert_eq!(canonical, "existing");
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0].id, "existing");
-        assert_eq!(sessions[0].created_at, 100);
+    fn all(&self) -> Result<Vec<ChatSessionData>, String> {
+        let _guard = self.lock.lock().map_err(|_| "会话存储锁异常".to_string())?;
+        self.snapshot()
     }
 
-    #[test]
-    fn upsert_preserves_creation_time_on_id_update() {
-        let mut sessions = vec![sample("same", "v1", 100, 100)];
-
-        let canonical = upsert_session(&mut sessions, sample("same", "v2", 900, 900));
-
-        assert_eq!(canonical, "same");
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0].stream_text, "v2");
-        assert_eq!(sessions[0].created_at, 100);
+    fn list(&self) -> Result<Vec<SessionMeta>, String> {
+        Ok(self
+            .all()?
+            .into_iter()
+            .map(|s| SessionMeta {
+                id: s.id,
+                title: s.title,
+                action_id: s.action_id,
+                model: s.model,
+                updated_at: s.updated_at,
+            })
+            .collect())
     }
 
-    #[test]
-    fn repairs_legacy_marker_title() {
-        let mut session = sample(
-            "id",
-            "\n\n---\n**追问：** 去网上找几个有关 bilibili 的网站\n\n<!-- iox:answer -->\n\n回答",
-            1,
-            1,
-        );
-        session.title = "--- **追问：** 去网上找几个有关 bilibili 的网站".to_string();
-
-        assert!(repair_legacy_title(&mut session));
-        assert_eq!(session.title, "去网上找几个有关 bilibili 的网站");
+    fn get(&self, id: &str) -> Result<ChatSessionData, String> {
+        self.all()?
+            .into_iter()
+            .find(|s| s.id == id)
+            .ok_or_else(|| format!("Session '{}' not found", id))
     }
 
-    #[test]
-    fn empty_stream_sessions_are_not_deduped() {
-        let mut sessions = vec![sample("a", "", 100, 100), sample("b", "", 200, 200)];
-
-        dedupe_sessions_by_content(&mut sessions);
-
-        assert_eq!(sessions.len(), 2);
+    fn save(&self, mut session: ChatSessionData) -> Result<String, String> {
+        let _guard = self.lock.lock().map_err(|_| "会话存储锁异常".to_string())?;
+        let mut sessions = self.snapshot()?;
+        prepare_session(&mut session);
+        let canonical = upsert_session(&mut sessions, session);
+        self.commit(sessions, Some(&canonical))?;
+        Ok(canonical)
     }
+
+    fn delete(&self, id: &str) -> Result<(), String> {
+        let _guard = self.lock.lock().map_err(|_| "会话存储锁异常".to_string())?;
+        let mut sessions = self.snapshot()?;
+        sessions.retain(|s| s.id != id);
+        self.commit(sessions, None)
+    }
+
+    fn clear(&self) -> Result<(), String> {
+        let _guard = self.lock.lock().map_err(|_| "会话存储锁异常".to_string())?;
+        self.snapshot()?;
+        self.commit(Vec::new(), None)
+    }
+
+    // Called only while the transaction lock is held; stable sorting preserves ties.
+    fn commit(
+        &self,
+        mut sessions: Vec<ChatSessionData>,
+        canonical: Option<&str>,
+    ) -> Result<(), String> {
+        sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        sessions.truncate(200);
+        if canonical.is_some_and(|id| !sessions.iter().any(|s| s.id == id)) {
+            return Err("会话未能保留在历史上限内，保存已取消".to_string());
+        }
+        jsonl::commit(&self.path, &sessions, self.io)
+    }
+}
+
+fn production_store() -> SessionStore<'static> {
+    SessionStore::new(
+        crate::config::AppConfig::sessions_path(),
+        &SESSION_STORE_LOCK,
+    )
+}
+
+#[tauri::command]
+pub fn list_chat_sessions() -> Result<Vec<SessionMeta>, String> {
+    production_store().list()
+}
+#[tauri::command]
+pub fn get_all_full_chat_sessions() -> Result<Vec<ChatSessionData>, String> {
+    production_store().all()
+}
+#[tauri::command]
+pub fn get_chat_session(id: String) -> Result<ChatSessionData, String> {
+    production_store().get(&id)
+}
+#[tauri::command]
+pub fn save_chat_session(session: ChatSessionData) -> Result<String, String> {
+    production_store().save(session)
+}
+#[tauri::command]
+pub fn delete_chat_session(id: String) -> Result<(), String> {
+    production_store().delete(&id)
+}
+#[tauri::command]
+pub fn clear_all_chat_sessions() -> Result<(), String> {
+    production_store().clear()
+}
+
+#[tauri::command]
+pub fn open_sessions_directory() -> Result<String, String> {
+    let path = crate::config::AppConfig::sessions_path();
+    let dir = path.parent().unwrap_or(&path);
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let dir_str = dir.to_string_lossy().to_string();
+    let _ = open::that(dir);
+    Ok(dir_str)
 }

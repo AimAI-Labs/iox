@@ -13,6 +13,7 @@ import { UserBubble } from '@/components/overlay/UserBubble';
 import { ResizeHandle } from '@/components/overlay/ResizeHandle';
 import { ContextMenu } from '@/components/overlay/ContextMenu';
 import { SessionPanel } from '@/components/overlay/SessionPanel';
+import { SessionStorageAlert } from '@/components/SessionStorageAlert';
 import { LinkDock } from '@/components/overlay/LinkDock';
 import { LinkPanel } from '@/components/overlay/LinkPanel';
 import { MessageRail } from '@/components/overlay/MessageRail';
@@ -784,6 +785,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         onMinimize={onClose}
       />
 
+      {!chatSessions.isPanelOpen && <SessionStorageAlert error={chatSessions.storageError} />}
+
       {/* 2. 正文与对话流内容区 */}
       <div className="relative flex-1 min-h-0">
         <div
@@ -1070,6 +1073,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
       {/* 7. 多会话历史侧滑面板 */}
       <SessionPanel
+        storageError={chatSessions.storageError}
+        historyLoaded={chatSessions.historyLoaded}
         isOpen={chatSessions.isPanelOpen}
         sessions={chatSessions.sessions}
         currentSessionId={chatSessions.currentSessionId}

@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { ChatSessionData, SessionMeta } from '@/types/session';
 import { ActionConfig } from '@/types/config';
 import { splitTranscript, splitTurnChunk } from '@/lib/chatTranscript';
+import type { SessionStorageError } from '@/types/session';
 
 /** 从选区或首条追问生成稳定、可读的会话标题 */
 function buildSessionTitle(selectedText: string, streamText: string): string {
@@ -42,8 +43,10 @@ export function useChatSessions({
   onResetToNewChat,
 }: UseChatSessionsProps) {
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [storageError, setStorageError] = useState<SessionStorageError>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const lastSavedRef = useRef<{
@@ -71,7 +74,10 @@ export function useChatSessions({
     try {
       const list = await invoke<SessionMeta[]>('list_chat_sessions');
       setSessions(list || []);
+      setHistoryLoaded(true);
+      setStorageError((previous) => previous === 'load' ? null : previous);
     } catch (err) {
+      setStorageError('load');
       console.warn('Failed to list chat sessions:', err);
     }
   }, []);
@@ -114,7 +120,7 @@ export function useChatSessions({
       `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     if (!sessionIdRef.current) {
       sessionIdRef.current = sessionId;
-      setCurrentSessionId(sessionId);
+      // 内部预留 ID；提交成功前不对外确认为已保存。
     }
 
     const sessionData: ChatSessionData = {
@@ -136,9 +142,10 @@ export function useChatSessions({
         session: sessionData,
       });
 
-      if (resolvedId && resolvedId !== sessionIdRef.current) {
+      if (resolvedId && sessionIdRef.current === sessionId) {
         sessionIdRef.current = resolvedId;
         setCurrentSessionId(resolvedId);
+        setStorageError((previous) => previous === 'save' ? null : previous);
       }
 
       refreshSessions();
@@ -146,6 +153,7 @@ export function useChatSessions({
       // 保存失败时清掉占位，允许后续内容变化时重试
       if (lastSavedRef.current === snapshot) {
         lastSavedRef.current = null;
+        setStorageError('save');
       }
       console.warn('Failed to auto-save chat session:', err);
     }
@@ -179,9 +187,11 @@ export function useChatSessions({
           selectedText: fullData.selectedText || '',
           streamText: fullData.streamText || '',
         };
+        setStorageError((previous) => previous === 'load' ? null : previous);
         onRestoreSession(fullData);
         setIsPanelOpen(false);
       } catch (err) {
+        setStorageError('load');
         console.error('Failed to get chat session:', err);
       }
     },
@@ -203,11 +213,13 @@ export function useChatSessions({
       e.stopPropagation();
       try {
         await invoke('delete_chat_session', { id });
+        setStorageError((previous) => previous === 'delete' ? null : previous);
         if (currentSessionId === id) {
           handleNewSession();
         }
         refreshSessions();
       } catch (err) {
+        setStorageError('delete');
         console.error('Failed to delete chat session:', err);
       }
     },
@@ -224,6 +236,8 @@ export function useChatSessions({
   }, [refreshSessions]);
 
   return {
+    historyLoaded,
+    storageError,
     sessions,
     currentSessionId,
     isPanelOpen,

@@ -3,12 +3,16 @@ import { Plus, Trash2, X, MessageSquare, Clock, Layers } from 'lucide-react';
 import { SessionMeta } from '@/types/session';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
+import { SessionStorageAlert } from '@/components/SessionStorageAlert';
+import type { SessionStorageError } from '@/types/session';
 
 // 略长于动画时长，确保退出动画完整播放后再卸载
 const EXIT_ANIMATION_MS = 180;
 
 export interface SessionPanelProps {
   isOpen: boolean;
+  storageError?: SessionStorageError;
+  historyLoaded?: boolean;
   sessions: SessionMeta[];
   currentSessionId: string | null;
   onClose: () => void;
@@ -33,6 +37,8 @@ function formatRelativeTime(timestamp: number, isZh: boolean): string {
 
 export const SessionPanel: React.FC<SessionPanelProps> = ({
   isOpen,
+  storageError = null,
+  historyLoaded = true,
   sessions,
   currentSessionId,
   onClose,
@@ -110,9 +116,11 @@ export const SessionPanel: React.FC<SessionPanelProps> = ({
         </button>
       </div>
 
+      <SessionStorageAlert error={storageError} />
+
       {/* 会话列表 */}
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
-        {sessions.length === 0 ? (
+        {!historyLoaded ? null : sessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-zinc-400 dark:text-zinc-500 space-y-2">
             <MessageSquare size={32} strokeWidth={1.5} className="opacity-40" />
             <p className="text-[12.5px]">{t('sessions.noSessions')}</p>
