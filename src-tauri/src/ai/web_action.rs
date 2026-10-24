@@ -289,8 +289,7 @@ pub fn execute_web_action(
 }
 
 fn show_attachment_origin_notice(webview: &tauri::Webview) {
-    let theme = webview.state::<AppState>().config.lock()
-        .map(|config| config.general.theme.clone()).unwrap_or_else(|_| "system".into());
+    let theme = webview.state::<AppState>().config.snapshot().general.theme;
     let _ = webview.eval(&super::scripts::build_attachment_origin_notice(&theme));
 }
 
@@ -620,10 +619,14 @@ fn execute_multi_window_action(
                         let h = (size.height as f64 / scale).round();
                         if w >= 520.0 && h >= 400.0 {
                             if let Some(state) = app_handle.try_state::<AppState>() {
-                                if let Ok(mut config) = state.config.lock() {
-                                    config.general.web_window_size = (w, h);
-                                    let _ = config.save();
-                                }
+                                let _ = state.config.commit(|config| {
+                                    if config.general.web_window_size == (w, h) {
+                                        false
+                                    } else {
+                                        config.general.web_window_size = (w, h);
+                                        true
+                                    }
+                                });
                             }
                         }
                     }
@@ -878,10 +881,14 @@ fn execute_tabbed_hub_action(
                         let h = (size.height as f64 / scale).round();
                         if w >= 520.0 && h >= 400.0 {
                             if let Some(state) = app_handle.try_state::<AppState>() {
-                                if let Ok(mut config) = state.config.lock() {
-                                    config.general.web_window_size = (w, h);
-                                    let _ = config.save();
-                                }
+                                let _ = state.config.commit(|config| {
+                                    if config.general.web_window_size == (w, h) {
+                                        false
+                                    } else {
+                                        config.general.web_window_size = (w, h);
+                                        true
+                                    }
+                                });
                             }
                         }
                     }

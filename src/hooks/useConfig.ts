@@ -23,8 +23,10 @@ export function useConfig() {
 
   const updateConfig = async (newConfig: AppConfig): Promise<boolean> => {
     try {
+      // 后端只在持久化成功后广播 config_updated；本地不预写，
+      // 避免保存失败或并发即时更新时用旧快照覆盖已提交状态。
       await invoke('save_config', { newConfig });
-      setConfig(newConfig);
+      setError(null);
       return true;
     } catch (err) {
       setError(String(err));

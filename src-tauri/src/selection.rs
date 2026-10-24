@@ -720,17 +720,16 @@ fn trigger_selection_detection_async(cursor_pos: (i32, i32), task_seq: u64, is_d
             // 检查配置
             let (auto_popup, min_len, modifier, blacklist, actions, icon_only) = {
                 if let Some(state) = handle.try_state::<crate::AppState>() {
-                    if let Ok(config) = state.config.lock() {
-                        (
+                    match state.config.try_snapshot() {
+                        Some(config) => (
                             config.general.auto_popup_on_selection,
                             config.general.min_selection_length,
                             config.general.trigger_modifier.clone(),
                             config.blacklist.clone(),
                             config.actions.clone(),
                             config.general.icon_only_bubble,
-                        )
-                    } else {
-                        return;
+                        ),
+                        None => return,
                     }
                 } else {
                     return;

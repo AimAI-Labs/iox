@@ -38,11 +38,9 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle();
 
     let state = handle.state::<AppState>();
-    let (enable_floating_ball, current_lang) = {
-        let config = state.config.lock().unwrap();
-        let lang = crate::config::resolve_language(&config.general.language);
-        (config.general.enable_floating_ball, lang)
-    };
+    let config = state.config.snapshot();
+    let current_lang = crate::config::resolve_language(&config.general.language);
+    let enable_floating_ball = config.general.enable_floating_ball;
 
     let texts = get_tray_texts(current_lang);
     let ball_text = if enable_floating_ball {
@@ -76,22 +74,18 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "toggle_ball" => {
                 let state = app.state::<AppState>();
-                let (new_visible, lang) = {
-                    let mut config = state.config.lock().unwrap();
-                    let current = config.general.enable_floating_ball;
-                    config.general.enable_floating_ball = !current;
-                    let _ = config.save();
+                let config = state.config.snapshot();
+                let new_visible = !config.general.enable_floating_ball;
+                if crate::set_floating_ball_visible(&state.config, new_visible).is_ok() {
                     let lang = crate::config::resolve_language(&config.general.language);
-                    (!current, lang)
-                };
-                let _ = crate::toggle_floating_ball(app.clone(), state, new_visible);
-                let texts = get_tray_texts(lang);
-                let new_text = if new_visible {
-                    texts.toggle_ball_hide
-                } else {
-                    texts.toggle_ball_show
-                };
-                let _ = toggle_item_handle.set_text(new_text);
+                    let texts = get_tray_texts(lang);
+                    let new_text = if new_visible {
+                        texts.toggle_ball_hide
+                    } else {
+                        texts.toggle_ball_show
+                    };
+                    let _ = toggle_item_handle.set_text(new_text);
+                }
             }
             "open_settings" => {
                 let _ = crate::show_main_window(app.clone(), None);

@@ -85,7 +85,7 @@ fn dismiss_menu(app: &AppHandle) {
 
 fn enabled(app: &AppHandle) -> bool {
     app.try_state::<crate::AppState>().is_some_and(|state| {
-        state.config.try_lock().is_ok_and(|config| {
+        state.config.try_snapshot().is_some_and(|config| {
             config.general.auto_popup_on_file_selection
                 && config.actions.iter().any(|action| action.enabled && action.action_type == "web")
                 && crate::selection::is_modifier_satisfied(&config.general.trigger_modifier)
@@ -180,8 +180,11 @@ pub fn mouse_down(app: &AppHandle, point: (i32, i32), inside_overlay: bool) {
                 GetSystemMetrics(SM_CYDRAG).max(1),
             )
         };
-        let delay_ms = app.state::<crate::AppState>().config.lock()
-            .map(|config| config.general.file_drag_hover_delay_ms).unwrap_or(1000);
+        let delay_ms = app.state::<crate::AppState>()
+            .config
+            .snapshot()
+            .general
+            .file_drag_hover_delay_ms;
         let mut dwell = DragDwell::new(point, threshold, delay_ms);
         let started = Instant::now();
         loop {
@@ -211,9 +214,13 @@ pub fn mouse_down(app: &AppHandle, point: (i32, i32), inside_overlay: bool) {
                     }
                     crate::selection::cancel_pending_hide();
                     crate::overlay_state::set_overlay_bubble_mode(true);
-                    let count = main_app.state::<crate::AppState>().config.lock()
-                        .map(|config| config.actions.iter().filter(|a| a.enabled && a.action_type == "web").count())
-                        .unwrap_or(0);
+                    let count = main_app.state::<crate::AppState>()
+                        .config
+                        .snapshot()
+                        .actions
+                        .iter()
+                        .filter(|action| action.enabled && action.action_type == "web")
+                        .count();
                     let layout = FileMenuLayout::new(count);
                     let (width, height) = crate::window_manager::fit_overlay_size(
                         &main_app, position.0, position.1, layout.width, layout.height,

@@ -267,12 +267,7 @@ pub async fn sync_web_sessions(
     let Ok(guard) = SYNC_LOCK.try_lock() else {
         return Ok(());
     };
-    let config = app
-        .state::<AppState>()
-        .config
-        .lock()
-        .map_err(|e| e.to_string())?
-        .clone();
+    let config = app.state::<AppState>().config.snapshot();
     let cached = web_sessions::list_web_sessions()?;
     let full_sync = full_sync.unwrap_or(false);
     let skip_fresh = skip_fresh.unwrap_or(false) && !full_sync;

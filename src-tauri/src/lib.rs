@@ -19,10 +19,22 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct AppState {
-    pub config: Mutex<AppConfig>,
+    pub config: config::ConfigStore,
     pub ai_manager: AiManager,
     pub web_hub_state: Mutex<ai::WebHubState>,
     pub web_injections: Mutex<std::collections::HashMap<String, tokio_util::sync::CancellationToken>>,
+}
+
+/// 配置提交成功后的发布 adapter：先广播已提交快照，再应用原生窗口效果。
+struct TauriConfigPublisher {
+    app: AppHandle,
+}
+
+impl config::ConfigPublisher for TauriConfigPublisher {
+    fn publish(&self, previous: &AppConfig, current: &AppConfig) {
+        let _ = self.app.emit("config_updated", current);
+        window_manager::apply_config_effects(&self.app, previous, current);
+    }
 }
 
 #[tauri::command]
@@ -36,57 +48,27 @@ fn open_settings_devtools(webview: tauri::Webview) -> Result<(), String> {
 
 #[tauri::command]
 fn get_config(state: State<AppState>) -> AppConfig {
-    let config = state.config.lock().unwrap();
-    config.clone()
+    state.config.snapshot()
 }
 
 #[tauri::command]
-fn save_config(app: AppHandle, new_config: AppConfig, state: State<AppState>) -> Result<(), String> {
-    new_config.save()?;
-    let (style_changed, theme_changed) = {
-        let mut config = state.config.lock().unwrap();
-        let style_changed = config.general.ui_style != new_config.general.ui_style;
-        let theme_changed = config.general.theme != new_config.general.theme;
-        *config = new_config.clone();
-        (style_changed, theme_changed)
-    };
-    let _ = app.emit("config_updated", &new_config);
-
-    // 样式变化重设窗口装饰；仅深浅色变化时只同步系统标题栏配色
-    if style_changed {
-        window_manager::apply_ui_style(&app, &new_config.general.ui_style, &new_config.general.theme);
-    } else if theme_changed {
-        window_manager::sync_window_theme(&app, &new_config.general.theme);
-    }
-
-    // 即时同步常驻悬浮球窗口的显示/隐藏
-    if let Some(window) = app.get_webview_window("floating_ball") {
-        if new_config.general.enable_floating_ball {
-            let pos = new_config.general.floating_ball_pos;
-            window_manager::init_floating_ball(&window, pos);
-        } else {
-            let _ = window.hide();
-        }
-    }
+fn save_config(new_config: AppConfig, state: State<AppState>) -> Result<(), String> {
+    state.config.replace(new_config)?;
     Ok(())
 }
 
 /// 即时切换界面样式并单独持久化，不提交设置页其他未保存的修改
 #[tauri::command]
-fn set_ui_style(app: AppHandle, state: State<AppState>, style: String) -> Result<(), String> {
+fn set_ui_style(state: State<AppState>, style: String) -> Result<(), String> {
     let style = config::normalize_ui_style(&style);
-    let updated = {
-        let mut config = state.config.lock().map_err(|_| "配置不可用".to_string())?;
+    state.config.commit(|config| {
         if config.general.ui_style == style {
-            return Ok(());
+            false
+        } else {
+            config.general.ui_style = style;
+            true
         }
-        config.general.ui_style = style;
-        config.clone()
-    };
-    updated.save()?;
-
-    window_manager::apply_ui_style(&app, &updated.general.ui_style, &updated.general.theme);
-    let _ = app.emit("config_updated", &updated);
+    })?;
     Ok(())
 }
 
@@ -99,7 +81,7 @@ async fn trigger_web_action(
     copy_to_clipboard: Option<bool>,
     auto_submit_override: Option<bool>,
 ) -> Result<(), String> {
-    let config = state.config.lock().unwrap().clone();
+    let config = state.config.snapshot();
     let action = config
         .actions
         .iter()
@@ -132,7 +114,7 @@ async fn trigger_web_file_action(
     }
     file_selection::claim_dropped_files(drag_id, &files)?;
     let result = (|| {
-        let config = state.config.lock().map_err(|_| "配置不可用".to_string())?.clone();
+        let config = state.config.snapshot();
         if !config.general.auto_popup_on_file_selection {
             return Err("文件拖放功能已关闭".into());
         }
@@ -197,7 +179,7 @@ fn trigger_api_action(
     reasoning_effort: Option<ai::stream::ReasoningEffort>,
 ) -> Result<(), String> {
     let (provider, model, prompt_template) = {
-        let config = state.config.lock().unwrap();
+        let config = state.config.snapshot();
         resolve_api_request_config(
             &config,
             &action_id,
@@ -361,18 +343,21 @@ fn set_overlay_mode(mode: String) {
 
 #[tauri::command]
 fn save_api_card_size(
-    app: AppHandle,
     state: State<AppState>,
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    if width >= 320.0 && height >= 200.0 {
-        let mut config = state.config.lock().unwrap();
-        config.general.api_card_size = (width.round(), height.round());
-        config.api_card.card_size = (width.round(), height.round());
-        let _ = config.save();
-        let _ = app.emit("config_updated", &*config);
+    if width < 320.0 || height < 200.0 {
+        return Ok(());
     }
+    let size = (width.round(), height.round());
+    state.config.commit(|config| {
+        if config.api_card.card_size == size {
+            return false;
+        }
+        config.api_card.card_size = size;
+        true
+    })?;
     Ok(())
 }
 
@@ -392,10 +377,15 @@ fn close_web_window(app: AppHandle, state: State<AppState>, label: String) -> Re
                 let w = (size.width as f64 / scale).round();
                 let h = (size.height as f64 / scale).round();
                 if w >= 520.0 && h >= 400.0 {
-                    if let Ok(mut config) = state.config.lock() {
-                        config.general.web_window_size = (w, h);
-                        let _ = config.save();
-                    }
+                    // 窗口尺寸是关闭流程的附带记忆，保存失败不影响关闭结果。
+                    let _ = state.config.commit(|config| {
+                        if config.general.web_window_size == (w, h) {
+                            false
+                        } else {
+                            config.general.web_window_size = (w, h);
+                            true
+                        }
+                    });
                 }
             }
         }
@@ -504,14 +494,28 @@ async fn fetch_provider_models(
     ai::fetch_provider_models(base_url, api_key).await
 }
 
+/// 悬浮球开关的唯一提交入口：设置页、托盘与命令共用。
+pub(crate) fn set_floating_ball_visible(
+    store: &config::ConfigStore,
+    visible: bool,
+) -> Result<(), String> {
+    store.commit(|config| {
+        if config.general.enable_floating_ball == visible {
+            false
+        } else {
+            config.general.enable_floating_ball = visible;
+            true
+        }
+    })?;
+    Ok(())
+}
+
 #[tauri::command]
 fn init_floating_ball(app: AppHandle, state: State<AppState>) -> Result<window_manager::FloatingBallPosition, String> {
     if let Some(window) = app.get_webview_window("floating_ball") {
-        let (pos, enabled) = {
-            let config = state.config.lock().unwrap();
-            (config.general.floating_ball_pos, config.general.enable_floating_ball)
-        };
-        if !enabled {
+        let config = state.config.snapshot();
+        let pos = config.general.floating_ball_pos;
+        if !config.general.enable_floating_ball {
             let _ = window.hide();
             return Ok((pos.0, pos.1, "top-right".to_string(), "none".to_string()));
         }
@@ -530,19 +534,20 @@ fn snap_floating_ball(
     y: i32,
 ) -> Result<window_manager::FloatingBallPosition, String> {
     if let Some(window) = app.get_webview_window("floating_ball") {
-        let enabled = {
-            let config = state.config.lock().unwrap();
-            config.general.enable_floating_ball
-        };
-        if !enabled {
+        if !state.config.snapshot().general.enable_floating_ball {
             let _ = window.hide();
             return Ok((x, y, "top-right".to_string(), "none".to_string()));
         }
         let (logical_x, logical_y, corner, edge) = window_manager::snap_floating_ball(&window, x, y);
-        if let Ok(mut config) = state.config.lock() {
-            config.general.floating_ball_pos = (logical_x, logical_y);
-            let _ = config.save();
-        }
+        // 位置记忆失败不影响本次吸附交互。
+        let _ = state.config.commit(|config| {
+            if config.general.floating_ball_pos == (logical_x, logical_y) {
+                false
+            } else {
+                config.general.floating_ball_pos = (logical_x, logical_y);
+                true
+            }
+        });
         Ok((logical_x, logical_y, corner, edge))
     } else {
         Err("Floating ball window not found".to_string())
@@ -558,11 +563,7 @@ async fn start_floating_ball_dragging(
         .get_webview_window("floating_ball")
         .ok_or_else(|| "Floating ball window not found".to_string())?;
 
-    let enabled = {
-        let config = state.config.lock().unwrap();
-        config.general.enable_floating_ball
-    };
-    if !enabled {
+    if !state.config.snapshot().general.enable_floating_ball {
         let _ = window.hide();
         return Ok((0, 0, "top-right".to_string(), "none".to_string()));
     }
@@ -575,10 +576,15 @@ async fn start_floating_ball_dragging(
 
     if let Some(win) = app.get_webview_window("floating_ball") {
         let (logical_x, logical_y, corner, edge) = window_manager::snap_floating_ball(&win, drag_x, drag_y);
-        if let Ok(mut config) = state.config.lock() {
-            config.general.floating_ball_pos = (logical_x, logical_y);
-            let _ = config.save();
-        }
+        // 位置记忆失败不影响本次拖动结果。
+        let _ = state.config.commit(|config| {
+            if config.general.floating_ball_pos == (logical_x, logical_y) {
+                false
+            } else {
+                config.general.floating_ball_pos = (logical_x, logical_y);
+                true
+            }
+        });
         Ok((logical_x, logical_y, corner, edge))
     } else {
         Err("Floating ball window not found".to_string())
@@ -586,24 +592,8 @@ async fn start_floating_ball_dragging(
 }
 
 #[tauri::command]
-fn toggle_floating_ball(app: AppHandle, state: State<AppState>, visible: bool) -> Result<(), String> {
-    let updated_config = {
-        let mut config = state.config.lock().unwrap();
-        config.general.enable_floating_ball = visible;
-        let _ = config.save();
-        config.clone()
-    };
-    let _ = app.emit("config_updated", &updated_config);
-
-    if let Some(window) = app.get_webview_window("floating_ball") {
-        if visible {
-            let pos = updated_config.general.floating_ball_pos;
-            window_manager::init_floating_ball(&window, pos);
-        } else {
-            let _ = window.hide();
-        }
-    }
-    Ok(())
+fn toggle_floating_ball(state: State<AppState>, visible: bool) -> Result<(), String> {
+    set_floating_ball_visible(&state.config, visible)
 }
 
 #[tauri::command]
@@ -620,11 +610,7 @@ fn set_floating_ball_expanded(
     expanded: bool,
 ) -> Result<(i32, i32, String), String> {
     if let Some(window) = app.get_webview_window("floating_ball") {
-        let enabled = {
-            let config = state.config.lock().unwrap();
-            config.general.enable_floating_ball
-        };
-        if !enabled {
+        if !state.config.snapshot().general.enable_floating_ball {
             let _ = window.hide();
             return Ok((0, 0, "right".to_string()));
         }
@@ -648,19 +634,21 @@ fn focus_floating_ball_input(app: AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let initial_config = AppConfig::load();
-    let app_state = AppState {
-        config: Mutex::new(initial_config.clone()),
-        ai_manager: AiManager::new(),
-        web_hub_state: Mutex::new(ai::WebHubState::default()),
-        web_injections: Mutex::new(std::collections::HashMap::new()),
-    };
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(app_state)
         .setup(move |app| {
             let handle = app.handle().clone();
+            let config = config::ConfigStore::load(Box::new(TauriConfigPublisher {
+                app: handle.clone(),
+            }));
+            let initial_config = config.snapshot();
+            app.manage(AppState {
+                config,
+                ai_manager: AiManager::new(),
+                web_hub_state: Mutex::new(ai::WebHubState::default()),
+                web_injections: Mutex::new(std::collections::HashMap::new()),
+            });
+
             // 首帧前应用持久化的界面样式，避免窗口显示后再切换装饰
             window_manager::apply_ui_style(
                 &handle,

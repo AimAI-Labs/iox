@@ -307,12 +307,7 @@ pub async fn open_web_session(app: AppHandle, id: String, external: bool) -> Res
     if external {
         return open::that_detached(&url).map_err(|e| e.to_string());
     }
-    let config = app
-        .state::<AppState>()
-        .config
-        .lock()
-        .map_err(|e| e.to_string())?
-        .clone();
+    let config = app.state::<AppState>().config.snapshot();
     let action = config
         .actions
         .iter()

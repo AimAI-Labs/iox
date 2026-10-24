@@ -74,6 +74,30 @@ pub fn sync_window_theme(app: &AppHandle, theme: &str) {
     }
 }
 
+/// 配置成功提交后的窗口 adapter：只应用新旧快照之间实际变化的原生效果。
+/// 窗口操作失败不回滚配置，内存与磁盘仍以已提交状态为准。
+pub fn apply_config_effects(
+    app: &AppHandle,
+    previous: &crate::config::AppConfig,
+    current: &crate::config::AppConfig,
+) {
+    if previous.general.ui_style != current.general.ui_style {
+        apply_ui_style(app, &current.general.ui_style, &current.general.theme);
+    } else if previous.general.theme != current.general.theme {
+        sync_window_theme(app, &current.general.theme);
+    }
+
+    if previous.general.enable_floating_ball != current.general.enable_floating_ball {
+        if let Some(window) = app.get_webview_window("floating_ball") {
+            if current.general.enable_floating_ball {
+                init_floating_ball(&window, current.general.floating_ball_pos);
+            } else {
+                let _ = window.hide();
+            }
+        }
+    }
+}
+
 /// 对单个窗口应用界面策略：系统标题栏开关、直角/圆角与标题栏配色
 pub fn apply_window_ui_style(window: &tauri::Window, native: bool, theme: Option<tauri::Theme>) {
     let _ = window.set_theme(theme);
