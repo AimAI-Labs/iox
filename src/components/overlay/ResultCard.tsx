@@ -1,6 +1,14 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ProviderConfig, ApiCardConfig } from '@/types/config';
+import {
+  ProviderConfig,
+  ApiCardConfig,
+  DEFAULT_AUTO_COLLAPSE_THINKING,
+  DEFAULT_CONTEXT_TURNS,
+  DEFAULT_FONT_SIZE,
+  DEFAULT_SHOW_DURATION,
+  DEFAULT_THINKING_OPEN,
+} from '@/types/config';
 import { CardHeader } from '@/components/overlay/CardHeader';
 import { TabItem } from '@/components/overlay/TabBar';
 import { LoadingState } from '@/components/overlay/LoadingState';
@@ -158,10 +166,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const [followUpInput, setFollowUpInput] = useState(initialInput || '');
   const [editingTurnIndex, setEditingTurnIndex] = useState<number | null>(null);
   const contextUsage = useMemo(
-    () => getContextUsage(conversation, followUpInput, apiCard?.contextTurns ?? 5),
+    () => getContextUsage(conversation, followUpInput, apiCard?.contextTurns ?? DEFAULT_CONTEXT_TURNS),
     [conversation, followUpInput, apiCard?.contextTurns]
   );
-  const [isThinkingOpen, setIsThinkingOpen] = useState(apiCard?.thinkingDefaultOpen ?? true);
+  const [isThinkingOpen, setIsThinkingOpen] = useState(apiCard?.thinkingDefaultOpen ?? DEFAULT_THINKING_OPEN);
   const [isMaximized, setIsMaximized] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; visible: boolean }>({
     x: 0,
@@ -371,11 +379,11 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const prevThinkingRef = useRef(isThinking);
   useEffect(() => {
     if (isThinking) {
-      if (apiCard?.thinkingDefaultOpen ?? true) {
+      if (apiCard?.thinkingDefaultOpen ?? DEFAULT_THINKING_OPEN) {
         setIsThinkingOpen(true);
       }
     } else if (prevThinkingRef.current && !isThinking) {
-      if (apiCard?.autoCollapseThinkingOnDone ?? true) {
+      if (apiCard?.autoCollapseThinkingOnDone ?? DEFAULT_AUTO_COLLAPSE_THINKING) {
         setIsThinkingOpen(false);
       }
     }
@@ -500,7 +508,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           onWheelCapture={handleWheel}
           onMouseUp={handleSelectionCheck}
           onKeyUp={handleSelectionCheck}
-          style={{ fontSize: `${apiCard?.fontSize || 13}px` }}
+          style={{ fontSize: `${apiCard?.fontSize ?? DEFAULT_FONT_SIZE}px` }}
           className="h-full overflow-y-auto px-3.5 pt-3 pb-12 text-ink select-text custom-scrollbar"
         >
         {/* 初始用户选中文本气泡 (如果存在) */}
@@ -596,7 +604,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                             {displayTurnModel}
                           </span>
                         )}
-                        {displayTurnDuration !== undefined && (apiCard?.showDuration ?? true) && (
+                        {displayTurnDuration !== undefined && (apiCard?.showDuration ?? DEFAULT_SHOW_DURATION) && (
                           <span className="font-mono text-ink-3 tabular-nums">
                             for {displayTurnDuration.toFixed(1)}s
                           </span>
@@ -609,7 +617,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                           thinkingText={turnThinking}
                           isThinking={turnIsThinking}
                           isOpen={isThinkingOpen}
-                          autoCollapseOnDone={apiCard?.autoCollapseThinkingOnDone ?? true}
+                          autoCollapseOnDone={apiCard?.autoCollapseThinkingOnDone ?? DEFAULT_AUTO_COLLAPSE_THINKING}
                           onToggleOpen={handleToggleThinking}
                         />
                       )}

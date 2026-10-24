@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { listen, emit } from '@tauri-apps/api/event';
+import { DEFAULT_OVERLAY_OPACITY } from '@/types/config';
 
 export type ThemeMode = 'system' | 'dark' | 'light';
 
@@ -110,9 +111,9 @@ export async function broadcastThemeChange(theme: ThemeMode, overlayOpacity?: nu
  * @param theme 目标主题 ('system' | 'dark' | 'light')
  * @param overlayOpacity 悬浮窗背景透明度 (50 ~ 100)
  */
-export function useTheme(theme: ThemeMode = 'system', overlayOpacity: number = 90) {
+export function useTheme(theme: ThemeMode = 'system', overlayOpacity: number = DEFAULT_OVERLAY_OPACITY) {
   const [activeTheme, setActiveTheme] = useState<ThemeMode>(theme || 'system');
-  const [activeOpacity, setActiveOpacity] = useState<number>(overlayOpacity ?? 90);
+  const [activeOpacity, setActiveOpacity] = useState<number>(overlayOpacity ?? DEFAULT_OVERLAY_OPACITY);
   const isInitialMountRef = useRef(true);
   // 标记是否已完成持久化主题的首次同步，防止启动/开窗时因
   // "system 预设 -> config 实际主题"的落差而播放一次多余的水滴动画（启动闪屏）
@@ -123,7 +124,7 @@ export function useTheme(theme: ThemeMode = 'system', overlayOpacity: number = 9
   }, [theme]);
 
   useEffect(() => {
-    setActiveOpacity(overlayOpacity ?? 90);
+    setActiveOpacity(overlayOpacity ?? DEFAULT_OVERLAY_OPACITY);
   }, [overlayOpacity]);
 
   // 监听来自其他窗口的实时主题与透明度广播
@@ -152,7 +153,7 @@ export function useTheme(theme: ThemeMode = 'system', overlayOpacity: number = 9
   // 动态同步背景透明度 CSS 变量
   useEffect(() => {
     const root = document.documentElement;
-    const opacityVal = Math.min(Math.max(activeOpacity ?? 90, 50), 100) / 100;
+    const opacityVal = Math.min(Math.max(activeOpacity ?? DEFAULT_OVERLAY_OPACITY, 50), 100) / 100;
     root.style.setProperty('--overlay-opacity', opacityVal.toString());
   }, [activeOpacity]);
 

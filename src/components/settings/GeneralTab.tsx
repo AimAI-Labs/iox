@@ -1,6 +1,6 @@
 import React from "react";
 import { AppWindow, Monitor, Moon, Sun, Sparkles } from "lucide-react";
-import { GeneralConfig, LanguageSetting, UiStyle } from "@/types/config";
+import { DEFAULT_OVERLAY_OPACITY, GeneralConfig, LanguageSetting, UiStyle } from "@/types/config";
 import { switchThemeWithTransition } from "@/hooks/useTheme";
 import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
@@ -353,12 +353,12 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
                   min={50}
                   max={100}
                   step={1}
-                  value={general.overlayOpacity ?? 90}
+                  value={general.overlayOpacity ?? DEFAULT_OVERLAY_OPACITY}
                   onChange={(val) => onUpdateGeneral({ overlayOpacity: val })}
                   className="flex-1"
                 />
                 <span className="w-9 text-right text-xs font-mono text-muted-foreground font-semibold">
-                  {general.overlayOpacity ?? 90}%
+                  {general.overlayOpacity ?? DEFAULT_OVERLAY_OPACITY}%
                 </span>
               </div>
             </div>
@@ -368,7 +368,7 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
               <div className="relative z-10 flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10.5px] font-medium text-muted-foreground">
-                    {isZh ? `效果实时预览 (当前不透明度 ${general.overlayOpacity ?? 90}%)` : `Live Preview (Opacity ${general.overlayOpacity ?? 90}%)`}
+                    {isZh ? `效果实时预览 (当前不透明度 ${general.overlayOpacity ?? DEFAULT_OVERLAY_OPACITY}%)` : `Live Preview (Opacity ${general.overlayOpacity ?? DEFAULT_OVERLAY_OPACITY}%)`}
                   </span>
                   <span className="text-[10px] text-muted-foreground/80">
                     {isZh ? "毛玻璃高斯模糊已联动" : "Linked with blur effects"}

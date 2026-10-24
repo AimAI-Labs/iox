@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { DEFAULT_API_CARD_SIZE } from '@/types/config';
 
 /* ─────────────────────────────────────────────────────────
  * ResizeHandle — 右下角原生缩放手柄
@@ -39,7 +40,7 @@ export const ResizeHandle: React.FC<ResizeHandleProps> = ({ onReset }) => {
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
       className="absolute right-0 bottom-0 z-20 flex size-4 cursor-nwse-resize items-end justify-end p-0.5 select-none transition-transform hover:scale-110 active:scale-95"
-      title="拖拽调整大小 (双击恢复默认尺寸 600×900)"
+      title={`拖拽调整大小 (双击恢复默认尺寸 ${DEFAULT_API_CARD_SIZE[0]}×${DEFAULT_API_CARD_SIZE[1]})`}
     >
       {/* BUI 极简三点角标 */}
       <svg

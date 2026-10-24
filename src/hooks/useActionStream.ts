@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { ActionConfig, AppConfig } from '@/types/config';
+import { DEFAULT_CONTEXT_TURNS, type ActionConfig, type AppConfig } from '@/types/config';
 import type { OverlayMode } from '@/state/overlayReducer';
 import type { GenerationPlan } from '@/types/session';
 import type { ConversationWorkspace } from '@/conversation/workspace';
@@ -137,7 +137,7 @@ export function useActionStream({ config, workspace, selectionText, isPinned, on
     if (workspace.getSnapshot().active?.selectedModel.trim()) return true;
     reportMissingModel(); return false;
   };
-  const maxTurns = () => config?.apiCard?.contextTurns ?? 5;
+  const maxTurns = () => config?.apiCard?.contextTurns ?? DEFAULT_CONTEXT_TURNS;
   const handleSendFollowUp = async (prompt: string) => {
     if (hasModel()) await send(workspace.followUp(prompt, maxTurns()));
   };

@@ -1,0 +1,232 @@
+{
+  "general": {
+    "autoPopupOnSelection": true,
+    "autoPopupOnFileSelection": false,
+    "fileDragHoverDelayMs": 1000,
+    "minSelectionLength": 1,
+    "triggerModifier": "None",
+    "globalHotkey": "Alt+Space",
+    "theme": "system",
+    "uiStyle": "classic",
+    "autoStart": false,
+    "webWindowMode": "multi_window",
+    "autoCopyOnWebAction": false,
+    "overlayOpacity": 90,
+    "webWindowSize": [
+      860.0,
+      640.0
+    ],
+    "apiCardSize": [
+      600.0,
+      900.0
+    ],
+    "iconOnlyBubble": false,
+    "enableFloatingBall": true,
+    "floatingBallAutoHide": true,
+    "floatingBallHideDelayMs": 2500,
+    "floatingBallHoverDelayMs": 220,
+    "floatingBallPos": [
+      0,
+      0
+    ],
+    "language": "auto"
+  },
+  "blacklist": [
+    "League of Legends.exe",
+    "Valorant.exe",
+    "GenshinImpact.exe"
+  ],
+  "providers": [
+    {
+      "id": "deepseek",
+      "name": "DeepSeek 官方",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "apiKey": "",
+      "models": [],
+      "defaultModel": "",
+      "enabled": true
+    },
+    {
+      "id": "qwen",
+      "name": "通义千问 (DashScope)",
+      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "apiKey": "",
+      "models": [],
+      "defaultModel": "",
+      "enabled": true
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama (本地)",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "apiKey": "",
+      "models": [],
+      "defaultModel": "",
+      "enabled": true
+    }
+  ],
+  "actions": [
+    {
+      "id": "act_translate",
+      "name": "翻译",
+      "icon": "Languages",
+      "actionType": "api",
+      "providerId": "deepseek",
+      "promptTemplate": "你是一位专业翻译官。请将以下内容翻译为地道流畅的语言（中文转英文，外语转中文），直接输出译文：\n\n{text}",
+      "urlTemplate": null,
+      "copyToClipboard": null,
+      "enabled": true
+    },
+    {
+      "id": "act_summarize",
+      "name": "总结",
+      "icon": "FileText",
+      "actionType": "api",
+      "providerId": "deepseek",
+      "promptTemplate": "请简明扼要地总结以下内容的核心要点与关键结论：\n\n{text}",
+      "urlTemplate": null,
+      "copyToClipboard": null,
+      "enabled": true
+    },
+    {
+      "id": "act_web_deepseek",
+      "name": "DeepSeek",
+      "icon": "DeepSeek",
+      "actionType": "web",
+      "providerId": null,
+      "promptTemplate": null,
+      "urlTemplate": "https://chat.deepseek.com/",
+      "copyToClipboard": false,
+      "enabled": true,
+      "inputSelector": "textarea#chat-input, textarea",
+      "submitSelector": "div[role='button'][aria-label*='发送'], div[role='button'][aria-label*='Send'], button[type='submit']",
+      "autoSubmit": true
+    },
+    {
+      "id": "act_web_kimi",
+      "name": "Kimi",
+      "icon": "Kimi",
+      "actionType": "web",
+      "providerId": null,
+      "promptTemplate": null,
+      "urlTemplate": "https://www.kimi.com/",
+      "copyToClipboard": false,
+      "enabled": false,
+      "inputSelector": "div[contenteditable='true'], textarea, [contenteditable='true']",
+      "submitSelector": "button[data-testid*='send'], button.send-button, div[role='button'][aria-label*='发送'], button[type='submit']",
+      "autoSubmit": true
+    },
+    {
+      "id": "act_web_search",
+      "name": "AI搜索",
+      "icon": "Perplexity",
+      "actionType": "web",
+      "providerId": null,
+      "promptTemplate": null,
+      "urlTemplate": "https://www.perplexity.ai/search?q={text}",
+      "copyToClipboard": false,
+      "enabled": true,
+      "useUrlTemplate": true
+    },
+    {
+      "id": "act_web_metaso",
+      "name": "秘塔AI",
+      "icon": "Metaso",
+      "actionType": "web",
+      "providerId": null,
+      "promptTemplate": null,
+      "urlTemplate": "https://metaso.cn/?q={text}",
+      "copyToClipboard": false,
+      "enabled": true,
+      "useUrlTemplate": true
+    },
+    {
+      "id": "act_web_chatgpt",
+      "name": "ChatGPT",
+      "icon": "OpenAI",
+      "actionType": "web",
+      "providerId": null,
+      "promptTemplate": null,
+      "urlTemplate": "https://chatgpt.com/",
+      "copyToClipboard": false,
+      "enabled": true
+    },
+    {
+      "id": "act_web_qwen",
+      "name": "问千问",
+      "icon": "Qwen",
+      "actionType": "web",
+      "providerId": null,
+      "promptTemplate": null,
+      "urlTemplate": "https://www.qianwen.com/",
+      "copyToClipboard": false,
+      "enabled": true,
+      "inputSelector": "textarea, div[contenteditable='true'], [contenteditable='true']",
+      "submitSelector": "button[class*='send'], div[class*='send'], button[class*='operate'], button[type='submit'], div[role='button'][aria-label*='发送'], div[role='button'][aria-label*='Send']",
+      "autoSubmit": true
+    },
+    {
+      "id": "act_web_phind",
+      "name": "Phind",
+      "icon": "Phind",
+      "actionType": "web",
+      "providerId": null,
+      "promptTemplate": null,
+      "urlTemplate": "https://www.phind.com/search?q={text}",
+      "copyToClipboard": false,
+      "enabled": false,
+      "useUrlTemplate": true
+    },
+    {
+      "id": "act_web_felo",
+      "name": "Felo AI",
+      "icon": "Felo",
+      "actionType": "web",
+      "providerId": null,
+      "promptTemplate": null,
+      "urlTemplate": "https://felo.ai/search?q={text}",
+      "copyToClipboard": false,
+      "enabled": false,
+      "useUrlTemplate": true
+    },
+    {
+      "id": "act_web_360",
+      "name": "360 AI",
+      "icon": "Ai360",
+      "actionType": "web",
+      "providerId": null,
+      "promptTemplate": null,
+      "urlTemplate": "https://ai.360.com/search?q={text}",
+      "copyToClipboard": false,
+      "enabled": false,
+      "useUrlTemplate": true
+    },
+    {
+      "id": "act_copy",
+      "name": "复制",
+      "icon": "Copy",
+      "actionType": "copy",
+      "providerId": null,
+      "promptTemplate": null,
+      "urlTemplate": null,
+      "copyToClipboard": true,
+      "enabled": true
+    }
+  ],
+  "apiCard": {
+    "cardSize": [
+      600.0,
+      900.0
+    ],
+    "autoPinOnOpen": false,
+    "autoFocusInput": false,
+    "thinkingDefaultOpen": true,
+    "autoCollapseThinkingOnDone": true,
+    "showDuration": true,
+    "fontSize": 13,
+    "codeBlockWrap": false,
+    "codeBlockLineNumbers": false,
+    "contextTurns": 5,
+    "sendKeyShortcut": "Enter"
+  }
+}

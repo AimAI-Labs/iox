@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { OverlayMode } from '@/state/overlayReducer';
-import { ActionConfig, ApiCardConfig } from '@/types/config';
+import { ActionConfig, ApiCardConfig, DEFAULT_API_CARD_SIZE } from '@/types/config';
 import { calculateBubbleWidth } from '@/utils/bubbleWidth';
 
 interface UseOverlayLifecycleProps {
@@ -49,9 +49,9 @@ export function useOverlayLifecycle({
         return;
       }
 
-      const defaultCardSize = apiCardRef.current?.cardSize || [600, 900];
-      const width = customSize?.width || defaultCardSize[0] || 600;
-      const height = customSize?.height || defaultCardSize[1] || 900;
+      const [defaultWidth, defaultHeight] = apiCardRef.current?.cardSize ?? DEFAULT_API_CARD_SIZE;
+      const width = customSize?.width ?? defaultWidth;
+      const height = customSize?.height ?? defaultHeight;
       const shouldFocus = allowFocus || (apiCardRef.current?.autoFocusInput ?? false);
       await invoke('layout_overlay', { mode: 'card', width, height, allowFocus: shouldFocus });
 
@@ -64,10 +64,11 @@ export function useOverlayLifecycle({
     [setIsPinned]
   );
 
-  // 一键重置卡片尺寸为 600x900px
+  // 一键重置卡片尺寸为配置契约中的默认值
   const handleResetCardSize = useCallback(async () => {
-    await updateWindowSize('card', true, { width: 600, height: 900 });
-    await invoke('save_api_card_size', { width: 600.0, height: 900.0 }).catch(() => {});
+    const [width, height] = DEFAULT_API_CARD_SIZE;
+    await updateWindowSize('card', true, { width, height });
+    await invoke('save_api_card_size', { width, height }).catch(() => {});
   }, [updateWindowSize]);
 
   // 组件加载时同步初始钉住状态至 Rust 后端

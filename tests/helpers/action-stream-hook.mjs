@@ -6,14 +6,17 @@ import { loadConversationModule } from './conversation-module.mjs';
 const { createConversationWorkspace } = await loadConversationModule('conversation/workspace');
 const conversationTranscript = await loadConversationModule('conversation/transcript');
 
-async function moduleAt(path) {
-  const source = readFileSync(new URL(path, import.meta.url), 'utf8');
+async function moduleAt(path, rewrite = (source) => source) {
+  const source = rewrite(readFileSync(new URL(path, import.meta.url), 'utf8'));
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
   return import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 }
 const client = await moduleAt('../../src/lib/actionStreamClient.ts');
 const reasoning = await moduleAt('../../src/lib/reasoning.ts');
 const provider = await moduleAt('../../src/lib/provider.ts');
+const config = await moduleAt('../../src/types/config.ts', (source) =>
+  source.replace("from 'zod'", `from '${import.meta.resolve('zod')}'`)
+);
 const source = readFileSync(new URL('../../src/hooks/useActionStream.ts', import.meta.url), 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
 
@@ -56,6 +59,7 @@ export function mountActionStream(overrides = {}, transport = {}) {
     '@/lib/actionStreamClient': client,
     '@/lib/reasoning': reasoning,
     '@/lib/provider': provider,
+    '@/types/config': config,
     '@/conversation/transcript': conversationTranscript,
     '@/lib/formatQuote': { formatQuoteText: (text) => text },
   };

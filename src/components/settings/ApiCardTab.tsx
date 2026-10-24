@@ -5,7 +5,18 @@ import {
   Moon,
   Monitor,
 } from "lucide-react";
-import { ApiCardConfig, ActionConfig, GeneralConfig } from "@/types/config";
+import {
+  ApiCardConfig,
+  ActionConfig,
+  GeneralConfig,
+  DEFAULT_API_CARD_SIZE,
+  DEFAULT_AUTO_COLLAPSE_THINKING,
+  DEFAULT_CONTEXT_TURNS,
+  DEFAULT_FONT_SIZE,
+  DEFAULT_SEND_KEY_SHORTCUT,
+  DEFAULT_SHOW_DURATION,
+  DEFAULT_THINKING_OPEN,
+} from "@/types/config";
 import { switchThemeWithTransition } from "@/hooks/useTheme";
 import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
@@ -39,7 +50,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
 
-  const [currentW, currentH] = apiCard.cardSize || [600, 900];
+  const [currentW, currentH] = apiCard.cardSize ?? DEFAULT_API_CARD_SIZE;
 
   const [widthInput, setWidthInput] = useState(String(Math.round(currentW)));
   const [heightInput, setHeightInput] = useState(String(Math.round(currentH)));
@@ -74,9 +85,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
   };
 
   const handleResetSize = () => {
-    setWidthInput("600");
-    setHeightInput("900");
-    onUpdateApiCard({ cardSize: [600, 900] });
+    setWidthInput(String(DEFAULT_API_CARD_SIZE[0]));
+    setHeightInput(String(DEFAULT_API_CARD_SIZE[1]));
+    onUpdateApiCard({ cardSize: [...DEFAULT_API_CARD_SIZE] });
   };
 
   return (
@@ -209,7 +220,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                   onBlur={commitSizeChange}
                   onKeyDown={handleKeyDown}
                   className="h-7 w-[72px] pl-6 pr-1 text-xs font-mono"
-                  placeholder="600"
+                  placeholder={String(DEFAULT_API_CARD_SIZE[0])}
                 />
               </div>
 
@@ -228,7 +239,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                   onBlur={commitSizeChange}
                   onKeyDown={handleKeyDown}
                   className="h-7 w-[72px] pl-6 pr-1 text-xs font-mono"
-                  placeholder="900"
+                  placeholder={String(DEFAULT_API_CARD_SIZE[1])}
                 />
               </div>
 
@@ -239,7 +250,11 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                 size="sm"
                 onClick={handleResetSize}
                 className="h-7 text-xs gap-1 border-border/70 hover:border-primary/50 px-2 cursor-pointer"
-                title={isZh ? "恢复至推荐默认尺寸 600 × 900" : "Reset to default size 600 × 900"}
+                title={
+                  isZh
+                    ? `恢复至推荐默认尺寸 ${DEFAULT_API_CARD_SIZE[0]} × ${DEFAULT_API_CARD_SIZE[1]}`
+                    : `Reset to default size ${DEFAULT_API_CARD_SIZE[0]} × ${DEFAULT_API_CARD_SIZE[1]}`
+                }
               >
                 <RefreshCcw size={11} />
                 <span>{t('common.reset')}</span>
@@ -305,7 +320,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
               </p>
             </div>
             <Switch
-              checked={apiCard.thinkingDefaultOpen ?? true}
+              checked={apiCard.thinkingDefaultOpen ?? DEFAULT_THINKING_OPEN}
               onCheckedChange={(checked) => onUpdateApiCard({ thinkingDefaultOpen: checked })}
             />
           </div>
@@ -323,7 +338,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
               </p>
             </div>
             <Switch
-              checked={apiCard.autoCollapseThinkingOnDone ?? true}
+              checked={apiCard.autoCollapseThinkingOnDone ?? DEFAULT_AUTO_COLLAPSE_THINKING}
               onCheckedChange={(checked) =>
                 onUpdateApiCard({ autoCollapseThinkingOnDone: checked })
               }
@@ -343,7 +358,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
               </p>
             </div>
             <Switch
-              checked={apiCard.showDuration ?? true}
+              checked={apiCard.showDuration ?? DEFAULT_SHOW_DURATION}
               onCheckedChange={(checked) => onUpdateApiCard({ showDuration: checked })}
             />
           </div>
@@ -373,7 +388,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                 </p>
               </div>
               <span className="text-xs font-mono font-semibold text-primary dark:text-blue-400">
-                {apiCard.fontSize ?? 13} px
+                {apiCard.fontSize ?? DEFAULT_FONT_SIZE} px
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -382,7 +397,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                 min={12}
                 max={18}
                 step={1}
-                value={apiCard.fontSize ?? 13}
+                value={apiCard.fontSize ?? DEFAULT_FONT_SIZE}
                 onChange={(val) => onUpdateApiCard({ fontSize: val })}
                 className="flex-1"
               />
@@ -392,7 +407,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
             {/* 字号微缩预览 */}
             <div
               className="p-2.5 rounded-lg border border-border/50 bg-black/5 dark:bg-white/5 text-foreground/90 transition-all select-none"
-              style={{ fontSize: `${apiCard.fontSize ?? 13}px` }}
+              style={{ fontSize: `${apiCard.fontSize ?? DEFAULT_FONT_SIZE}px` }}
             >
               <span className="font-semibold text-primary dark:text-blue-400">
                 {isZh ? "示例预览：" : "Preview: "}
@@ -460,7 +475,9 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                 </p>
               </div>
               <span className="text-xs font-mono font-semibold text-primary dark:text-blue-400">
-                {isZh ? `最近 ${apiCard.contextTurns ?? 5} 轮` : `Last ${apiCard.contextTurns ?? 5} turns`}
+                {isZh
+                  ? `最近 ${apiCard.contextTurns ?? DEFAULT_CONTEXT_TURNS} 轮`
+                  : `Last ${apiCard.contextTurns ?? DEFAULT_CONTEXT_TURNS} turns`}
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -469,7 +486,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
                 min={1}
                 max={10}
                 step={1}
-                value={apiCard.contextTurns ?? 5}
+                value={apiCard.contextTurns ?? DEFAULT_CONTEXT_TURNS}
                 onChange={(val) => onUpdateApiCard({ contextTurns: val })}
                 className="flex-1"
               />
@@ -491,7 +508,7 @@ export const ApiCardTab: React.FC<ApiCardTabProps> = ({
             </div>
             <div className="w-56">
               <Select
-                value={apiCard.sendKeyShortcut ?? "Enter"}
+                value={apiCard.sendKeyShortcut ?? DEFAULT_SEND_KEY_SHORTCUT}
                 onChange={(val) =>
                   onUpdateApiCard({ sendKeyShortcut: val as "Enter" | "Ctrl+Enter" })
                 }

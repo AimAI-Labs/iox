@@ -1569,6 +1569,36 @@ mod tests {
         assert!(en_translate.prompt_template.as_ref().unwrap().contains("professional translator"));
     }
 
+    fn contract_fixture_path() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../tests/fixtures/config/default-config.zh.json")
+    }
+
+    /// 锁定后端默认配置的序列化结果，供前端 zod 契约测试共用同一份夹具。
+    #[test]
+    fn default_config_matches_contract_fixture() {
+        let path = contract_fixture_path();
+        let fixture = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("读取配置契约夹具失败 {}: {error}", path.display()));
+        let expected: serde_json::Value = serde_json::from_str(&fixture).unwrap();
+        let actual = serde_json::to_value(AppConfig::default_for_language("zh")).unwrap();
+
+        assert_eq!(
+            actual, expected,
+            "默认配置与 tests/fixtures/config/default-config.zh.json 不一致；\
+             若默认值变更是有意的，运行 `cargo test --manifest-path src-tauri/Cargo.toml regenerate_config_contract_fixture -- --ignored` 更新夹具"
+        );
+    }
+
+    #[test]
+    #[ignore = "仅用于重新生成跨语言配置契约夹具"]
+    fn regenerate_config_contract_fixture() {
+        let path = contract_fixture_path();
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let json = serde_json::to_string_pretty(&AppConfig::default_for_language("zh")).unwrap();
+        fs::write(&path, format!("{json}\n")).unwrap();
+    }
+
     #[test]
     fn test_kimi_legacy_url_migration() {
         let raw_json = r#"{

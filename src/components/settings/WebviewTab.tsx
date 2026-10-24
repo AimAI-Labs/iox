@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Globe, LayoutGrid, Layers, RefreshCcw, ArrowUpRight, Zap } from "lucide-react";
-import { GeneralConfig, ActionConfig, WebWindowMode } from "@/types/config";
+import { GeneralConfig, ActionConfig, DEFAULT_WEB_WINDOW_SIZE, WebWindowMode } from "@/types/config";
 import { useTranslation } from "@/hooks/useTranslation";
 import {
   Card,
@@ -30,7 +30,7 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
 
-  const [currentW, currentH] = general.webWindowSize || [860, 640];
+  const [currentW, currentH] = general.webWindowSize ?? DEFAULT_WEB_WINDOW_SIZE;
   const webActions = actions.filter((a) => a.actionType === "web");
   const enabledWebActionsCount = webActions.filter((a) => a.enabled).length;
 
@@ -67,9 +67,9 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
   };
 
   const handleResetSize = () => {
-    setWidthInput("860");
-    setHeightInput("640");
-    onUpdateGeneral({ webWindowSize: [860, 640] });
+    setWidthInput(String(DEFAULT_WEB_WINDOW_SIZE[0]));
+    setHeightInput(String(DEFAULT_WEB_WINDOW_SIZE[1]));
+    onUpdateGeneral({ webWindowSize: [...DEFAULT_WEB_WINDOW_SIZE] });
   };
 
   return (
@@ -194,7 +194,7 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
                   onBlur={commitSizeChange}
                   onKeyDown={handleKeyDown}
                   className="h-7 w-[72px] pl-6 pr-1 text-xs font-mono"
-                  placeholder="640"
+                  placeholder={String(DEFAULT_WEB_WINDOW_SIZE[1])}
                 />
               </div>
 
@@ -205,7 +205,11 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
                 size="sm"
                 onClick={handleResetSize}
                 className="h-7 text-xs gap-1 border-border/70 hover:border-primary/50 px-2 cursor-pointer"
-                title={isZh ? "恢复至推荐默认尺寸 860 × 640" : "Reset to default size 860 × 640"}
+                title={
+                  isZh
+                    ? `恢复至推荐默认尺寸 ${DEFAULT_WEB_WINDOW_SIZE[0]} × ${DEFAULT_WEB_WINDOW_SIZE[1]}`
+                    : `Reset to default size ${DEFAULT_WEB_WINDOW_SIZE[0]} × ${DEFAULT_WEB_WINDOW_SIZE[1]}`
+                }
               >
                 <RefreshCcw size={11} />
                 <span>{t('common.reset')}</span>

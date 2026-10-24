@@ -15,6 +15,7 @@ import {
   Moon,
   Monitor,
 } from 'lucide-react';
+import { DEFAULT_API_CARD_SIZE } from '@/types/config';
 import { switchThemeWithTransition } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
@@ -280,7 +281,11 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         >
           <div className="flex items-center gap-2">
             <ResetIcon size={13.5} className="text-zinc-500 dark:text-zinc-400" />
-            <span>{resolvedLanguage === 'zh' ? '恢复默认尺寸 (600×900)' : 'Reset Default Size (600×900)'}</span>
+            <span>
+              {resolvedLanguage === 'zh'
+                ? `恢复默认尺寸 (${DEFAULT_API_CARD_SIZE[0]}×${DEFAULT_API_CARD_SIZE[1]})`
+                : `Reset Default Size (${DEFAULT_API_CARD_SIZE[0]}×${DEFAULT_API_CARD_SIZE[1]})`}
+            </span>
           </div>
         </button>
       )}

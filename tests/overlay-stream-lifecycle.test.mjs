@@ -6,6 +6,10 @@ import ts from 'typescript';
 
 const source = readFileSync(new URL('../src/hooks/useOverlayLifecycle.ts', import.meta.url), 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+const configSource = readFileSync(new URL('../src/types/config.ts', import.meta.url), 'utf8')
+  .replace("from 'zod'", `from '${import.meta.resolve('zod')}'`);
+const configJs = ts.transpileModule(configSource, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
+const config = await import(`data:text/javascript;base64,${Buffer.from(configJs).toString('base64')}`);
 
 function setup(isPinned) {
   const events = [];
@@ -18,6 +22,7 @@ function setup(isPinned) {
       if (name === 'react') return { useRef: (current) => ({ current }), useCallback: (fn) => fn };
       if (name === '@tauri-apps/api/core') return { invoke: async () => {} };
       if (name === '@/utils/bubbleWidth') return { calculateBubbleWidth: () => 100 };
+      if (name === '@/types/config') return config;
       throw new Error(`Unexpected import ${name}`);
     },
   });

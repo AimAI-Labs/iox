@@ -4,6 +4,10 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { loadConversationModule } from './conversation-module.mjs';
 const transcript = await loadConversationModule('conversation/transcript');
+const configSource = readFileSync(new URL('../../src/types/config.ts', import.meta.url), 'utf8')
+  .replace("from 'zod'", `from '${import.meta.resolve('zod')}'`);
+const configJs = ts.transpileModule(configSource, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
+const config = await import(`data:text/javascript;base64,${Buffer.from(configJs).toString('base64')}`);
 export function mountConversationView(props) {
  const slots=[],effects=[],copied=[]; let cursor=0,dirty=false,tree;
  const changed=(a,b)=>!a||!b||b.some((v,i)=>!Object.is(v,a[i]));
@@ -24,6 +28,7 @@ export function mountConversationView(props) {
  if(name==='@/hooks/useCopyFeedback')return {useCopyFeedback:()=>({copied:false,copy(text){copied.push(text);}})};
  if(name==='@/hooks/useTranslation')return {useTranslation:()=>({t:x=>x,resolvedLanguage:'en'})};
  if(name==='@/hooks/useChatSessions')return {useChatSessions:()=>props.chatSessions};
+ if(name==='@/types/config')return config;
  if(name==='@tauri-apps/api/core')return {invoke:async()=>false};
  if(name.startsWith('@/components/')||name==='lucide-react')return new Proxy({},{get:(_,key)=>key});
  throw new Error(name);

@@ -1,7 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { AppConfig } from '@/types/config';
+import { AppConfig, appConfigSchema } from '@/types/config';
+
+/**
+ * 校验 IPC 边界上的配置载荷。
+ *
+ * 校验失败说明前后端契约漂移：记录结构化错误，并按原始载荷继续运行，
+ * 避免旧配置或新字段直接白屏；写入方向则由调用方拒绝提交。
+ */
+function readConfig(raw: unknown): { config: AppConfig; error: string | null } {
+  const parsed = appConfigSchema.safeParse(raw);
+  if (parsed.success) {
+    return { config: parsed.data, error: null };
+  }
+  console.error('[config] 配置契约校验失败', parsed.error.issues);
+  return { config: raw as AppConfig, error: parsed.error.message };
+}
 
 export function useConfig() {
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -11,9 +26,10 @@ export function useConfig() {
   const fetchConfig = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await invoke<AppConfig>('get_config');
-      setConfig(data);
-      setError(null);
+      const data = await invoke<unknown>('get_config');
+      const result = readConfig(data);
+      setConfig(result.config);
+      setError(result.error);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -22,10 +38,16 @@ export function useConfig() {
   }, []);
 
   const updateConfig = async (newConfig: AppConfig): Promise<boolean> => {
+    const parsed = appConfigSchema.safeParse(newConfig);
+    if (!parsed.success) {
+      console.error('[config] 拒绝提交不符合契约的配置', parsed.error.issues);
+      setError(parsed.error.message);
+      return false;
+    }
     try {
       // 后端只在持久化成功后广播 config_updated；本地不预写，
       // 避免保存失败或并发即时更新时用旧快照覆盖已提交状态。
-      await invoke('save_config', { newConfig });
+      await invoke('save_config', { newConfig: parsed.data });
       setError(null);
       return true;
     } catch (err) {
@@ -38,8 +60,10 @@ export function useConfig() {
     fetchConfig();
 
     let unlisten: (() => void) | undefined;
-    listen<AppConfig>('config_updated', (event) => {
-      setConfig(event.payload);
+    listen<unknown>('config_updated', (event) => {
+      const result = readConfig(event.payload);
+      setConfig(result.config);
+      setError(result.error);
     }).then((fn) => {
       unlisten = fn;
     }).catch((err) => {
