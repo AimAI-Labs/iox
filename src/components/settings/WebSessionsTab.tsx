@@ -68,7 +68,10 @@ function PlatformSyncBadge({
             : "border-border/60 hover:border-primary/50 hover:bg-muted/70"
         )}
         aria-label={`${platform.platform}: ${statusLabel} (${platform.count})`}
-        title={`${platform.platform}: ${statusLabel} · ${text(`已同步 ${platform.count} 条 (单击筛选，双击打开)`, `${platform.count} synced (Click to filter, double click to open)`)}`}
+        title={[
+          `${platform.platform}: ${statusLabel} · ${text(`已同步 ${platform.count} 条 (单击筛选，双击打开)`, `${platform.count} synced (Click to filter, double click to open)`)}`,
+          platform.error,
+        ].filter(Boolean).join('\n')}
       >
         {/* Syncing spinning ring */}
         {isSyncing && (
@@ -97,16 +100,16 @@ function PlatformSyncBadge({
       <div
         role="tooltip"
         className={cn(
-          "absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none",
+          "absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-52 max-w-[calc(100vw-2rem)] pointer-events-none",
           "opacity-0 scale-95 group-hover/badge:opacity-100 group-hover/badge:scale-100 transition-all duration-150 flex flex-col items-center"
         )}
       >
-        <div className="flex flex-col items-center rounded-lg border border-border/80 bg-popover/95 dark:bg-zinc-900/95 px-3 py-2 text-center shadow-xl backdrop-blur-md whitespace-nowrap min-w-32">
-          <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+        <div className="flex w-full min-w-0 flex-col items-center rounded-lg border border-border/80 bg-popover/95 dark:bg-zinc-900/95 px-3 py-2 text-center shadow-xl backdrop-blur-md whitespace-normal [overflow-wrap:anywhere]">
+          <div className="flex max-w-full items-center justify-center gap-1.5 font-semibold text-xs text-foreground">
             <DynamicIcon name={actionIcon || platform.platform} size={13} />
-            <span>{platform.platform}</span>
+            <span className="min-w-0 truncate">{platform.platform}</span>
           </div>
-          <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+          <div className="mt-1 flex max-w-full flex-wrap items-center justify-center gap-x-1 gap-y-0.5 text-[11px] text-muted-foreground">
             <span
               className={cn(
                 isSyncing && "text-primary font-medium",
@@ -122,7 +125,7 @@ function PlatformSyncBadge({
             </span>
           </div>
           {platform.error && (
-            <p className="mt-1 max-w-44 break-words text-[10px] text-red-500/90 leading-tight">
+            <p className="mt-1 line-clamp-4 w-full whitespace-pre-wrap text-left text-[10px] text-red-500/90 leading-tight">
               {platform.error}
             </p>
           )}
