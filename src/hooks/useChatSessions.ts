@@ -1,251 +1,119 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ChatSessionData, SessionMeta } from '@/types/session';
-import { ActionConfig } from '@/types/config';
-import { splitTranscript, splitTurnChunk } from '@/lib/chatTranscript';
-import type { SessionStorageError } from '@/types/session';
-
-/** 从选区或首条追问生成稳定、可读的会话标题 */
-function buildSessionTitle(selectedText: string, streamText: string): string {
-  let seed = selectedText.trim();
-
-  if (!seed) {
-    const parts = splitTranscript(streamText);
-    seed = parts.length > 1 ? splitTurnChunk(parts[1]).prompt : streamText;
-  }
-
-  const cleaned = seed
-    .replace(/\*\*追问：\*\*/g, ' ')
-    .replace(/^[\s#>*`-]+/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return (cleaned || '新对话').slice(0, 28);
-}
+import type { ChatSessionData, SessionMeta, SessionStorageError } from '@/types/session';
+import type { ActionConfig } from '@/types/config';
+import type { ConversationWorkspace } from '@/conversation/workspace';
 
 interface UseChatSessionsProps {
-  activeAction: ActionConfig | null;
-  selectedModel: string;
-  selectedText: string;
-  streamText: string;
-  isLoading: boolean;
-  onRestoreSession: (session: ChatSessionData) => void;
-  onResetToNewChat: () => void;
+  workspace: ConversationWorkspace;
+  actions: ActionConfig[];
+  onNavigation: () => void;
+  onNewSession: () => void;
 }
 
-export function useChatSessions({
-  activeAction,
-  selectedModel,
-  selectedText,
-  streamText,
-  isLoading,
-  onRestoreSession,
-  onResetToNewChat,
-}: UseChatSessionsProps) {
+/** History transport adapter; conversation identities and save revisions belong to the workspace. */
+export function useChatSessions({ workspace, actions, onNavigation, onNewSession }: UseChatSessionsProps) {
+  const snapshot = useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [storageError, setStorageError] = useState<SessionStorageError>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
-  const lastSavedRef = useRef<{
-    actionId: string;
-    providerId: string;
-    model: string;
-    selectedText: string;
-    streamText: string;
-  } | null>(null);
-  const activeActionIdRef = useRef(activeAction?.id ?? null);
+  const mounted = useRef(true);
+  const listSequence = useRef(0);
+  const restoreSequence = useRef(0);
+  const deleting = useRef(new Set<string>());
+  const saves = useRef(new Map<string, { sessionId: string; promise: Promise<void> }>());
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; restoreSequence.current++; }; }, []);
 
-  // 同一组件实例内切换动作时，开启新的会话记录
-  useEffect(() => {
-    const nextActionId = activeAction?.id ?? null;
-    if (activeActionIdRef.current === nextActionId) return;
-
-    activeActionIdRef.current = nextActionId;
-    sessionIdRef.current = null;
-    lastSavedRef.current = null;
-    setCurrentSessionId(null);
-  }, [activeAction?.id]);
-
-  // 刷新历史会话列表
   const refreshSessions = useCallback(async () => {
+    const sequence = ++listSequence.current;
     try {
       const list = await invoke<SessionMeta[]>('list_chat_sessions');
-      setSessions(list || []);
-      setHistoryLoaded(true);
+      if (!mounted.current || sequence !== listSequence.current) return;
+      setSessions(list || []); setHistoryLoaded(true);
       setStorageError((previous) => previous === 'load' ? null : previous);
-    } catch (err) {
-      setStorageError('load');
-      console.warn('Failed to list chat sessions:', err);
+    } catch (error) {
+      if (mounted.current && sequence === listSequence.current) setStorageError('load');
+      console.warn('Failed to list chat sessions:', error);
     }
   }, []);
+  useEffect(() => { void refreshSessions(); }, [refreshSessions]);
 
+  const candidates = workspace.getSaveCandidates();
+  const saveKey = candidates.map((id) => `${id}:${snapshot.tabs.find((tab) => tab.id === id)!.revision}`).join('|');
   useEffect(() => {
-    refreshSessions();
-  }, [refreshSessions]);
+    if (!saveKey) return;
+    const timer = setTimeout(() => {
+      for (const id of workspace.getSaveCandidates()) {
+        const conversation = workspace.getSnapshot().tabs.find((tab) => tab.id === id);
+        if (conversation?.sessionId && deleting.current.has(conversation.sessionId)) continue;
+        const job = workspace.beginSave(id);
+        if (!job) continue;
+        const promise = (async () => {
+          try {
+            const canonical = await invoke<string>('save_chat_session', { session: job.data });
+            const accepted = workspace.completeSave(job.ticket, canonical);
+            if (!mounted.current) return;
+            if (accepted) setStorageError((previous) => previous === 'save' ? null : previous);
+            else if (workspace.getSnapshot().tabs.some((tab) => tab.id === job.conversationId)) setStorageError('save');
+            // A list failure after this point cannot undo the acknowledged commit.
+            void refreshSessions();
+          } catch (error) {
+            const relevant = workspace.getSnapshot().tabs.some((tab) => tab.pendingSave?.ticket === job.ticket);
+            workspace.failSave(job.ticket);
+            if (mounted.current && relevant) setStorageError('save');
+            console.warn('Failed to auto-save chat session:', error);
+          } finally { saves.current.delete(job.ticket); }
+        })();
+        saves.current.set(job.ticket, { sessionId: job.data.id, promise });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [workspace, saveKey, refreshSessions]);
 
-  // 自动持久化当前会话（防抖保存）
-  const saveCurrentSession = useCallback(async () => {
-    if (!activeAction || (!streamText && !selectedText)) return;
-
-    const model = selectedModel || 'default';
-    const snapshot = {
-      actionId: activeAction.id,
-      providerId: activeAction.providerId || '',
-      model,
-      selectedText,
-      streamText,
-    };
-    const previous = lastSavedRef.current;
-
-    // 内容与元信息均未变化时跳过重复写入
-    if (
-      previous &&
-      previous.actionId === snapshot.actionId &&
-      previous.providerId === snapshot.providerId &&
-      previous.model === snapshot.model &&
-      previous.selectedText === snapshot.selectedText &&
-      previous.streamText === snapshot.streamText
-    ) {
-      return;
-    }
-
-    // 先占位，避免同一内容的并发定时器重复创建会话
-    lastSavedRef.current = snapshot;
-
-    const sessionId =
-      sessionIdRef.current ||
-      `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    if (!sessionIdRef.current) {
-      sessionIdRef.current = sessionId;
-      // 内部预留 ID；提交成功前不对外确认为已保存。
-    }
-
-    const sessionData: ChatSessionData = {
-      id: sessionId,
-      title: buildSessionTitle(selectedText, streamText),
-      actionId: activeAction.id,
-      providerId: activeAction.providerId,
-      model,
-      selectedText,
-      streamText,
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
+  const handleSwitchSession = useCallback(async (id: string) => {
+    const sequence = ++restoreSequence.current;
+    const navigation = workspace.getSnapshot().navigationRevision;
+    onNavigation();
     try {
-      // 后端按内容去重，并返回最终使用的会话 ID
-      const resolvedId = await invoke<string>('save_chat_session', {
-        session: sessionData,
-      });
-
-      if (resolvedId && sessionIdRef.current === sessionId) {
-        sessionIdRef.current = resolvedId;
-        setCurrentSessionId(resolvedId);
-        setStorageError((previous) => previous === 'save' ? null : previous);
-      }
-
-      refreshSessions();
-    } catch (err) {
-      // 保存失败时清掉占位，允许后续内容变化时重试
-      if (lastSavedRef.current === snapshot) {
-        lastSavedRef.current = null;
-        setStorageError('save');
-      }
-      console.warn('Failed to auto-save chat session:', err);
+      const data = await invoke<ChatSessionData>('get_chat_session', { id });
+      if (!mounted.current || sequence !== restoreSequence.current || navigation !== workspace.getSnapshot().navigationRevision) return;
+      // restore validates first and synchronously revokes the previous generation.
+      workspace.restore(data, actions);
+      setStorageError((previous) => previous === 'load' ? null : previous);
+      setIsPanelOpen(false);
+    } catch (error) {
+      if (mounted.current && sequence === restoreSequence.current && navigation === workspace.getSnapshot().navigationRevision) setStorageError('load');
+      console.error('Failed to get chat session:', error);
     }
-  }, [activeAction, selectedModel, selectedText, streamText, refreshSessions]);
+  }, [workspace, actions, onNavigation]);
 
-  // 当流式回答结束或有更新时自动保存
-  useEffect(() => {
-    if (isLoading) return;
-    if (streamText || selectedText) {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        saveCurrentSession();
-      }, 500);
-    }
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, [streamText, selectedText, isLoading, saveCurrentSession]);
-
-  // 切换加载指定的历史会话
-  const handleSwitchSession = useCallback(
-    async (id: string) => {
-      try {
-        const fullData = await invoke<ChatSessionData>('get_chat_session', { id });
-        sessionIdRef.current = fullData.id;
-        setCurrentSessionId(fullData.id);
-        lastSavedRef.current = {
-          actionId: fullData.actionId,
-          providerId: fullData.providerId || '',
-          model: fullData.model || 'default',
-          selectedText: fullData.selectedText || '',
-          streamText: fullData.streamText || '',
-        };
-        setStorageError((previous) => previous === 'load' ? null : previous);
-        onRestoreSession(fullData);
-        setIsPanelOpen(false);
-      } catch (err) {
-        setStorageError('load');
-        console.error('Failed to get chat session:', err);
-      }
-    },
-    [onRestoreSession]
-  );
-
-  // 开启一个全新的对话
   const handleNewSession = useCallback(() => {
-    sessionIdRef.current = null;
-    lastSavedRef.current = null;
-    setCurrentSessionId(null);
-    onResetToNewChat();
-    setIsPanelOpen(false);
-  }, [onResetToNewChat]);
-
-  // 删除某条历史会话
-  const handleDeleteSession = useCallback(
-    async (e: React.MouseEvent, id: string) => {
-      e.stopPropagation();
-      try {
-        await invoke('delete_chat_session', { id });
+    restoreSequence.current++; onNewSession(); setIsPanelOpen(false);
+  }, [onNewSession]);
+  const handleDeleteSession = useCallback(async (event: React.MouseEvent, id: string) => {
+    event.stopPropagation(); deleting.current.add(id);
+    try {
+      // Publish deletion after any already-started write for this persistent ID.
+      await Promise.all([...saves.current.values()].filter((save) => save.sessionId === id).map((save) => save.promise));
+      await invoke('delete_chat_session', { id });
+      workspace.forgetSession(id);
+      if (mounted.current) {
         setStorageError((previous) => previous === 'delete' ? null : previous);
-        if (currentSessionId === id) {
-          handleNewSession();
-        }
-        refreshSessions();
-      } catch (err) {
-        setStorageError('delete');
-        console.error('Failed to delete chat session:', err);
+        void refreshSessions();
       }
-    },
-    [currentSessionId, handleNewSession, refreshSessions]
-  );
-
+    } catch (error) {
+      if (mounted.current) setStorageError('delete');
+      console.error('Failed to delete chat session:', error);
+    } finally { deleting.current.delete(id); }
+  }, [workspace, refreshSessions]);
   const togglePanel = useCallback(() => {
-    setIsPanelOpen((prev) => {
-      if (!prev) {
-        refreshSessions();
-      }
-      return !prev;
-    });
-  }, [refreshSessions]);
+    if (!isPanelOpen) void refreshSessions();
+    setIsPanelOpen(!isPanelOpen);
+  }, [isPanelOpen, refreshSessions]);
 
-  return {
-    historyLoaded,
-    storageError,
-    sessions,
-    currentSessionId,
-    isPanelOpen,
-    setIsPanelOpen,
-    togglePanel,
-    handleSwitchSession,
-    handleNewSession,
-    handleDeleteSession,
-    refreshSessions,
-  };
+  return { sessions, historyLoaded, storageError, currentSessionId: snapshot.active?.sessionId ?? null,
+    isPanelOpen, setIsPanelOpen, togglePanel, handleSwitchSession, handleNewSession, handleDeleteSession, refreshSessions };
 }
+
+export type ChatSessionsView = ReturnType<typeof useChatSessions>;

@@ -30,6 +30,9 @@ pub struct ChatSessionData {
     pub stream_text: String,
     #[serde(default)]
     pub messages: Vec<ChatMessageItem>,
+    // The conversation module owns this versioned payload; preserve unknown fields.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<serde_json::Value>,
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -87,6 +90,13 @@ fn repair_legacy_title(session: &mut ChatSessionData) -> bool {
     true
 }
 
+fn same_content(a: &ChatSessionData, b: &ChatSessionData) -> bool {
+    a.action_id == b.action_id
+        && a.selected_text == b.selected_text
+        && a.stream_text == b.stream_text
+        && a.conversation == b.conversation
+}
+
 /// 合并内容完全相同的重复会话：
 /// - 会话已按 updated_at 倒序，保留最新一条
 /// - 合并时保留最早的创建时间
@@ -101,11 +111,7 @@ fn dedupe_sessions_by_content(sessions: &mut Vec<ChatSessionData>) {
 
         let mut next = index + 1;
         while next < sessions.len() {
-            let same_content = sessions[next].action_id == sessions[index].action_id
-                && sessions[next].selected_text == sessions[index].selected_text
-                && sessions[next].stream_text == sessions[index].stream_text;
-
-            if same_content {
+            if same_content(&sessions[next], &sessions[index]) {
                 let removed = sessions.remove(next);
                 if removed.created_at > 0
                     && (sessions[index].created_at == 0
@@ -139,11 +145,10 @@ fn upsert_session(sessions: &mut Vec<ChatSessionData>, mut session: ChatSessionD
     }
 
     if !session.stream_text.trim().is_empty() {
-        if let Some(pos) = sessions.iter().position(|item| {
-            item.action_id == session.action_id
-                && item.selected_text == session.selected_text
-                && item.stream_text == session.stream_text
-        }) {
+        if let Some(pos) = sessions
+            .iter()
+            .position(|item| same_content(item, &session))
+        {
             let existing_id = sessions[pos].id.clone();
             let existing_created_at = sessions[pos].created_at;
 

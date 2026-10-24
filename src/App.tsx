@@ -179,21 +179,17 @@ export function App() {
               onActionContextMenu={overlayState.handleTriggerActionWithoutText}
               onOpenSettings={() => handleOpenSettings()}
             />
-          ) : overlayState.activeAction ? (
+          ) : overlayState.conversation ? (
             <ResultCard
-              action={overlayState.activeAction}
+              conversation={overlayState.conversation!}
+              tabs={overlayState.tabs}
+              activeTabId={overlayState.activeTabId!}
+              chatSessions={overlayState.chatSessions}
               providers={config.providers}
-              selectedModel={overlayState.selectedModel}
-              streamText={overlayState.streamText}
-              selectedText={overlayState.selectedText}
-              initialInput={overlayState.initialInput}
-              isLoading={overlayState.isLoading}
               isPinned={overlayState.isPinned}
               isClosing={overlayState.isClosing}
-              error={overlayState.error}
               apiCard={config.apiCard}
               theme={config.general.theme}
-              thinkingMode={overlayState.thinkingMode}
               onThemeChange={(newTheme) => {
                 updateConfig({
                   ...config,
@@ -211,7 +207,11 @@ export function App() {
               onEditMessage={overlayState.handleEditMessage}
               onRegenerateCurrentTurn={overlayState.handleRegenerateCurrentTurn}
               onNewChat={overlayState.handleNewChat}
-              onRestoreSession={overlayState.handleRestoreSession}
+              onSelectTab={overlayState.handleSelectTab}
+              onCloseTab={overlayState.handleCloseTab}
+              onCloseOtherTabs={overlayState.handleCloseOtherTabs}
+              onCloseLeftTabs={overlayState.handleCloseLeftTabs}
+              onCloseRightTabs={overlayState.handleCloseRightTabs}
               onExportMarkdown={overlayState.handleExportMarkdown}
               onOpenSettings={() => handleOpenSettings('api_card')}
               onCancel={overlayState.handleCancel}

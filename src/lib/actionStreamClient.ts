@@ -4,6 +4,7 @@ export interface ActionStreamRequest {
   actionId: string;
   text: string;
   modelOverride?: string;
+  providerOverride?: string;
   promptOverride?: string | null;
   thinkingEnabled?: boolean;
   reasoningEffort?: ReasoningEffort;
@@ -21,12 +22,13 @@ interface StreamClientOptions {
   invoke: (command: string, args: Record<string, unknown>) => Promise<unknown>;
   listen: (name: string, handler: (event: { payload: StreamPayload }) => void) => Promise<() => void>;
   createRequestId: () => string;
-  onToken: (token: string) => void;
-  onDone: (canceled: boolean) => void;
-  onError: (error: string) => void;
+  onToken: (token: string, owner?: string) => void;
+  onDone: (canceled: boolean, owner?: string) => void;
+  onError: (error: string, owner?: string) => void;
 }
 
 interface Execution {
+  owner?: string;
   actionId: string;
   requestId: string;
   submitted: boolean;
@@ -52,15 +54,15 @@ export function createActionStreamClient(options: StreamClientOptions) {
     if (!owns(execution)) return;
     execution.terminal = true;
     current = null;
-    if (error !== undefined) options.onError(error);
-    else options.onDone(canceled);
+    if (error !== undefined) options.onError(error, execution.owner);
+    else options.onDone(canceled, execution.owner);
   }
 
   function receive(kind: 'token' | 'done' | 'error', payload: StreamPayload) {
     const execution = current;
     if (!execution || !owns(execution) || !execution.submitted ||
         payload?.actionId !== execution.actionId || payload.requestId !== execution.requestId) return;
-    if (kind === 'token' && typeof payload.token === 'string') options.onToken(payload.token);
+    if (kind === 'token' && typeof payload.token === 'string') options.onToken(payload.token, execution.owner);
     if (kind === 'done') finish(execution, undefined, payload.canceled === true);
     if (kind === 'error' && typeof payload.error === 'string') finish(execution, payload.error);
   }
@@ -110,11 +112,12 @@ export function createActionStreamClient(options: StreamClientOptions) {
     return execution.cancellation;
   }
 
-  async function start(args: ActionStreamRequest, prepare?: () => Promise<void>): Promise<void> {
+  async function start(args: ActionStreamRequest, prepare?: () => Promise<void>, owner?: string): Promise<void> {
     if (disposed) return;
     const previous = current;
     let settle!: () => void;
     const execution: Execution = {
+      owner,
       actionId: args.actionId,
       requestId: options.createRequestId(),
       submitted: false,

@@ -10,11 +10,12 @@ async function loadModule(path) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
 
-const transcript = await loadModule('../src/lib/chatTranscript.ts');
+// 旧版会话的 wire format 是持久化契约，测试直接钉住字面量而不是复用生产编码。
+const followUpChunk = (prompt, answer = '') => `\n\n---\n**追问：** ${prompt}\n\n<!-- iox:answer -->\n\n${answer}`;
 
 function setup(overrides = {}, rejectRequest = false) {
-  const streamText = 'first answer' + transcript.createFollowUpChunk('old question') +
-    'old answer' + transcript.createFollowUpChunk('later question') + 'later answer';
+  const streamText = 'first answer' + followUpChunk('old question', 'old answer') +
+    followUpChunk('later question', 'later answer');
   const mounted = mountActionStream({
     config: { apiCard: { contextTurns: 5 }, providers: [{ id: 'deepseek', baseUrl: 'https://api.deepseek.com' }] },
     activeAction: { id: 'test', providerId: 'deepseek', promptTemplate: 'Translate: {text}' },
@@ -28,7 +29,7 @@ function setup(overrides = {}, rejectRequest = false) {
 test('editing an earlier question preserves preceding history and replaces everything below it', async () => {
   const { hook, calls, updates } = setup();
   assert.equal(await hook.handleEditMessage(1, 'new question\n\nwith paragraphs'), true);
-  assert.equal(updates.streamText, 'first answer' + transcript.createFollowUpChunk('new question\n\nwith paragraphs'));
+  assert.equal(updates.streamText, 'first answer' + followUpChunk('new question\n\nwith paragraphs'));
   assert.equal(updates.isLoading, true);
   assert.equal(updates.error, null);
   assert.equal(calls.length, 1);
@@ -60,7 +61,7 @@ test('editing the latest question keeps earlier questions and answers', async ()
   assert.ok(calls[0].args.text.includes('old question'));
   assert.ok(calls[0].args.text.includes('old answer'));
   assert.ok(!calls[0].args.text.includes('later answer'));
-  assert.ok(updates.streamText.endsWith(transcript.createFollowUpChunk('new latest')));
+  assert.ok(updates.streamText.endsWith(followUpChunk('new latest')));
 });
 
 test('editing respects the configured history limit', async () => {
@@ -86,7 +87,7 @@ test('invalid edits and edits during generation leave the transcript intact', as
 test('a failed resend retains the edited message and reports the failure', async () => {
   const { hook, updates } = setup({}, true);
   assert.equal(await hook.handleEditMessage(1, 'edited'), true);
-  assert.ok(updates.streamText.endsWith(transcript.createFollowUpChunk('edited')));
+  assert.ok(updates.streamText.endsWith(followUpChunk('edited')));
   assert.equal(updates.isLoading, false);
   assert.match(updates.error, /request failed/);
 });

@@ -1,557 +1,182 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { ActionConfig, AppConfig } from '@/types/config';
-import { OverlayMode } from '@/state/overlayReducer';
+import type { ActionConfig, AppConfig } from '@/types/config';
+import type { OverlayMode } from '@/state/overlayReducer';
+import type { GenerationPlan } from '@/types/session';
+import type { ConversationWorkspace } from '@/conversation/workspace';
+import { exportMarkdown } from '@/conversation/transcript';
 import { formatQuoteText } from '@/lib/formatQuote';
-import {
-  FOLLOW_UP_MARKER,
-  buildHistoryContext,
-  buildFollowUpPrompt,
-  createFollowUpChunk,
-  splitTranscript,
-  splitTurnChunk,
-  stripInternalMarkers,
-} from '@/lib/chatTranscript';
 import { getThinkingRequestOptions, type ThinkingMode } from '@/lib/reasoning';
 import { createActionStreamClient, type ActionStreamClient } from '@/lib/actionStreamClient';
 
 interface UseActionStreamProps {
   config: AppConfig | null;
-  selectedText: string;
-  activeAction: ActionConfig | null;
-  selectedModel: string;
-  streamText: string;
-  isLoading: boolean;
+  workspace: ConversationWorkspace;
+  selectionText: string;
   isPinned: boolean;
-  thinkingMode: ThinkingMode;
-  onStartAction: (action: ActionConfig, model?: string) => void;
-  onStartEmptyAction?: (action: ActionConfig, model?: string) => void;
-  onStartQuoteAction?: (action: ActionConfig, initialInput: string, model?: string) => void;
-  onAppendToken: (token: string) => void;
-  onStreamDone: () => void;
-  onStreamError: (error: string) => void;
-  onSetStreamText: (text: string) => void;
-  onSetSelectedText: (text: string) => void;
-  onSetLoading: (loading: boolean) => void;
-  onSetError: (error: string | null) => void;
-  onSetModel: (model: string) => void;
-  onSetProvider: (providerId: string, defaultModel: string) => void;
-  onSetThinkingMode: (mode: ThinkingMode) => void;
-  onNewChat?: () => void;
-  updateWindowSize: (
-    mode: OverlayMode,
-    allowFocus?: boolean,
-    customSize?: { width: number; height: number }
-  ) => Promise<void>;
+  onShowCard: () => void;
+  updateWindowSize: (mode: OverlayMode, allowFocus?: boolean, customSize?: { width: number; height: number }) => Promise<void>;
   executeGracefulHide: () => void;
 }
 
-export function useActionStream({
-  config,
-  selectedText,
-  activeAction,
-  selectedModel,
-  streamText,
-  isLoading,
-  isPinned,
-  thinkingMode,
-  onStartAction,
-  onStartEmptyAction,
-  onStartQuoteAction,
-  onAppendToken,
-  onStreamDone,
-  onStreamError,
-  onSetStreamText,
-  onSetSelectedText,
-  onSetLoading,
-  onSetError,
-  onSetModel,
-  onSetProvider,
-  onSetThinkingMode,
-  onNewChat: onNewChatDispatch,
-  updateWindowSize,
-  executeGracefulHide,
-}: UseActionStreamProps) {
-  const streamHandlersRef = useRef({ onAppendToken, onStreamDone, onStreamError });
-  streamHandlersRef.current = { onAppendToken, onStreamDone, onStreamError };
+export function useActionStream({ config, workspace, selectionText, isPinned, onShowCard,
+  updateWindowSize, executeGracefulHide }: UseActionStreamProps) {
   const clientRef = useRef<ActionStreamClient | null>(null);
-
   const getStreamClient = useCallback(() => {
-    if (!clientRef.current) {
-      clientRef.current = createActionStreamClient({
-        invoke,
-        listen,
-        createRequestId: () => crypto.randomUUID(),
-        onToken: (token) => streamHandlersRef.current.onAppendToken(token),
-        onDone: () => streamHandlersRef.current.onStreamDone(),
-        onError: (error) => streamHandlersRef.current.onStreamError(error),
-      });
-    }
+    if (!clientRef.current) clientRef.current = createActionStreamClient({
+      invoke, listen, createRequestId: () => crypto.randomUUID(),
+      onToken: (token, owner) => { if (owner) workspace.append(owner, token); },
+      onDone: (canceled, owner) => { if (owner) workspace.finish(owner, { canceled }); },
+      onError: (error, owner) => { if (owner) workspace.finish(owner, { error }); },
+    });
     return clientRef.current;
-  }, []);
+  }, [workspace]);
 
   useEffect(() => {
     const client = getStreamClient();
-    // A failed subscription is reported when a request is attempted.
     void client.connect().catch(() => {});
     return () => {
+      workspace.stop();
       client.dispose();
       if (clientRef.current === client) clientRef.current = null;
     };
-  }, [getStreamClient]);
-
-  useEffect(() => {
-    const client = clientRef.current;
-    if (client && client.activeActionId !== activeAction?.id) void client.detach(false);
-  }, [activeAction?.id]);
+  }, [getStreamClient, workspace]);
 
   const handleDetachStream = useCallback(() => {
+    workspace.stop();
     void clientRef.current?.detach();
-  }, []);
+  }, [workspace]);
 
-  const getThinkingOptions = useCallback(
-    (providerId?: string) => getThinkingRequestOptions(
-      thinkingMode,
-      config?.providers.find((provider) => provider.id === (providerId || activeAction?.providerId))
-    ),
-    [thinkingMode, config?.providers, activeAction?.providerId]
-  );
+  const send = useCallback(async (plan: GenerationPlan | null, prepare?: () => Promise<void>) => {
+    if (!plan) return;
+    const provider = config?.providers.find((p) => p.id === plan.providerId);
+    await getStreamClient().start({ actionId: plan.actionId, text: plan.text,
+      modelOverride: plan.modelOverride, providerOverride: plan.providerId, promptOverride: plan.promptOverride,
+      ...getThinkingRequestOptions(plan.thinkingMode, provider),
+    }, prepare, plan.generationId);
+  }, [config?.providers, getStreamClient]);
 
-  // 触发动作
-  const handleTriggerAction = useCallback(
-    async (action: ActionConfig) => {
-      // 1. 快捷复制模式
-      if (action.actionType === 'copy') {
-        void clientRef.current?.detach(false);
-        if (selectedText) {
-          try {
-            await navigator.clipboard.writeText(selectedText);
-          } catch (err) {
-            console.warn('Copy action failed:', err);
-          }
-        }
-        if (!isPinned) {
-          executeGracefulHide();
-        }
-        return;
-      }
+  const defaultModel = (action: ActionConfig) => {
+    const provider = config?.providers.find((p) => p.id === action.providerId);
+    return provider?.defaultModel || provider?.models[0] || '';
+  };
+  const reportMissingModel = () => workspace.reportError('⚠️ 当前未配置可用模型，请在下方切换服务商或前往设置添加模型。');
 
-      // 2. Web 官网原生浮窗模式
-      if (action.actionType === 'web') {
-        void clientRef.current?.detach(false);
-        if (action.copyToClipboard && selectedText) {
-          try {
-            await navigator.clipboard.writeText(selectedText);
-          } catch {
-            // ignore
-          }
-        }
+  async function triggerWeb(action: ActionConfig, text: string, autoSubmitOverride?: boolean) {
+    try {
+      await invoke('trigger_web_action', { actionId: action.id, text,
+        copyToClipboard: action.copyToClipboard || false, ...(autoSubmitOverride === undefined ? {} : { autoSubmitOverride }) });
+      if (!isPinned) executeGracefulHide();
+    } catch (error) { workspace.reportError(String(error)); }
+  }
+  async function copyText(text: string) {
+    try { await navigator.clipboard.writeText(text); }
+    catch (error) { console.warn('Copy action failed:', error); }
+  }
+  function detachForeignView() {
+    workspace.stop();
+    void clientRef.current?.detach(false);
+  }
 
-        try {
-          await invoke('trigger_web_action', {
-            actionId: action.id,
-            text: selectedText,
-            copyToClipboard: action.copyToClipboard || false,
-          });
-          if (!isPinned) {
-            executeGracefulHide();
-          }
-        } catch (err) {
-          onSetError(String(err));
-        }
-        return;
-      }
-
-      // 3. API 流式卡片模式
-      const provider = config?.providers.find((p) => p.id === action.providerId);
-      const defaultModel = provider?.defaultModel || provider?.models[0] || '';
-
-      onStartAction(action, defaultModel);
-
-      if (!defaultModel || defaultModel.trim() === '') {
-        void clientRef.current?.detach(clientRef.current.activeActionId === action.id);
-        onSetError('⚠️ 当前服务商尚未配置可用模型，请前往「设置 -> 模型服务商」获取或添加可用模型。');
-        onSetLoading(false);
-        await updateWindowSize('card', true);
-        return;
-      }
-
-      const thinkingOptions = getThinkingOptions(action.providerId);
-
-      await getStreamClient().start({
-        actionId: action.id,
-        text: selectedText,
-        modelOverride: defaultModel,
-        promptOverride: action.promptTemplate,
-        ...thinkingOptions,
-      }, () => updateWindowSize('card', true));
-    },
-    [
-      config?.providers,
-      selectedText,
-      isPinned,
-      thinkingMode,
-      getThinkingOptions,
-      executeGracefulHide,
-      updateWindowSize,
-      onStartAction,
-      onSetError,
-      onSetLoading,
-      getStreamClient,
-    ]
-  );
-
-  // 触发动作（空文本直达模式：API 展开空白卡片并不发请求，Web 打开纯净首页并不改剪贴板）
-  const handleTriggerActionWithoutText = useCallback(
-    async (action: ActionConfig) => {
-      // 1. 快捷复制模式：右键直接忽略
-      if (action.actionType === 'copy') {
-        return;
-      }
-      void clientRef.current?.detach(clientRef.current.activeActionId === action.id);
-
-      // 2. Web 官网原生浮窗模式
-      if (action.actionType === 'web') {
-        try {
-          await invoke('trigger_web_action', {
-            actionId: action.id,
-            text: '',
-            copyToClipboard: false,
-          });
-          if (!isPinned) {
-            executeGracefulHide();
-          }
-        } catch (err) {
-          onSetError(String(err));
-        }
-        return;
-      }
-
-      // 3. API 流式卡片模式 (进入空白新对话)
-      const provider = config?.providers.find((p) => p.id === action.providerId);
-      const defaultModel = provider?.defaultModel || provider?.models[0] || '';
-
-      if (onStartEmptyAction) {
-        onStartEmptyAction(action, defaultModel);
-      } else {
-        onStartAction(action, defaultModel);
-        onSetStreamText('');
-        onSetLoading(false);
-      }
-      await updateWindowSize('card', true);
-    },
-    [
-      config?.providers,
-      isPinned,
-      executeGracefulHide,
-      updateWindowSize,
-      onStartEmptyAction,
-      onStartAction,
-      onSetStreamText,
-      onSetLoading,
-      onSetError,
-    ]
-  );
-
-  // 触发动作（双击引用模式）：
-  // 1. Web 官网：调起官网并将划选文字作为引用发送至官网输入框，焦点在输入框，不自动提交 (autoSubmitOverride: false)
-  // 2. API 动作：展开本地流式卡片并预填引用，光标聚焦末尾，不自动请求
-  const handleTriggerQuoteAction = useCallback(
-    async (action: ActionConfig) => {
-      if (action.actionType === 'copy') return;
-      void clientRef.current?.detach(clientRef.current.activeActionId === action.id);
-      // 1. Web 官网模式
-      if (action.actionType === 'web') {
-        const formattedQuote = formatQuoteText(selectedText);
-        if (action.copyToClipboard && formattedQuote) {
-          try {
-            await navigator.clipboard.writeText(formattedQuote);
-          } catch {
-            // ignore
-          }
-        }
-
-        try {
-          await invoke('trigger_web_action', {
-            actionId: action.id,
-            text: formattedQuote,
-            copyToClipboard: action.copyToClipboard || false,
-            autoSubmitOverride: false,
-          });
-          if (!isPinned) {
-            executeGracefulHide();
-          }
-        } catch (err) {
-          onSetError(String(err));
-        }
-        return;
-      }
-
-      // 2. API 流式卡片模式
-      if (action.actionType === 'api') {
-        const provider = config?.providers.find((p) => p.id === action.providerId);
-        const defaultModel = provider?.defaultModel || provider?.models[0] || '';
-        const formattedQuote = formatQuoteText(selectedText);
-
-        if (onStartQuoteAction) {
-          onStartQuoteAction(action, formattedQuote, defaultModel);
-        } else {
-          onStartAction(action, defaultModel);
-          onSetStreamText('');
-          onSetLoading(false);
-        }
-        await updateWindowSize('card', true);
-      }
-    },
-    [
-      config?.providers,
-      selectedText,
-      isPinned,
-      executeGracefulHide,
-      onSetError,
-      onStartQuoteAction,
-      onStartAction,
-      onSetStreamText,
-      onSetLoading,
-      updateWindowSize,
-    ]
-  );
-
-  // 发送追问
-  const handleSendFollowUp = useCallback(
-    async (followUpPrompt: string) => {
-      if (!activeAction || !followUpPrompt.trim()) return;
-
-      if (!selectedModel || selectedModel.trim() === '') {
-        onSetError('⚠️ 当前未配置可用模型，请在下方切换服务商或前往设置添加模型。');
-        onSetLoading(false);
-        return;
-      }
-
-      onSetStreamText(streamText + createFollowUpChunk(followUpPrompt));
-      onSetLoading(true);
-      onSetError(null);
-
-      // 根据配置截取最近 N 轮历史对话
-      const maxTurns = config?.apiCard?.contextTurns ?? 5;
-      const recentHistory = buildHistoryContext(streamText, maxTurns);
-
-      const followUpCombined = buildFollowUpPrompt(recentHistory, selectedText, followUpPrompt);
-
-      const thinkingOptions = getThinkingOptions();
-
-      await getStreamClient().start({
-        actionId: activeAction.id,
-        text: followUpCombined,
-        modelOverride: selectedModel,
-        promptOverride: '{text}',
-        ...thinkingOptions,
-      });
-    },
-    [
-      activeAction,
-      config?.apiCard?.contextTurns,
-      streamText,
-      selectedText,
-      selectedModel,
-      thinkingMode,
-      getThinkingOptions,
-      onSetStreamText,
-      onSetLoading,
-      onSetError,
-      getStreamClient,
-    ]
-  );
-
-  // 切换供应商（仅切换选中状态与默认模型，不自动触发网络请求）
-  const handleProviderChange = useCallback(
-    (newProviderId: string) => {
-      if (!config?.providers) return;
-      const provider = config.providers.find(
-        (p) => p.id === newProviderId && p.enabled !== false
-      );
-      if (!provider) return;
-      const newModel = provider.defaultModel || provider.models[0] || '';
-
-      onSetProvider(newProviderId, newModel);
-      onSetError(null);
-    },
-    [config?.providers, onSetProvider, onSetError]
-  );
-
-  // 切换模型（仅切换选中状态，不自动触发网络请求）
-  const handleModelChange = useCallback(
-    (newModel: string) => {
-      onSetModel(newModel);
-      onSetError(null);
-    },
-    [onSetModel, onSetError]
-  );
-
-  // 切换思考模式
-  const handleThinkingModeChange = useCallback(
-    (mode: ThinkingMode) => {
-      onSetThinkingMode(mode);
-    },
-    [onSetThinkingMode]
-  );
-
-  // 针对当前轮次重新生成 (保留前序多轮历史)
-  const handleRegenerateCurrentTurn = useCallback(async () => {
-    if (!activeAction) return;
-
-    if (!selectedModel || selectedModel.trim() === '') {
-      onSetError('⚠️ 当前未配置可用模型，请在下方切换服务商或前往设置添加模型。');
-      onSetLoading(false);
+  const handleTriggerAction = async (action: ActionConfig) => {
+    if (action.actionType === 'copy') {
+      detachForeignView();
+      if (selectionText) await copyText(selectionText);
+      if (!isPinned) executeGracefulHide();
       return;
     }
-
-    onSetLoading(true);
-    onSetError(null);
-
-    const thinkingOptions = getThinkingOptions();
-
-    const parts = splitTranscript(streamText);
-    if (parts.length <= 1) {
-      // 第一轮回答重新生成
-      onSetStreamText('');
-
-      await getStreamClient().start({
-        actionId: activeAction.id,
-        text: selectedText,
-        modelOverride: selectedModel,
-        promptOverride: activeAction.promptTemplate,
-        ...thinkingOptions,
-      });
-    } else {
-      // 多轮追问：保留前 N-1 轮历史，仅重置最新一轮
-      const lastPart = parts[parts.length - 1];
-      const { prompt: latestPrompt } = splitTurnChunk(lastPart);
-
-      const precedingParts = parts.slice(0, -1);
-      const maxTurns = config?.apiCard?.contextTurns ?? 5;
-      const recentHistory = buildHistoryContext(precedingParts.join(FOLLOW_UP_MARKER), maxTurns);
-
-      // 重置 streamText 为去掉最新轮 assistant 内容的状态
-      const baseStreamText = precedingParts.join(FOLLOW_UP_MARKER) + createFollowUpChunk(latestPrompt);
-      onSetStreamText(baseStreamText);
-
-      const followUpCombined = buildFollowUpPrompt(recentHistory, selectedText, latestPrompt);
-
-      await getStreamClient().start({
-        actionId: activeAction.id,
-        text: followUpCombined,
-        modelOverride: selectedModel,
-        promptOverride: '{text}',
-        ...thinkingOptions,
-      });
+    if (action.actionType === 'web') {
+      detachForeignView();
+      if (action.copyToClipboard && selectionText) await copyText(selectionText);
+      await triggerWeb(action, selectionText); return;
     }
-  }, [
-    activeAction,
-    streamText,
-    selectedText,
-    selectedModel,
-    thinkingMode,
-    getThinkingOptions,
-    config?.apiCard?.contextTurns,
-    onSetStreamText,
-    onSetLoading,
-    onSetError,
-    getStreamClient,
-  ]);
-
-  // 原位编辑：保留上方历史，替换当前问题并移除原回答及后续轮次。
-  const handleEditMessage = useCallback(async (turnIndex: number, prompt: string): Promise<boolean> => {
-    const editedPrompt = prompt.trim();
-    if (!activeAction || isLoading || !editedPrompt) return false;
-    const parts = splitTranscript(streamText);
-    if (!Number.isInteger(turnIndex) || turnIndex < 0 || turnIndex >= parts.length) return false;
-    if (turnIndex === 0 && !selectedText) return false;
-    if (!selectedModel.trim()) {
-      onSetError('⚠️ 当前未配置可用模型，请在下方切换服务商或前往设置添加模型。');
-      return false;
+    const model = defaultModel(action);
+    const thinkingMode = workspace.getSnapshot().active?.thinkingMode;
+    if (!model.trim()) {
+      void clientRef.current?.detach(clientRef.current.activeActionId === action.id);
+      const failed = workspace.startInitial(action, model, selectionText, thinkingMode);
+      workspace.finish(failed.generationId, { error: '⚠️ 当前未配置可用模型，请在下方切换服务商或前往设置添加模型。' });
+      onShowCard();
+      await updateWindowSize('card', true); return;
     }
-
-    const precedingHistory = parts.slice(0, turnIndex).join(FOLLOW_UP_MARKER);
-    if (turnIndex === 0) onSetSelectedText(editedPrompt);
-    onSetStreamText(turnIndex === 0 ? '' : precedingHistory + createFollowUpChunk(editedPrompt));
-    onSetLoading(true);
-    onSetError(null);
-
-    const recentHistory = buildHistoryContext(precedingHistory, config?.apiCard?.contextTurns ?? 5);
-    await getStreamClient().start({
-      actionId: activeAction.id,
-      text: turnIndex === 0 ? editedPrompt : buildFollowUpPrompt(recentHistory, selectedText, editedPrompt),
-      modelOverride: selectedModel,
-      promptOverride: turnIndex === 0 ? activeAction.promptTemplate : '{text}',
-      ...getThinkingOptions(),
-    });
-    return true;
-  }, [activeAction, isLoading, streamText, selectedText, selectedModel, config?.apiCard?.contextTurns,
-    onSetSelectedText, onSetStreamText, onSetLoading, onSetError, getThinkingOptions, getStreamClient]);
-
-  // 开启新会话 (彻底清空追问历史与选中文本，终止在途请求)
-  const handleNewChat = useCallback(async () => {
-    handleDetachStream();
-    if (onNewChatDispatch) {
-      onNewChatDispatch();
-    } else {
-      onSetStreamText('');
-      onSetLoading(false);
-      onSetError(null);
-    }
-  }, [handleDetachStream, onNewChatDispatch, onSetStreamText, onSetLoading, onSetError]);
-
-  // 导出完整对话为 Markdown
-  const handleExportMarkdown = useCallback(async () => {
-    let md = `# IOX AI 对话记录\n\n- **动作**: ${activeAction?.name || 'AI'}\n- **模型**: ${selectedModel || '默认'}\n- **时间**: ${new Date().toLocaleString()}\n\n`;
-    if (selectedText) {
-      md += `### 原始选中文本\n> ${selectedText.replace(/\n/g, '\n> ')}\n\n---\n\n`;
-    }
-    md += `### 对话内容\n\n${stripInternalMarkers(streamText)}\n`;
-
-    try {
-      await navigator.clipboard.writeText(md);
-    } catch (err) {
-      console.warn('Failed to export markdown:', err);
-    }
-  }, [activeAction?.name, selectedModel, selectedText, streamText]);
-
-  // 恢复历史会话内容
-  const handleRestoreSession = useCallback(
-    (sessionText: string, model?: string, providerId?: string) => {
-      handleDetachStream();
-      onSetStreamText(sessionText);
-      if (model) onSetModel(model);
-      if (providerId) {
-        onSetProvider(providerId, model || 'default');
-      }
-      onSetLoading(false);
-      onSetError(null);
-    },
-    [handleDetachStream, onSetStreamText, onSetModel, onSetProvider, onSetLoading, onSetError]
-  );
-
-  // 停止生成
-  const handleCancel = useCallback(async () => {
-    await clientRef.current?.cancel();
-  }, []);
-
-  return {
-    handleTriggerAction,
-    handleTriggerActionWithoutText,
-    handleTriggerQuoteAction,
-    handleSendFollowUp,
-    handleEditMessage,
-    handleProviderChange,
-    handleModelChange,
-    handleThinkingModeChange,
-    handleRegenerateCurrentTurn,
-    handleNewChat,
-    handleRestoreSession,
-    handleExportMarkdown,
-    handleCancel,
-    handleDetachStream,
+    const plan = workspace.startInitial(action, model, selectionText, thinkingMode);
+    onShowCard();
+    await send(plan, () => updateWindowSize('card', true));
   };
+
+  const handleTriggerActionWithoutText = async (action: ActionConfig) => {
+    if (action.actionType === 'copy') return;
+    workspace.stop();
+    void clientRef.current?.detach(clientRef.current.activeActionId === action.id);
+    if (action.actionType === 'web') {
+      try {
+        await invoke('trigger_web_action', { actionId: action.id, text: '', copyToClipboard: false });
+        if (!isPinned) executeGracefulHide();
+      } catch (error) { workspace.reportError(String(error)); }
+      return;
+    }
+    workspace.openEmpty(action, defaultModel(action)); onShowCard();
+    await updateWindowSize('card', true);
+  };
+
+  const handleTriggerQuoteAction = async (action: ActionConfig) => {
+    if (action.actionType === 'copy') return;
+    workspace.stop();
+    void clientRef.current?.detach(clientRef.current.activeActionId === action.id);
+    const quote = formatQuoteText(selectionText);
+    if (action.actionType === 'web') {
+      if (action.copyToClipboard && quote) await copyText(quote);
+      await triggerWeb(action, quote, false); return;
+    }
+    workspace.openEmpty(action, defaultModel(action), quote); onShowCard();
+    await updateWindowSize('card', true);
+  };
+
+  const hasModel = () => {
+    if (workspace.getSnapshot().active?.selectedModel.trim()) return true;
+    reportMissingModel(); return false;
+  };
+  const maxTurns = () => config?.apiCard?.contextTurns ?? 5;
+  const handleSendFollowUp = async (prompt: string) => {
+    if (hasModel()) await send(workspace.followUp(prompt, maxTurns()));
+  };
+  const handleEditMessage = async (index: number, prompt: string): Promise<boolean> => {
+    if (!hasModel()) return false;
+    const plan = workspace.edit(index, prompt, maxTurns());
+    await send(plan); return plan !== null;
+  };
+  const handleRegenerateCurrentTurn = async () => {
+    if (hasModel()) await send(workspace.regenerate(maxTurns()));
+  };
+  const handleProviderChange = (id: string) => {
+    const provider = config?.providers.find((p) => p.id === id && p.enabled !== false);
+    if (provider) workspace.chooseProvider(id, provider.defaultModel || provider.models[0] || '');
+  };
+  const handleModelChange = (model: string) => workspace.chooseModel(model);
+  const handleThinkingModeChange = (mode: ThinkingMode) => workspace.chooseThinkingMode(mode);
+
+  // Domain navigation revokes generation ownership synchronously; cancellation targets the old execution.
+  const navigate = (intent: () => void) => {
+    const generation = workspace.getSnapshot().active?.generation?.id;
+    intent();
+    if (generation && workspace.getSnapshot().active?.generation?.id !== generation) void clientRef.current?.detach();
+  };
+  const handleNewChat = () => navigate(() => workspace.newTab());
+  const handleSelectTab = (id: string) => navigate(() => workspace.select(id));
+  const handleCloseTab = (id: string) => navigate(() => workspace.close(id));
+  const handleCloseOtherTabs = (id: string) => navigate(() => workspace.closeOthers(id));
+  const handleCloseLeftTabs = (id: string) => navigate(() => workspace.closeLeft(id));
+  const handleCloseRightTabs = (id: string) => navigate(() => workspace.closeRight(id));
+  const handleExportMarkdown = async () => {
+    const active = workspace.getSnapshot().active;
+    if (active) await copyText(exportMarkdown(active));
+  };
+  const handleCancel = async () => { await clientRef.current?.cancel(); };
+
+  return { handleTriggerAction, handleTriggerActionWithoutText, handleTriggerQuoteAction,
+    handleSendFollowUp, handleEditMessage, handleRegenerateCurrentTurn,
+    handleProviderChange, handleModelChange, handleThinkingModeChange, handleNewChat,
+    handleSelectTab, handleCloseTab, handleCloseOtherTabs, handleCloseLeftTabs, handleCloseRightTabs,
+    handleExportMarkdown, handleCancel, handleDetachStream };
 }

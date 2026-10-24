@@ -43,7 +43,9 @@ test('restoring a session synchronously detaches the old request and ignores its
   t.after(h.unmount);
   await h.hook.handleTriggerAction(h.action);
   const first = h.calls.find((call) => call.command === 'trigger_api_action').args;
-  h.hook.handleRestoreSession('saved answer', 'saved-model');
+  h.hook.handleDetachStream();
+  h.workspace.restore({ id: 'saved', title: 'Saved', actionId: 'saved-action', model: 'saved-model',
+    selectedText: 'saved selection', streamText: 'saved answer', messages: [], createdAt: 1, updatedAt: 1 }, []);
   h.emit('token', { ...first, token: 'stale' });
   h.emit('error', { ...first, error: 'stale error' });
   assert.equal(h.updates.streamText, 'saved answer');
@@ -61,7 +63,7 @@ test('new chat detaches immediately even while start acceptance is pending', asy
   const first = h.calls.find((call) => call.command === 'trigger_api_action').args;
   const resetting = h.hook.handleNewChat();
   h.emit('token', { ...first, token: 'stale' });
-  assert.equal(h.updates.streamText, '');
+  assert.equal(h.workspace.getSnapshot().active.turns.length, 0);
   assert.equal(h.updates.isLoading, false);
   accepted.reject(new Error('late failure'));
   await Promise.all([starting, resetting]);
@@ -92,4 +94,67 @@ test('ignored copy gestures do not detach a running API request', async (t) => {
     h.emit('token', { ...request, token: 'still owned' });
     assert.equal(h.updates.streamText, 'still owned', method);
   }
+});
+
+
+test('API execution updates the workspace owner instead of a parallel view snapshot', async (t) => {
+  const h = mountActionStream(); t.after(h.unmount);
+  const before = h.workspace.getSnapshot().activeId;
+  await h.hook.handleTriggerAction({ ...h.action, name: 'Action', icon: 'Sparkles', enabled: true });
+  assert.notEqual(h.workspace.getSnapshot().activeId, before);
+  const request = h.calls.find((call) => call.command === 'trigger_api_action').args;
+  h.emit('token', { ...request, token: 'owned answer' });
+  assert.equal(h.workspace.getSnapshot().active.turns[0].answer, 'owned answer');
+});
+
+test('switching and closing tabs cancels their execution and cannot deliver into another tab', async (t) => {
+  const h = mountActionStream(); t.after(h.unmount);
+  await h.hook.handleTriggerAction(h.action);
+  const firstId = h.workspace.getSnapshot().activeId;
+  const request = h.calls.find((call) => call.command === 'trigger_api_action').args;
+  h.emit('token', { ...request, token: 'partial A' });
+  h.hook.handleNewChat();
+  const secondId = h.workspace.getSnapshot().activeId;
+  h.emit('token', { ...request, token: 'late A' });
+  h.emit('done', { ...request, canceled: false });
+  assert.equal(h.workspace.getSnapshot().activeId, secondId);
+  assert.equal(h.workspace.getSnapshot().active.turns.length, 0);
+  h.hook.handleSelectTab(firstId);
+  assert.equal(h.workspace.getSnapshot().active.turns[0].answer, 'partial A');
+  assert.equal(h.workspace.getSnapshot().active.turns[0].status, 'canceled');
+  await h.hook.handleRegenerateCurrentTurn();
+  const latest = h.calls.filter((call) => call.command === 'trigger_api_action').at(-1).args;
+  h.hook.handleCloseTab(firstId);
+  h.emit('token', { ...latest, token: 'closed A' });
+  assert.equal(h.workspace.getSnapshot().activeId, secondId);
+  assert.equal(h.workspace.getSnapshot().active.turns.length, 0);
+});
+
+test('a missing provider model preserves the original selection for retry after configuration', async (t) => {
+  const action = { id: 'empty-provider', actionType: 'api', providerId: 'provider', promptTemplate: 'Translate: {text}' };
+  const h = mountActionStream({ config: { providers: [] }, selectedText: 'keep this original selection' });
+  t.after(h.unmount);
+  await h.hook.handleTriggerAction(action);
+  assert.equal(h.workspace.getSnapshot().active.selectedText, 'keep this original selection');
+  assert.equal(h.workspace.getSnapshot().active.turns[0].prompt, 'keep this original selection');
+  assert.ok(h.workspace.getSnapshot().active.error);
+  h.hook.handleModelChange('configured-model');
+  await h.hook.handleRegenerateCurrentTurn();
+  assert.equal(h.calls.find((call) => call.command === 'trigger_api_action').args.text, 'keep this original selection');
+});
+
+test('the provider selected for the turn is forwarded with its model and reasoning options', async (t) => {
+  const h = mountActionStream({ config: { providers: [
+    { id: 'provider', models: ['old-model'], defaultModel: 'old-model' },
+    { id: 'chosen', models: ['chosen-model'], defaultModel: 'chosen-model', baseUrl: 'https://api.deepseek.com' },
+  ] } });
+  t.after(h.unmount);
+  h.hook.handleProviderChange('chosen');
+  h.hook.handleThinkingModeChange('deep');
+  await h.hook.handleSendFollowUp('chosen provider');
+  const request = h.calls.find((call) => call.command === 'trigger_api_action').args;
+  assert.equal(request.providerOverride, 'chosen');
+  assert.equal(request.modelOverride, 'chosen-model');
+  assert.equal(request.reasoningEffort, 'high');
+  assert.equal(h.workspace.getSnapshot().active.turns.at(-1).providerId, 'chosen');
 });

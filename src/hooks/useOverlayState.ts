@@ -1,139 +1,53 @@
-import { useReducer } from 'react';
-import { AppConfig } from '@/types/config';
-import {
-  overlayReducer,
-  initialOverlayState,
-  OverlayMode,
-} from '@/state/overlayReducer';
+import { useReducer, useRef, useSyncExternalStore } from 'react';
+import type { AppConfig } from '@/types/config';
+import { overlayReducer, initialOverlayState } from '@/state/overlayReducer';
+import { createConversationWorkspace, type ConversationWorkspace } from '@/conversation/workspace';
 import { useOverlayLifecycle } from '@/hooks/useOverlayLifecycle';
 import { useSelectionEvents } from '@/hooks/useSelectionEvents';
 import { useActionStream } from '@/hooks/useActionStream';
+import { useChatSessions } from '@/hooks/useChatSessions';
 
-export type { OverlayMode };
+export type { OverlayMode } from '@/state/overlayReducer';
 
-/**
- * 悬浮窗统一状态管理 Facade Hook
- */
 export function useOverlayState(config: AppConfig | null) {
   const [state, dispatch] = useReducer(overlayReducer, initialOverlayState);
+  const workspaceRef = useRef<ConversationWorkspace | null>(null);
+  if (!workspaceRef.current) workspaceRef.current = createConversationWorkspace();
+  const workspace = workspaceRef.current;
+  const snapshot = useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);
+  const conversation = snapshot.active;
 
-  // 1. 生命周期与动画控制
-  const {
-    updateWindowSize,
-    handleResetCardSize,
-    executeGracefulHide,
-    cancelCloseTimer,
-    handlePinToggle,
-    handleClose,
-  } = useOverlayLifecycle({
-    actions: config?.actions,
-    iconOnly: config?.general.iconOnlyBubble,
-    apiCard: config?.apiCard,
-    isPinned: state.isPinned,
-    currentMode: state.mode,
-    setIsPinned: (pinned) => dispatch({ type: 'SET_PINNED', isPinned: pinned }),
-    setIsClosing: (closing) => dispatch({ type: 'SET_CLOSING', isClosing: closing }),
-    onHideComplete: () => dispatch({ type: 'HIDE_COMPLETE' }),
-    onHideStart: () => handleDetachStream(),
+  const { updateWindowSize, handleResetCardSize, executeGracefulHide, cancelCloseTimer,
+    handlePinToggle, handleClose } = useOverlayLifecycle({
+    actions: config?.actions, iconOnly: config?.general.iconOnlyBubble, apiCard: config?.apiCard,
+    isPinned: state.isPinned, currentMode: state.mode,
+    setIsPinned: (isPinned) => dispatch({ type: 'SET_PINNED', isPinned }),
+    setIsClosing: (isClosing) => dispatch({ type: 'SET_CLOSING', isClosing }),
+    onHideComplete: () => { workspace.reset(); dispatch({ type: 'HIDE_COMPLETE' }); },
+    onHideStart: () => stream.handleDetachStream(),
   });
-
-  // 2. 选词触发与退场事件监听
+  const stream = useActionStream({ config, workspace, selectionText: state.selectedText,
+    isPinned: state.isPinned, onShowCard: () => dispatch({ type: 'SHOW_CARD' }),
+    updateWindowSize, executeGracefulHide });
   useSelectionEvents({
     isPinned: state.isPinned,
     onSelectionTriggered: (text) => {
-      handleDetachStream();
-      dispatch({ type: 'SELECTION_TRIGGERED', text });
+      stream.handleDetachStream(); workspace.reset(); dispatch({ type: 'SELECTION_TRIGGERED', text });
     },
     onFilesSelected: (files, dragId, layout) => {
-      handleDetachStream();
-      dispatch({ type: 'FILES_SELECTED', files, dragId, layout });
+      stream.handleDetachStream(); workspace.reset(); dispatch({ type: 'FILES_SELECTED', files, dragId, layout });
     },
-    onRequestHide: executeGracefulHide,
-    cancelCloseTimer,
-    updateWindowSize,
+    onRequestHide: executeGracefulHide, cancelCloseTimer, updateWindowSize,
   });
-
-  // 3. 动作调度与流式处理
-  const {
-    handleTriggerAction,
-    handleTriggerActionWithoutText,
-    handleTriggerQuoteAction,
-    handleSendFollowUp,
-    handleEditMessage,
-    handleProviderChange,
-    handleModelChange,
-    handleThinkingModeChange,
-    handleRegenerateCurrentTurn,
-    handleNewChat,
-    handleRestoreSession,
-    handleExportMarkdown,
-    handleCancel,
-    handleDetachStream,
-  } = useActionStream({
-    config,
-    selectedText: state.selectedText,
-    activeAction: state.activeAction,
-    selectedModel: state.selectedModel,
-    streamText: state.streamText,
-    isLoading: state.isLoading,
-    isPinned: state.isPinned,
-    thinkingMode: state.thinkingMode,
-    onStartAction: (action, model) =>
-      dispatch({ type: 'START_ACTION', action, model }),
-    onStartEmptyAction: (action, model) =>
-      dispatch({ type: 'START_EMPTY_CARD_ACTION', action, model }),
-    onStartQuoteAction: (action, initialInput, model) =>
-      dispatch({ type: 'START_QUOTE_ACTION', action, initialInput, model }),
-    onAppendToken: (token) => dispatch({ type: 'APPEND_STREAM_TOKEN', token }),
-    onStreamDone: () => dispatch({ type: 'STREAM_DONE' }),
-    onStreamError: (error) => dispatch({ type: 'STREAM_ERROR', error }),
-    onSetStreamText: (text) => dispatch({ type: 'SET_STREAM_TEXT', text }),
-    onSetSelectedText: (text) => dispatch({ type: 'SET_SELECTED_TEXT', text }),
-    onSetLoading: (isLoading) => dispatch({ type: 'SET_LOADING', isLoading }),
-    onSetError: (error) => dispatch({ type: 'SET_ERROR', error }),
-    onSetModel: (model) => dispatch({ type: 'SET_MODEL', model }),
-    onSetProvider: (providerId, defaultModel) =>
-      dispatch({ type: 'SET_PROVIDER', providerId, defaultModel }),
-    onSetThinkingMode: (mode) =>
-      dispatch({ type: 'SET_THINKING_MODE', mode }),
-    onNewChat: () => dispatch({ type: 'NEW_CHAT' }),
-    updateWindowSize,
-    executeGracefulHide,
-  });
+  const chatSessions = useChatSessions({ workspace, actions: config?.actions ?? [],
+    onNavigation: stream.handleDetachStream, onNewSession: stream.handleNewChat });
 
   return {
-    mode: state.mode,
-    visible: state.visible,
-    animKey: state.animKey,
-    isClosing: state.isClosing,
-    selectedText: state.selectedText,
-    selectedFiles: state.selectedFiles,
-    fileDragId: state.fileDragId,
-    fileMenuLayout: state.fileMenuLayout,
-    activeAction: state.activeAction,
-    selectedModel: state.selectedModel,
-    streamText: state.streamText,
-    isLoading: state.isLoading,
-    isPinned: state.isPinned,
-    error: state.error,
-    thinkingMode: state.thinkingMode,
-    initialInput: state.initialInput,
-    handleTriggerAction,
-    handleTriggerActionWithoutText,
-    handleTriggerQuoteAction,
-    handleSendFollowUp,
-    handleEditMessage,
-    handleProviderChange,
-    handleModelChange,
-    handleThinkingModeChange,
-    handleRegenerateCurrentTurn,
-    handleNewChat,
-    handleRestoreSession,
-    handleExportMarkdown,
-    handleCancel,
-    handleClose,
-    handlePinToggle,
-    handleResetCardSize,
-    updateWindowSize,
+    ...state, ...stream, conversation, chatSessions,
+    activeTabId: snapshot.activeId,
+    tabs: snapshot.tabs.map((tab) => ({ id: tab.id, title: tab.title, isLoading: Boolean(tab.generation) })),
+    // 视图只读取结构化投影，旧版 streamText 编码不再出现在渲染路径上。
+    selectedText: state.mode === 'card' && conversation ? conversation.selectedText : state.selectedText,
+    handleClose, handlePinToggle, handleResetCardSize, updateWindowSize,
   };
 }

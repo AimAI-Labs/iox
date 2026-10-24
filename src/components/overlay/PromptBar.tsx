@@ -22,7 +22,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 import { ReasoningControl } from '@/components/overlay/ReasoningControl';
 import { ContextMeter } from '@/components/overlay/ContextMeter';
-import type { ContextUsage } from '@/lib/chatTranscript';
+import type { ContextUsage } from '@/types/session';
 import { isDeepSeekProvider, type ThinkingMode } from '@/lib/reasoning';
 
 export interface ActionChip {

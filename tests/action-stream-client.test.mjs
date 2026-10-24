@@ -216,3 +216,22 @@ test('events may arrive synchronously during command acceptance without losing t
   assert.deepEqual(h.events, [['token', 'first'], ['done', false]]);
   h.client.dispose();
 });
+
+test('local execution ownership accompanies events and never enters IPC parameters', async () => {
+  const handlers = new Map(), calls = [], events = [];
+  const client = createActionStreamClient({
+    createRequestId: () => 'request',
+    listen: async (name, callback) => { handlers.set(name, callback); return () => {}; },
+    invoke: async (command, args) => calls.push({ command, args }),
+    onToken: (token, owner) => events.push(['token', token, owner]),
+    onDone: (canceled, owner) => events.push(['done', canceled, owner]),
+    onError: (error, owner) => events.push(['error', error, owner]),
+  });
+  await client.start({ actionId: 'action', text: 'question' }, undefined, 'generation-A');
+  handlers.get('action-stream-token')({ payload: { actionId: 'action', requestId: 'request', token: 'answer' } });
+  handlers.get('action-stream-done')({ payload: { actionId: 'action', requestId: 'request', canceled: true } });
+  assert.deepEqual(events, [['token', 'answer', 'generation-A'], ['done', true, 'generation-A']]);
+  assert.ok(!('owner' in calls[0].args));
+  assert.ok(!('generationId' in calls[0].args));
+  client.dispose();
+});

@@ -64,6 +64,7 @@ fn sample(id: &str, stream: &str, created: u64, updated: u64) -> ChatSessionData
         selected_text: String::new(),
         stream_text: stream.into(),
         messages: vec![],
+        conversation: None,
         created_at: created,
         updated_at: updated,
     }
@@ -529,4 +530,39 @@ fn shared_lock_covers_read_modify_commit_for_save_save_and_save_delete() {
             assert!(records.iter().any(|s| s.id == "second"));
         }
     }
+}
+
+#[test]
+fn structured_conversation_json_round_trips_without_dropping_extensions() {
+    let f = Fixture::new();
+    let mut value = serde_json::to_value(sample("structured", "answer", 1, 1)).unwrap();
+    let snapshot = serde_json::json!({
+        "version": 1,
+        "action": { "id": "act", "name": "Original action" },
+        "turns": [{"prompt": "literal **追问：**", "answer": "code\n\n```rust\n```", "model": "first-model"}],
+        "futureExtension": {"keep": true}
+    });
+    value["conversation"] = snapshot.clone();
+    let session: ChatSessionData = serde_json::from_value(value).unwrap();
+    f.store().save(session).unwrap();
+    let stored = serde_json::to_value(f.store().get("structured").unwrap()).unwrap();
+    assert_eq!(stored.get("conversation"), Some(&snapshot));
+}
+
+#[test]
+fn matching_compatibility_text_does_not_merge_distinct_structured_conversations() {
+    let f = Fixture::new();
+    let make = |id: &str, model: &str| {
+        let mut value = serde_json::to_value(sample(id, "identical projection", 1, 2)).unwrap();
+        value["conversation"] = serde_json::json!({"version":1,"turns":[{"model":model}]});
+        serde_json::from_value::<ChatSessionData>(value).unwrap()
+    };
+    f.sessions(&[make("a", "model-a"), make("b", "model-b")]);
+    assert_eq!(f.store().all().unwrap().len(), 2);
+    assert_eq!(f.store().save(make("c", "model-c")).unwrap(), "c");
+    assert_eq!(f.store().all().unwrap().len(), 3);
+    assert_eq!(f.store().save(make("d", "model-c")).unwrap(), "c");
+    let legacy = sample("legacy", "identical projection", 1, 1);
+    assert_eq!(f.store().save(legacy).unwrap(), "legacy");
+    assert_eq!(f.store().all().unwrap().len(), 4);
 }

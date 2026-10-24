@@ -142,6 +142,47 @@ async fn trigger_web_file_action(
     result
 }
 
+fn resolve_api_request_config(
+    config: &AppConfig,
+    action_id: &str,
+    provider_override: Option<&str>,
+    model_override: Option<String>,
+    prompt_override: Option<String>,
+) -> Result<(config::ProviderConfig, String, String), String> {
+    let action = config
+        .actions
+        .iter()
+        .find(|a| a.id == action_id)
+        .ok_or_else(|| format!("Action '{}' not found", action_id))?;
+
+    let provider_id = provider_override
+        .or(action.provider_id.as_deref())
+        .ok_or_else(|| "Action has no assigned provider".to_string())?;
+
+    let provider = config
+        .providers
+        .iter()
+        .find(|p| p.id == provider_id)
+        .cloned()
+        .ok_or_else(|| format!("Provider '{}' not found", provider_id))?;
+
+    // Explicit selection must never silently fall back to the action's provider.
+    // Omitted overrides retain legacy behavior, including existing disabled providers.
+    if provider_override.is_some() && !provider.enabled {
+        return Err(format!("Provider '{}' is disabled", provider_id));
+    }
+
+    let model = model_override
+        .or_else(|| Some(provider.default_model.clone()))
+        .unwrap_or_else(|| "default".to_string());
+
+    let template = prompt_override
+        .or_else(|| action.prompt_template.clone())
+        .unwrap_or_else(|| "{text}".to_string());
+
+    Ok((provider, model, template))
+}
+
 #[tauri::command]
 fn trigger_api_action(
     app: AppHandle,
@@ -149,6 +190,7 @@ fn trigger_api_action(
     action_id: String,
     request_id: String,
     text: String,
+    provider_override: Option<String>,
     model_override: Option<String>,
     prompt_override: Option<String>,
     thinking_enabled: Option<bool>,
@@ -156,33 +198,13 @@ fn trigger_api_action(
 ) -> Result<(), String> {
     let (provider, model, prompt_template) = {
         let config = state.config.lock().unwrap();
-        let action = config
-            .actions
-            .iter()
-            .find(|a| a.id == action_id)
-            .ok_or_else(|| format!("Action '{}' not found", action_id))?;
-
-        let provider_id = action
-            .provider_id
-            .as_ref()
-            .ok_or_else(|| "Action has no assigned provider".to_string())?;
-
-        let provider = config
-            .providers
-            .iter()
-            .find(|p| p.id == *provider_id)
-            .cloned()
-            .ok_or_else(|| format!("Provider '{}' not found", provider_id))?;
-
-        let model = model_override
-            .or_else(|| Some(provider.default_model.clone()))
-            .unwrap_or_else(|| "default".to_string());
-
-        let template = prompt_override
-            .or_else(|| action.prompt_template.clone())
-            .unwrap_or_else(|| "{text}".to_string());
-
-        (provider, model, template)
+        resolve_api_request_config(
+            &config,
+            &action_id,
+            provider_override.as_deref(),
+            model_override,
+            prompt_override,
+        )?
     };
 
     let user_prompt = ai::render_prompt_template(&prompt_template, &text);
@@ -738,3 +760,89 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
+
+#[cfg(test)]
+mod api_request_config_tests {
+    use super::resolve_api_request_config;
+    use crate::config::{AppConfig, ProviderConfig};
+
+    fn fixture() -> AppConfig {
+        let mut config = AppConfig::default_for_language("en");
+        config.providers = vec![
+            provider("original", true),
+            provider("selected", true),
+            provider("disabled", false),
+        ];
+        config.actions[0].provider_id = Some("original".into());
+        config.actions[0].prompt_template = Some("Explain {text}".into());
+        config
+    }
+
+    fn provider(id: &str, enabled: bool) -> ProviderConfig {
+        ProviderConfig {
+            id: id.into(),
+            name: id.into(),
+            base_url: format!("https://{id}.example/v1"),
+            api_key: format!("test-only-{id}-key"),
+            models: vec![format!("{id}-model")],
+            default_model: format!("{id}-model"),
+            enabled,
+        }
+    }
+
+    #[test]
+    fn provider_override_selects_actual_transport_without_changing_global_config() {
+        let config = fixture();
+        let before = serde_json::to_value(&config).unwrap();
+        let (provider, model, prompt) = resolve_api_request_config(
+            &config, &config.actions[0].id, Some("selected"), None, None,
+        ).unwrap();
+        assert_eq!(provider.id, "selected");
+        assert_eq!(provider.base_url, "https://selected.example/v1");
+        assert!(provider.api_key == "test-only-selected-key");
+        assert_eq!(model, "selected-model");
+        assert_eq!(prompt, "Explain {text}");
+        assert!(serde_json::to_value(&config).unwrap() == before);
+    }
+
+    #[test]
+    fn provider_override_missing_or_disabled_does_not_fall_back() {
+        let config = fixture();
+        for (id, expected) in [("missing", "not found"), ("disabled", "disabled")] {
+            let result = resolve_api_request_config(
+                &config, &config.actions[0].id, Some(id), None, None,
+            );
+            assert!(matches!(result, Err(error) if error.contains(expected)));
+        }
+    }
+
+    #[test]
+    fn provider_override_absent_preserves_original_defaults_and_disabled_behavior() {
+        let mut config = fixture();
+        config.providers[0].enabled = false;
+        let (provider, model, prompt) = resolve_api_request_config(
+            &config, &config.actions[0].id, None, None, None,
+        ).unwrap();
+        assert_eq!(provider.id, "original");
+        assert_eq!(model, "original-model");
+        assert_eq!(prompt, "Explain {text}");
+        config.actions[0].provider_id = None;
+        assert!(resolve_api_request_config(
+            &config, &config.actions[0].id, None, None, None,
+        ).is_err());
+    }
+
+    #[test]
+    fn provider_override_preserves_explicit_model_and_prompt_including_empty_values() {
+        let config = fixture();
+        for (model, prompt) in [("custom-model", "Custom {text}"), ("", "")] {
+            let (provider, actual_model, actual_prompt) = resolve_api_request_config(
+                &config, &config.actions[0].id, Some("selected"),
+                Some(model.into()), Some(prompt.into()),
+            ).unwrap();
+            assert_eq!(provider.id, "selected");
+            assert_eq!(actual_model, model);
+            assert_eq!(actual_prompt, prompt);
+        }
+    }
+}

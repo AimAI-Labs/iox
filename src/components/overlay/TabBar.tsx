@@ -7,14 +7,7 @@ import { cn } from '@/lib/utils';
 export interface TabItem {
   id: string;
   title: string;
-  actionId: string;
-  providerId?: string;
-  model: string;
-  selectedText: string;
-  streamText: string;
   isLoading: boolean;
-  error?: string | null;
-  turnSnapshots?: Record<string, { model: string; duration?: number }>;
 }
 
 export interface TabBarProps {

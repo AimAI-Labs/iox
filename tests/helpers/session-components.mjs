@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { loadConversationModule } from './conversation-module.mjs';
+const { createConversationWorkspace } = await loadConversationModule('conversation/workspace');
 
 export const flush = () => new Promise(setImmediate);
 export function deferred() {
@@ -22,6 +24,11 @@ export function mountSessionView(view = 'hook', invoke = async () => [], overrid
         const resolved = typeof next === 'function' ? next(slots[index]) : next;
         if (!Object.is(resolved, slots[index])) { slots[index] = resolved; dirty = true; }
       }];
+    },
+    useSyncExternalStore(subscribe, getSnapshot) {
+      const index = cursor++;
+      if (!slots[index]) slots[index] = { cleanup: subscribe(() => { dirty = true; }) };
+      return getSnapshot();
     },
     useRef: (initial) => slots[cursor++] ??= { current: initial },
     useCallback(callback, deps) {
@@ -48,7 +55,7 @@ export function mountSessionView(view = 'hook', invoke = async () => [], overrid
   };
   const load = (path) => {
     const source = readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
-    const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React } }).outputText;
+    const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
     const exports = {};
     vm.runInNewContext(js, { exports, console: { warn() {}, error() {} },
       window: { confirm: () => true },
@@ -58,7 +65,6 @@ export function mountSessionView(view = 'hook', invoke = async () => [], overrid
     });
     return exports;
   };
-  modules['@/lib/chatTranscript'] = load('src/lib/chatTranscript.ts');
   // Render the real shared alert when present, without executing child component hooks inline.
   try { modules['@/components/SessionStorageAlert'] = load('src/components/SessionStorageAlert.tsx'); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -68,8 +74,23 @@ export function mountSessionView(view = 'hook', invoke = async () => [], overrid
   let props = { activeAction: { id: 'action', providerId: 'provider' }, selectedModel: 'model',
     selectedText: 'selection', streamText: 'answer', isLoading: true,
     onRestoreSession() {}, onResetToNewChat() {}, ...overrides };
+  let sequence = 0;
+  const workspace = createConversationWorkspace({ createId: () => `session-view-${++sequence}` });
+  if (view === 'hook' && props.activeAction) {
+    const plan = workspace.startInitial({ name: 'Action', icon: 'Sparkles', enabled: true, actionType: 'api', ...props.activeAction }, props.selectedModel, props.selectedText);
+    workspace.append(plan.generationId, props.streamText);
+  }
+  props.workspace = workspace;
+  props.actions = [{ name: 'Action', icon: 'Sparkles', enabled: true, actionType: 'api', ...props.activeAction }];
+  props.onNavigation = () => workspace.stop();
+  props.onNewSession = () => { workspace.newTab(); props.onResetToNewChat(); };
   function render(patch = {}) {
     props = { ...props, ...patch };
+    if (view === 'hook' && patch.isLoading === true && !workspace.getSnapshot().active?.generation) workspace.regenerate(5);
+    if (view === 'hook' && patch.streamText !== undefined) {
+      const generation = workspace.getSnapshot().active?.generation;
+      if (generation) workspace.append(generation.id, patch.streamText);
+    }
     let iterations = 0;
     do {
       dirty = false; cursor = 0; value = component(props);
@@ -79,9 +100,9 @@ export function mountSessionView(view = 'hook', invoke = async () => [], overrid
     return value;
   }
   render();
-  return { calls, render, get value() { return value; },
+  return { calls, render, workspace, get value() { return value; },
     async settle() { await flush(); render(); },
-    async save() { render({ isLoading: false }); const pending = [...timers.values()]; timers.clear(); pending.forEach((callback) => callback()); await flush(); render(); },
+    async save() { if (view === 'hook' && workspace.getSnapshot().active?.generation) workspace.finish(workspace.getSnapshot().active.generation.id); render({ isLoading: false }); const pending = [...timers.values()]; timers.clear(); pending.forEach((callback) => callback()); await flush(); render(); },
     unmount() { slots.forEach((slot) => slot?.cleanup?.()); },
   };
 }

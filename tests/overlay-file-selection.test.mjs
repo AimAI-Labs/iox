@@ -23,9 +23,9 @@ test('native file drops reach the overlay through Webview events with Tauri unst
   );
 });
 
-test('file selection opens the bubble and replaces previous text and errors', () => {
+test('file selection opens the bubble and replaces the previous selection buffer', () => {
   const layout = { width: 548, height: 232, buttons: [{ x: 12, y: 140 }] };
-  const result = overlayReducer({ ...initialOverlayState, selectedText: 'old', error: 'old error' }, {
+  const result = overlayReducer({ ...initialOverlayState, selectedText: 'old' }, {
     type: 'FILES_SELECTED', dragId: 42, files: ['C:\\文档\\报告.pdf', 'C:\\image.png'], layout,
   });
   assert.equal(result.fileDragId, 42);
@@ -34,7 +34,6 @@ test('file selection opens the bubble and replaces previous text and errors', ()
   assert.equal(result.mode, 'bubble');
   assert.deepEqual(result.selectedFiles, ['C:\\文档\\报告.pdf', 'C:\\image.png']);
   assert.equal(result.selectedText, '');
-  assert.equal(result.error, null);
 });
 
 test('text selection and completed hiding clear previous files', () => {
@@ -52,4 +51,12 @@ test('text selection and completed hiding clear previous files', () => {
   assert.equal(hidden.fileDragId, null);
   assert.equal(hidden.fileMenuLayout, null);
   assert.equal(hidden.visible, false);
+});
+
+test('opening the card changes window mode without duplicating conversation content', () => {
+  const bubble = overlayReducer(initialOverlayState, { type: 'SELECTION_TRIGGERED', text: 'original selection' });
+  const card = overlayReducer(bubble, { type: 'SHOW_CARD' });
+  assert.equal(card.mode, 'card');
+  assert.equal(card.visible, true);
+  assert.equal(card.selectedText, 'original selection');
 });

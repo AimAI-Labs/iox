@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { loadConversationModule } from './conversation-module.mjs';
+const { createConversationWorkspace } = await loadConversationModule('conversation/workspace');
+const conversationTranscript = await loadConversationModule('conversation/transcript');
 
 async function moduleAt(path) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -9,7 +12,6 @@ async function moduleAt(path) {
   return import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 }
 const client = await moduleAt('../../src/lib/actionStreamClient.ts');
-const transcript = await moduleAt('../../src/lib/chatTranscript.ts');
 const reasoning = await moduleAt('../../src/lib/reasoning.ts');
 const source = readFileSync(new URL('../../src/hooks/useActionStream.ts', import.meta.url), 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
@@ -51,8 +53,8 @@ export function mountActionStream(overrides = {}, transport = {}) {
       return () => listeners.delete(name);
     } },
     '@/lib/actionStreamClient': client,
-    '@/lib/chatTranscript': transcript,
     '@/lib/reasoning': reasoning,
+    '@/conversation/transcript': conversationTranscript,
     '@/lib/formatQuote': { formatQuoteText: (text) => text },
   };
   const exports = {};
@@ -79,8 +81,39 @@ export function mountActionStream(overrides = {}, transport = {}) {
     onNewChat: () => { updates.streamText = ''; updates.isLoading = false; },
     ...overrides,
   };
+  const workspace = createConversationWorkspace({ createId: () => `conversation-${++sequence}` });
+  if (props.activeAction) {
+    const initialAction = { name: 'Test action', icon: 'Sparkles', enabled: true, actionType: 'api', ...props.activeAction };
+    workspace.restore({ id: 'seed', title: '', actionId: initialAction.id, providerId: initialAction.providerId,
+      model: props.selectedModel, selectedText: props.selectedText, streamText: props.streamText,
+      messages: [], createdAt: 1, updatedAt: 1 }, [initialAction]);
+    workspace.forgetSession('seed');
+    workspace.chooseThinkingMode(props.thinkingMode);
+    if (props.isLoading) workspace.regenerate(5);
+  }
+  props.workspace = workspace;
+  props.selectionText = props.selectedText;
+  props.onShowCard = () => {};
+  let previous = workspace.getSnapshot().active;
+  const unsubscribe = workspace.subscribe(() => {
+    const active = workspace.getSnapshot().active;
+    const text = active ? conversationTranscript.compatibilityTranscript(active) : '';
+    const oldText = previous ? conversationTranscript.compatibilityTranscript(previous) : '';
+    if (text !== oldText) updates.streamText = text;
+    if (active?.selectedText !== previous?.selectedText) updates.selectedText = active?.selectedText ?? '';
+    updates.isLoading = Boolean(active?.generation);
+    updates.error = active?.error ?? null;
+    updates.activeAction = active?.action ?? null;
+    updates.selectedModel = active?.selectedModel ?? '';
+    previous = active;
+  });
   function render(patch = {}) {
-    props = { ...props, ...updates, ...patch };
+    props = { ...props, ...patch };
+    if ('selectedText' in patch) props.selectionText = patch.selectedText;
+    if ('activeAction' in patch && patch.activeAction?.id !== workspace.getSnapshot().active?.action.id) {
+      if (patch.activeAction) workspace.openEmpty({ name: 'Action', icon: 'Sparkles', enabled: true, ...patch.activeAction }, props.selectedModel);
+      else workspace.reset();
+    }
     cursor = 0;
     hook = exports.useActionStream(props);
     effects.splice(0).forEach((effect) => effect());
@@ -88,10 +121,10 @@ export function mountActionStream(overrides = {}, transport = {}) {
   }
   render();
   return {
-    action, calls, updates, listeners, render,
+    action, calls, updates, listeners, render, workspace,
     get hook() { return hook; },
     emit: (kind, payload) => listeners.get(`action-stream-${kind}`)?.({ payload }),
-    unmount: () => slots.forEach((slot) => slot?.cleanup?.()),
+    unmount: () => { unsubscribe(); slots.forEach((slot) => slot?.cleanup?.()); },
   };
 }
 

@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { ContextUsage } from '@/lib/chatTranscript';
+import type { ContextUsage } from '@/types/session';
 
 export function ContextMeter({ usage, isZh }: { usage: ContextUsage; isZh: boolean }) {
   const tooltipId = useId();

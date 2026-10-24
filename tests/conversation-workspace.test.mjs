@@ -1,0 +1,208 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { loadConversationModule } from './helpers/conversation-module.mjs';
+const { createConversationWorkspace } = await loadConversationModule('conversation/workspace');
+const adapter = await loadConversationModule('conversation/transcript');
+const action = { id: 'a', name: 'Action A', icon: 'Sparkles', actionType: 'api', enabled: true, providerId: 'pa', promptTemplate: 'Explain {text}' };
+function setup() {
+  assert.equal(typeof createConversationWorkspace, 'function', 'conversation owner module is required');
+  let id = 0, time = 1000;
+  return { w: createConversationWorkspace({ createId: () => `id-${++id}`, now: () => time }), time: (value) => { time = value; } };
+}
+function answer(w, text = 'answer') {
+  const g = w.getSnapshot().active.generation.id;
+  w.append(g, text); w.finish(g);
+}
+test('immutable A/B tabs retain complete identities and stop streams when switching', () => {
+  const h = setup(), { w } = h;
+  const p = w.startInitial(action, 'm1', 'selection', 'deep');
+  const first = w.getSnapshot(), a = first.active.id;
+  assert.equal(first, w.getSnapshot());
+  w.append(p.generationId, 'partial');
+  h.time(2550); w.newTab();
+  const b = w.getSnapshot().active.id;
+  assert.equal(w.getSnapshot().tabs[0].turns[0].duration, 1.6);
+  assert.equal(w.getSnapshot().tabs[0].turns[0].status, 'canceled');
+  w.chooseProvider('pb', 'm2'); w.chooseThinkingMode('max');
+  w.followUp('B question', 5); answer(w, 'B answer');
+  const savedB = w.getSnapshot().active;
+  w.select(a); w.append(p.generationId, 'late'); w.finish(p.generationId, { error: 'late' });
+  assert.equal(w.getSnapshot().active.turns[0].answer, 'partial');
+  assert.equal(w.getSnapshot().active.selectedText, 'selection');
+  assert.equal(w.getSnapshot().active.action.providerId, 'pa');
+  w.select(b); assert.deepEqual(w.getSnapshot().active, savedB);
+  assert.equal(first.active.turns[0].answer, '');
+});
+test('edit truncates only later turns and keeps earlier metadata; invalid operations are stable', () => {
+  const h = setup(), { w } = h;
+  w.startInitial(action, 'm1', 'selected'); h.time(2200); answer(w);
+  w.chooseModel('m2'); w.followUp('second', 5); h.time(4700); answer(w, 'two');
+  const previous = w.getSnapshot().active.turns[0];
+  w.followUp('third', 5); answer(w, 'three');
+  const plan = w.edit(1, 'edited\n\n```\nx\n```', 1);
+  assert.equal(w.getSnapshot().active.turns.length, 2);
+  assert.deepEqual(w.getSnapshot().active.turns[0], previous);
+  assert.equal(w.getSnapshot().active.selectedText, 'selected');
+  assert.ok(plan.text.includes('edited\n\n```'));
+  answer(w); const before = w.getSnapshot();
+  assert.equal(w.edit(20, 'bad', 5), null); w.chooseModel('  ');
+  assert.equal(w.getSnapshot(), before);
+  w.edit(0, 'new selection', 5); assert.equal(w.getSnapshot().active.selectedText, 'new selection');
+});
+test('structured persistence preserves literal markers, blank lines and code across restore', () => {
+  const { w } = setup();
+  const text = 'before\n\n---\n**追问：** literal\n\n<!-- iox:answer -->\n\n```js\nx\n```\n\n';
+  w.openEmpty(action, 'm', '', 'max'); w.followUp(text, 5); answer(w, text);
+  const save = w.beginSave(w.getSnapshot().active.id);
+  assert.equal(save.data.conversation.version, 1);
+  w.newTab(); w.restore({ ...save.data, id: 'canonical' }, []);
+  assert.equal(w.getSnapshot().active.turns[0].prompt, text);
+  assert.equal(w.getSnapshot().active.turns[0].answer, text);
+  assert.equal(w.getSnapshot().active.action.id, 'a');
+  assert.equal(w.getSnapshot().active.thinkingMode, 'max');
+  const before = w.getSnapshot();
+  assert.throws(() => w.restore({ ...save.data, conversation: { version: 99 } }, []), /version|版本/i);
+  assert.equal(w.getSnapshot(), before);
+  assert.ok(adapter.exportMarkdown(w.getSnapshot().active).includes(text));
+});
+test('legacy restore resolves recorded action and repeated session uses a single writer', () => {
+  const { w } = setup();
+  w.openEmpty(action, 'old');
+  const legacy = { id: 'old', title: 'history', actionId: 'deleted', providerId: 'p-old', model: 'm-old', selectedText: 'source', streamText: 'first\n\n---\n**追问：** question\n\nanswer', messages: [], createdAt: 1, updatedAt: 2 };
+  w.restore(legacy, [action]);
+  const restored = w.getSnapshot().active;
+  assert.equal(restored.action.id, 'deleted'); assert.equal(restored.action.actionType, 'api');
+  assert.equal(restored.action.providerId, 'p-old'); assert.equal(restored.turns[1].prompt, 'question');
+  w.newTab(); const count = w.getSnapshot().tabs.length;
+  w.restore(legacy, [action]); assert.equal(w.getSnapshot().tabs.length, count);
+  assert.equal(w.getSnapshot().active.id, restored.id);
+});
+test('save tickets serialize revisions, preserve pending id and ignore closed owners', () => {
+  const { w } = setup(); w.startInitial(action, 'm', 'q'); answer(w);
+  const id = w.getSnapshot().active.id, save = w.beginSave(id);
+  assert.equal(w.beginSave(id), null); assert.equal(w.getSnapshot().active.sessionId, null);
+  w.chooseModel('m2'); w.newTab();
+  assert.equal(w.completeSave(save.ticket, 'canonical'), true);
+  assert.equal(w.getSnapshot().active.sessionId, null);
+  assert.deepEqual(w.getSaveCandidates(), [id]);
+  const next = w.beginSave(id); assert.equal(next.data.id, 'canonical');
+  w.failSave(next.ticket); assert.deepEqual(w.getSaveCandidates(), []);
+  w.select(id); w.chooseModel('m3');
+  const retry = w.beginSave(id); assert.equal(retry.data.id, 'canonical');
+  w.close(id); assert.equal(w.completeSave(retry.ticket, 'late'), false);
+});
+test('failed new save keeps independent pending identity and retries after changes', () => {
+  const { w } = setup(); w.openEmpty(action, 'm'); w.followUp('q', 5); answer(w);
+  const id = w.getSnapshot().active.id, a = w.beginSave(id);
+  w.failSave(a.ticket); assert.deepEqual(w.getSaveCandidates(), []);
+  w.chooseModel('new'); const b = w.beginSave(id); assert.equal(a.data.id, b.data.id);
+  w.completeSave(b.ticket, 'saved'); w.forgetSession('saved');
+  assert.equal(w.getSnapshot().active.sessionId, null);
+  assert.equal(w.getSnapshot().active.turns[0].answer, 'answer');
+});
+test('canonical collisions merge only equivalent unchanged conversations', () => {
+  const { w } = setup(); w.openEmpty(action, 'm'); w.followUp('same', 5); answer(w);
+  const aId = w.getSnapshot().active.id, a = w.beginSave(aId); w.completeSave(a.ticket, 'shared');
+  w.newTab(); w.followUp('same', 5); answer(w); const b = w.beginSave(w.getSnapshot().active.id);
+  assert.equal(w.completeSave(b.ticket, 'shared'), true); assert.equal(w.getSnapshot().tabs.length, 1);
+  w.newTab(); w.followUp('different', 5); answer(w); const cId = w.getSnapshot().active.id, c = w.beginSave(cId);
+  assert.equal(w.completeSave(c.ticket, 'shared'), false);
+  assert.equal(w.getSnapshot().active.id, cId); assert.equal(w.getSnapshot().active.sessionId, null);
+  assert.deepEqual(w.getSaveCandidates(), []);
+});
+test('close operations retain active stream when removing unrelated tabs and recreate final empty tab', () => {
+  const { w } = setup(); w.openEmpty(action, 'm'); const first = w.getSnapshot().active.id;
+  w.newTab(); const second = w.getSnapshot().active.id;
+  w.newTab(); const p = w.followUp('q', 1); w.closeLeft(second);
+  assert.equal(w.getSnapshot().tabs.some(t => t.id === first), false);
+  assert.equal(w.getSnapshot().active.generation.id, p.generationId);
+  w.closeOthers(w.getSnapshot().active.id); w.close(w.getSnapshot().active.id);
+  assert.equal(w.getSnapshot().tabs.length, 1); assert.equal(w.getSnapshot().active.turns.length, 0);
+  assert.equal(w.getSnapshot().active.action.id, 'a');
+  w.reset(); assert.equal(w.getSnapshot().active, null);
+});
+test('navigation revision invalidates old history loads even across A to B to A', () => {
+  const { w } = setup(); w.openEmpty(action, 'm');
+  const a = w.getSnapshot().active.id;
+  const initial = w.getSnapshot().navigationRevision;
+  w.newTab(); const b = w.getSnapshot().active.id;
+  w.select(a); w.select(b); w.select(a);
+  assert.ok(w.getSnapshot().navigationRevision > initial);
+  const beforeGeneration = w.getSnapshot().navigationRevision;
+  const p = w.followUp('q', 5);
+  assert.ok(w.getSnapshot().navigationRevision > beforeGeneration);
+  const during = w.getSnapshot().navigationRevision;
+  w.append(p.generationId, 'answer'); w.finish(p.generationId);
+  const save = w.beginSave(a); w.completeSave(save.ticket, 'canonical');
+  assert.equal(w.getSnapshot().navigationRevision, during);
+  w.regenerate(5); assert.ok(w.getSnapshot().navigationRevision > during);
+});
+test('followup and regenerate replace running requests and revoke old events immediately', () => {
+  const h = setup(), { w } = h;
+  const a = w.startInitial(action, 'm', 'q'); w.append(a.generationId, 'partial');
+  h.time(2500); const b = w.followUp('next', 5);
+  assert.ok(b); assert.equal(w.getSnapshot().active.turns[0].duration, 1.5);
+  assert.equal(w.getSnapshot().active.turns[0].answer, 'partial');
+  w.append(b.generationId, 'replace'); const c = w.regenerate(5);
+  assert.ok(c); w.append(b.generationId, 'late'); w.finish(a.generationId, { error: 'late' });
+  assert.equal(w.getSnapshot().active.turns[1].answer, '');
+  assert.equal(w.getSnapshot().active.generation.id, c.generationId);
+});
+test('restore replaces local identity, rejects old save tickets and restores historical metadata', () => {
+  const h = setup(), { w } = h;
+  w.startInitial(action, 'm', 'q', 'deep'); h.time(3100); answer(w, 'recorded');
+  const original = w.getSnapshot().active, ticket = w.beginSave(original.id);
+  const historical = { ...ticket.data, id: 'history' };
+  w.restore(historical, []);
+  const restored = w.getSnapshot().active;
+  assert.notEqual(restored.id, original.id); assert.equal(w.getSnapshot().tabs.length, 1);
+  assert.equal(restored.turns[0].duration, 2.1); assert.equal(restored.turns[0].model, 'm');
+  assert.equal(restored.turns[0].providerId, 'pa'); assert.equal(restored.sessionId, 'history');
+  assert.deepEqual(w.getSaveCandidates(), []);
+  assert.equal(w.completeSave(ticket.ticket, 'late'), false);
+  w.newTab(); const other = w.getSnapshot().active.id;
+  w.forgetSession('history'); assert.equal(w.getSnapshot().active.id, other);
+  assert.equal(w.getSnapshot().tabs[0].sessionId, null);
+});
+test('canonical collision cannot merge later revisions or a pending writable owner', () => {
+  const { w } = setup(); w.openEmpty(action, 'm'); w.followUp('same', 5); answer(w);
+  const aId = w.getSnapshot().active.id, a = w.beginSave(aId); w.completeSave(a.ticket, 'shared');
+  w.newTab(); w.followUp('same', 5); answer(w); const bId = w.getSnapshot().active.id;
+  const b = w.beginSave(bId); w.chooseThinkingMode('deep');
+  assert.equal(w.completeSave(b.ticket, 'shared'), false);
+  assert.equal(w.getSnapshot().active.sessionId, null);
+  assert.deepEqual(w.getSaveCandidates(), []);
+  w.chooseThinkingMode('quick');
+  assert.deepEqual(w.getSaveCandidates(), [bId]);
+  w.select(aId); w.chooseThinkingMode('deep'); const pendingA = w.beginSave(aId);
+  w.chooseThinkingMode('quick');
+  w.select(bId); const pendingB = w.beginSave(bId);
+  assert.equal(pendingB.data.id, b.data.id);
+  assert.equal(w.completeSave(pendingB.ticket, 'shared'), false);
+  assert.equal(w.getSnapshot().tabs.length, 2);
+  assert.equal(w.getSnapshot().tabs[0].pendingSave.ticket, pendingA.ticket);
+});
+test('subscriptions expose stable immutable projections and context counts real structured turns', () => {
+  const { w } = setup(); let notifications = 0;
+  const unsubscribe = w.subscribe(() => notifications++);
+  w.openEmpty(action, 'm'); const empty = w.getSnapshot();
+  w.select('missing'); assert.equal(w.getSnapshot(), empty);
+  w.followUp('literal\n\n---\n**追问：** inside', 5); answer(w, 'answer');
+  const c = w.getSnapshot().active;
+  assert.equal(adapter.contextUsage(c, '', 1).usedTurns, 1);
+  assert.equal(adapter.contextUsage(c, '', 0).usedTurns, 0);
+  assert.ok(adapter.historyContext(c.turns, 1).includes(c.turns[0].prompt));
+  assert.ok(notifications > 1); unsubscribe(); const previous = notifications;
+  w.newTab(); assert.equal(notifications, previous);
+});
+test('legacy first answer without selection cannot be edited but first followup can', () => {
+  const { w } = setup();
+  w.restore({ id: 'legacy-no-selection', title: 'legacy', actionId: action.id, model: 'm',
+    selectedText: '', streamText: 'first answer', messages: [], createdAt: 1, updatedAt: 1 }, [action]);
+  const before = w.getSnapshot();
+  assert.equal(w.edit(0, 'edited', 5), null);
+  assert.equal(w.getSnapshot(), before);
+  w.openEmpty(action, 'm'); w.followUp('first question', 5); answer(w);
+  assert.ok(w.edit(0, 'edited first followup', 5));
+  assert.equal(w.getSnapshot().active.selectedText, '');
+});

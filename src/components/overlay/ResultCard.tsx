@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ActionConfig, ProviderConfig, ApiCardConfig } from '@/types/config';
+import { ProviderConfig, ApiCardConfig } from '@/types/config';
 import { CardHeader } from '@/components/overlay/CardHeader';
 import { TabItem } from '@/components/overlay/TabBar';
 import { LoadingState } from '@/components/overlay/LoadingState';
@@ -20,12 +20,13 @@ import { MessageRail } from '@/components/overlay/MessageRail';
 import { FloatingQuoteMenu } from '@/components/overlay/FloatingQuoteMenu';
 import { DynamicIcon } from '@/components/Icons';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
-import { useChatSessions } from '@/hooks/useChatSessions';
+import type { ChatSessionsView } from '@/hooks/useChatSessions';
+import type { Conversation } from '@/types/session';
 import { useTranslation } from '@/hooks/useTranslation';
 import { AlertCircle, ArrowDown, RotateCcw, Copy, Check, Brain, FileText, Wand2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { parseThinkingAndMain } from '@/lib/thinkingParser';
-import { getContextUsage, splitTranscript, splitTurnChunk } from '@/lib/chatTranscript';
+import { contextUsage as getContextUsage } from '@/conversation/transcript';
 import { collectLinksFromRoot, linksEqual, type LinkInfo } from '@/lib/links';
 import type { ThinkingMode } from '@/lib/reasoning';
 
@@ -34,19 +35,20 @@ import type { ThinkingMode } from '@/lib/reasoning';
  * ───────────────────────────────────────────────────────── */
 
 export interface ResultCardProps {
-  action: ActionConfig;
+  conversation: Conversation;
+  tabs: TabItem[];
+  activeTabId: string;
+  chatSessions: ChatSessionsView;
   providers: ProviderConfig[];
-  selectedModel: string;
-  streamText: string;
-  selectedText?: string;
-  initialInput?: string;
-  isLoading: boolean;
+  onSelectTab: (id: string) => void;
+  onCloseTab: (id: string) => void;
+  onCloseOtherTabs: (id: string) => void;
+  onCloseLeftTabs: (id: string) => void;
+  onCloseRightTabs: (id: string) => void;
   isPinned: boolean;
   isClosing?: boolean;
-  error: string | null;
   apiCard?: ApiCardConfig;
   theme?: 'system' | 'dark' | 'light';
-  thinkingMode?: ThinkingMode;
   onThemeChange?: (theme: 'system' | 'dark' | 'light') => void;
   onProviderChange?: (providerId: string) => void;
   onModelChange: (model: string) => void;
@@ -55,7 +57,6 @@ export interface ResultCardProps {
   onEditMessage?: (turnIndex: number, prompt: string) => Promise<boolean>;
   onRegenerateCurrentTurn?: () => void;
   onNewChat?: () => void;
-  onRestoreSession?: (text: string, model?: string, providerId?: string) => void;
   onExportMarkdown?: () => void;
   onOpenSettings?: () => void;
   onCancel: () => void;
@@ -117,19 +118,20 @@ function getSuggestedChips(isZh: boolean) {
 // 辅助函数 parseThinkingAndMain 已抽取至 @/lib/thinkingParser，便于复用与测试
 
 export const ResultCard: React.FC<ResultCardProps> = ({
-  action,
+  conversation,
+  tabs,
+  activeTabId,
+  chatSessions,
+  onSelectTab,
+  onCloseTab,
+  onCloseOtherTabs,
+  onCloseLeftTabs,
+  onCloseRightTabs,
   providers,
-  selectedModel,
-  streamText,
-  selectedText = '',
-  initialInput = '',
-  isLoading,
   isPinned,
   isClosing = false,
-  error,
   apiCard,
   theme = 'system',
-  thinkingMode = 'quick',
   onThemeChange,
   onProviderChange,
   onModelChange,
@@ -138,7 +140,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   onEditMessage,
   onRegenerateCurrentTurn,
   onNewChat,
-  onRestoreSession,
   onExportMarkdown,
   onOpenSettings,
   onCancel,
@@ -146,6 +147,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   onClose,
   onResetSize,
 }) => {
+  const { action, selectedModel, selectedText, initialInput, thinkingMode, error } = conversation;
+  const isLoading = conversation.generation !== null;
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
   const suggestedChips = getSuggestedChips(isZh);
@@ -154,8 +157,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   const [followUpInput, setFollowUpInput] = useState(initialInput || '');
   const [editingTurnIndex, setEditingTurnIndex] = useState<number | null>(null);
   const contextUsage = useMemo(
-    () => getContextUsage(streamText, selectedText, followUpInput, apiCard?.contextTurns ?? 5),
-    [streamText, selectedText, followUpInput, apiCard?.contextTurns]
+    () => getContextUsage(conversation, followUpInput, apiCard?.contextTurns ?? 5),
+    [conversation, followUpInput, apiCard?.contextTurns]
   );
   const [isThinkingOpen, setIsThinkingOpen] = useState(apiCard?.thinkingDefaultOpen ?? true);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -198,240 +201,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     y: 0,
     visible: false,
     text: '',
-  });
-
-  // 记录每个会话轮次对应的模型名称与独立耗时快照 (解耦全局 selectedModel)
-  const [turnSnapshots, setTurnSnapshots] = useState<
-    Record<string, { model: string; duration?: number }>
-  >({});
-
-  // 顶部原生多会话 Tab 列表
-  const [tabs, setTabs] = useState<TabItem[]>(() => [
-    {
-      id: `tab_init_${Date.now()}`,
-      title: action.name || t('card.newChat'),
-      actionId: action.id,
-      providerId: action.providerId,
-      model: selectedModel || 'default',
-      selectedText,
-      streamText,
-      isLoading,
-      turnSnapshots: {},
-    },
-  ]);
-  const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0]?.id || 'tab_init');
-
-  // 记录上一次激活的 Tab ID，用于在切换/新建 Tab 时精准阻断跨会话陈旧数据污染
-  const lastActiveTabIdRef = useRef<string>(activeTabId);
-
-  // 当当前活动 Tab 的 streamText / selectedText / isLoading / turnSnapshots 变化时，实时同步到 tabs 数组中
-  useEffect(() => {
-    // 若当前 render 是由于用户切换/新建 Tab 触发的，不使用上一个 Tab 的旧 props 覆写当前 Tab
-    if (activeTabId !== lastActiveTabIdRef.current) {
-      lastActiveTabIdRef.current = activeTabId;
-      return;
-    }
-
-    setTabs((prev) =>
-      prev.map((t) => {
-        if (t.id === activeTabId) {
-          return {
-            ...t,
-            streamText,
-            selectedText,
-            isLoading,
-            model: selectedModel,
-            turnSnapshots,
-          };
-        }
-        return t;
-      })
-    );
-  }, [activeTabId, streamText, selectedText, isLoading, selectedModel, turnSnapshots]);
-
-  // 新建 Tab
-  const handleNewTab = React.useCallback(() => {
-    const newId = `tab_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const newTab: TabItem = {
-      id: newId,
-      title: t('card.newChat'),
-      actionId: action.id,
-      providerId: action.providerId,
-      model: selectedModel || 'default',
-      selectedText: '',
-      streamText: '',
-      isLoading: false,
-      turnSnapshots: {},
-    };
-    lastActiveTabIdRef.current = newId;
-    setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(newId);
-    setTurnSnapshots({});
-    setTotalDuration(undefined);
-    setFollowUpInput('');
-    onNewChat?.();
-  }, [action.id, action.providerId, selectedModel, onNewChat, t]);
-
-  // 切换 Tab
-  const handleSelectTab = React.useCallback(
-    (tabId: string) => {
-      if (tabId === activeTabId) return;
-      const target = tabs.find((t) => t.id === tabId);
-      if (!target) return;
-
-      lastActiveTabIdRef.current = tabId;
-      setActiveTabId(tabId);
-      setFollowUpInput('');
-      setTurnSnapshots(target.turnSnapshots || {});
-      setTotalDuration(undefined);
-      onRestoreSession?.(target.streamText, target.model, target.providerId);
-    },
-    [activeTabId, tabs, onRestoreSession]
-  );
-
-  // 关闭单 Tab
-  const handleCloseTab = React.useCallback(
-    (tabId: string) => {
-      setTabs((prev) => {
-        if (prev.length <= 1) {
-          const newId = `tab_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-          lastActiveTabIdRef.current = newId;
-          setActiveTabId(newId);
-          setTurnSnapshots({});
-          setTotalDuration(undefined);
-          setFollowUpInput('');
-          onNewChat?.();
-          return [
-            {
-              id: newId,
-              title: t('card.newChat'),
-              actionId: action.id,
-              providerId: action.providerId,
-              model: selectedModel || 'default',
-              selectedText: '',
-              streamText: '',
-              isLoading: false,
-              turnSnapshots: {},
-            },
-          ];
-        }
-
-        const closingIndex = prev.findIndex((t) => t.id === tabId);
-        const filtered = prev.filter((t) => t.id !== tabId);
-        if (tabId === activeTabId) {
-          const nextActive =
-            filtered[Math.min(closingIndex, filtered.length - 1)] || filtered[0];
-          if (nextActive) {
-            lastActiveTabIdRef.current = nextActive.id;
-            setActiveTabId(nextActive.id);
-            setFollowUpInput('');
-            setTurnSnapshots(nextActive.turnSnapshots || {});
-            setTotalDuration(undefined);
-            onRestoreSession?.(nextActive.streamText, nextActive.model, nextActive.providerId);
-          }
-        }
-        return filtered;
-      });
-    },
-    [activeTabId, action.id, action.providerId, selectedModel, onNewChat, onRestoreSession, t]
-  );
-
-  // 关闭其他 Tab
-  const handleCloseOtherTabs = React.useCallback(
-    (tabId: string) => {
-      setTabs((prev) => {
-        const keepTab = prev.find((t) => t.id === tabId);
-        if (!keepTab) return prev;
-        lastActiveTabIdRef.current = keepTab.id;
-        setActiveTabId(keepTab.id);
-        setFollowUpInput('');
-        setTurnSnapshots(keepTab.turnSnapshots || {});
-        setTotalDuration(undefined);
-        onRestoreSession?.(keepTab.streamText, keepTab.model, keepTab.providerId);
-        return [keepTab];
-      });
-    },
-    [onRestoreSession]
-  );
-
-  // 关闭左侧 Tab
-  const handleCloseLeftTabs = React.useCallback(
-    (tabId: string) => {
-      setTabs((prev) => {
-        const targetIndex = prev.findIndex((t) => t.id === tabId);
-        if (targetIndex <= 0) return prev;
-        const currentActiveIndex = prev.findIndex((t) => t.id === activeTabId);
-        // 如果当前活跃 Tab 位于被关闭的左侧区域，切换至目标 Tab
-        if (currentActiveIndex < targetIndex) {
-          const targetTab = prev[targetIndex];
-          lastActiveTabIdRef.current = targetTab.id;
-          setActiveTabId(targetTab.id);
-          setFollowUpInput('');
-          setTurnSnapshots(targetTab.turnSnapshots || {});
-          setTotalDuration(undefined);
-          onRestoreSession?.(targetTab.streamText, targetTab.model, targetTab.providerId);
-        }
-        return prev.slice(targetIndex);
-      });
-    },
-    [activeTabId, onRestoreSession]
-  );
-
-  // 关闭右侧 Tab
-  const handleCloseRightTabs = React.useCallback(
-    (tabId: string) => {
-      setTabs((prev) => {
-        const targetIndex = prev.findIndex((t) => t.id === tabId);
-        if (targetIndex === -1 || targetIndex >= prev.length - 1) return prev;
-        const currentActiveIndex = prev.findIndex((t) => t.id === activeTabId);
-        // 如果当前活跃 Tab 位于被关闭的右侧区域，切换至目标 Tab
-        if (currentActiveIndex > targetIndex) {
-          const targetTab = prev[targetIndex];
-          lastActiveTabIdRef.current = targetTab.id;
-          setActiveTabId(targetTab.id);
-          setFollowUpInput('');
-          setTurnSnapshots(targetTab.turnSnapshots || {});
-          setTotalDuration(undefined);
-          onRestoreSession?.(targetTab.streamText, targetTab.model, targetTab.providerId);
-        }
-        return prev.slice(0, targetIndex + 1);
-      });
-    },
-    [activeTabId, onRestoreSession]
-  );
-
-  // 多会话管理 Hook
-  const chatSessions = useChatSessions({
-    activeAction: action,
-    selectedModel,
-    selectedText,
-    streamText,
-    isLoading,
-    onRestoreSession: (saved) => {
-      setTurnSnapshots({
-        'turn-0': { model: saved.model },
-      });
-      setTabs((prev) =>
-        prev.map((t) =>
-          t.id === activeTabId
-            ? {
-                ...t,
-                title: saved.title || (isZh ? '历史会话' : 'Chat History'),
-                streamText: saved.streamText,
-                model: saved.model,
-                providerId: saved.providerId,
-              }
-            : t
-        )
-      );
-      onRestoreSession?.(saved.streamText, saved.model, saved.providerId);
-    },
-    onResetToNewChat: () => {
-      setTurnSnapshots({});
-      setTotalDuration(undefined);
-      setFollowUpInput('');
-      onNewChat?.();
-    },
   });
 
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -504,10 +273,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     }, 50);
   }, [quoteMenu.text]);
 
-  // 耗时计时
-  const [totalDuration, setTotalDuration] = useState<number | undefined>(undefined);
-  const requestStartTimeRef = useRef<number | null>(null);
-
   // 底部模型切换器只展示已启用的服务商配置
   const enabledProviders = useMemo(
     () => providers.filter((p) => p.enabled !== false),
@@ -558,36 +323,11 @@ export const ResultCard: React.FC<ResultCardProps> = ({
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [handleRegenerate]);
 
-  // 结构化多轮对话气泡流 (Conversation Turns)
-  const conversationTurns = useMemo(() => {
-    const parts = splitTranscript(streamText);
-    if (parts.length <= 1) {
-      return [
-        {
-          id: 'turn-0',
-          userPrompt: '',
-          rawAssistantText: streamText,
-        },
-      ];
-    }
-
-    return parts.map((part, index) => {
-      if (index === 0) {
-        return {
-          id: 'turn-0',
-          userPrompt: '',
-          rawAssistantText: part,
-        };
-      }
-
-      const { prompt, answer } = splitTurnChunk(part);
-      return {
-        id: `turn-${index}`,
-        userPrompt: prompt,
-        rawAssistantText: answer,
-      };
-    });
-  }, [streamText]);
+  const conversationTurns = useMemo(() => conversation.turns.map((turn) => ({
+    ...turn,
+    userPrompt: turn.kind === 'selection' ? '' : turn.prompt,
+    rawAssistantText: turn.answer,
+  })), [conversation.turns]);
 
   // 从各轮已渲染的正文独立收集外链，避免跨轮次混合
   useEffect(() => {
@@ -602,7 +342,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         ? prev
         : next
     );
-  }, [streamText, error, activeTabId]);
+  }, [conversation.turns, error, activeTabId]);
 
   // 回答被清空或切换会话后收起链接详情栏
   useEffect(() => {
@@ -610,43 +350,21 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   }, [answerLinks.length]);
 
   useEffect(() => {
+    setFollowUpInput(initialInput);
     setActiveLinkTurnId(null);
+    setLinksByTurn({});
     setEditingTurnIndex(null);
-  }, [activeTabId]);
-
-  // 监听请求起止以计算总耗时并快照记录本轮的模型与耗时
-  useEffect(() => {
-    const currentTurnId = `turn-${Math.max(0, conversationTurns.length - 1)}`;
-    if (isLoading) {
-      if (requestStartTimeRef.current === null) {
-        requestStartTimeRef.current = Date.now();
-      }
-      setTotalDuration(undefined);
-      setTurnSnapshots((prev) => ({
-        ...prev,
-        [currentTurnId]: {
-          model: prev[currentTurnId]?.model || selectedModel,
-          duration: prev[currentTurnId]?.duration,
-        },
-      }));
-    } else if (requestStartTimeRef.current !== null) {
-      const sec = parseFloat(((Date.now() - requestStartTimeRef.current) / 1000).toFixed(1));
-      setTotalDuration(sec);
-      requestStartTimeRef.current = null;
-      setTurnSnapshots((prev) => ({
-        ...prev,
-        [currentTurnId]: {
-          model: prev[currentTurnId]?.model || selectedModel,
-          duration: sec,
-        },
-      }));
-    }
-  }, [isLoading, selectedModel, conversationTurns.length]);
+    setContextMenu({ x: 0, y: 0, visible: false });
+    setQuoteMenu({ x: 0, y: 0, visible: false, text: '' });
+    isAutoScrollRef.current = true;
+    // Drafts and menus belong to the visible conversation; stream updates preserve the draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation.id]);
 
   // 解析当前最新的思维链与正文状态
   const { thinkingText, mainText, isThinking } = useMemo(() => {
-    return parseThinkingAndMain(streamText);
-  }, [streamText]);
+    return parseThinkingAndMain(conversation.turns[conversation.turns.length - 1]?.answer ?? '');
+  }, [conversation.turns]);
 
   // 当处于思考中时根据配置展开，思考结束后根据配置自动收起
   const prevThinkingRef = useRef(isThinking);
@@ -679,7 +397,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [streamText, isLoading, thinkingText, isThinkingOpen, linksByTurn]);
+  }, [conversation.turns, isLoading, thinkingText, isThinkingOpen, linksByTurn]);
 
   const handleWheel = (event: React.WheelEvent) => {
     if (event.deltaX || event.deltaY) isAutoScrollRef.current = false;
@@ -699,16 +417,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   const handleFollowUpSubmit = (prompt: string) => {
     if (!prompt.trim() || isLoading) return;
-    const trimmed = prompt.trim();
-    // 提交问题时，若当前标签页仍为默认「新对话」或动作名，即时将标题设定为问题内容
-    setTabs((prev) =>
-      prev.map((t) =>
-        t.id === activeTabId && (!t.title || t.title === '新对话' || t.title === 'New Chat' || t.title === action.name)
-          ? { ...t, title: trimmed.slice(0, 12) }
-          : t
-      )
-    );
-    onSendFollowUp(trimmed);
+    onSendFollowUp(prompt);
     setFollowUpInput('');
     isAutoScrollRef.current = true;
   };
@@ -719,11 +428,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 
   const handleEditSubmit = async (turnIndex: number, prompt: string) => {
     if (!onEditMessage || isLoading || !prompt.trim() || !selectedModel.trim()) return;
-    setTurnSnapshots((prev) => Object.fromEntries(
-      Object.entries(prev).filter(([id]) => Number(id.slice(5)) < turnIndex)
-    ));
-    setTotalDuration(undefined);
-    requestStartTimeRef.current = null;
     setActiveLinkTurnId(null);
     isAutoScrollRef.current = true;
     if (await onEditMessage(turnIndex, prompt)) setEditingTurnIndex(null);
@@ -752,13 +456,13 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         title={action.name}
         tabs={tabs}
         activeTabId={activeTabId}
-        onSelectTab={handleSelectTab}
-        onCloseTab={handleCloseTab}
-        onCloseOtherTabs={handleCloseOtherTabs}
-        onCloseLeftTabs={handleCloseLeftTabs}
-        onCloseRightTabs={handleCloseRightTabs}
-        onNewTab={handleNewTab}
-        onNewChat={handleNewTab}
+        onSelectTab={onSelectTab}
+        onCloseTab={onCloseTab}
+        onCloseOtherTabs={onCloseOtherTabs}
+        onCloseLeftTabs={onCloseLeftTabs}
+        onCloseRightTabs={onCloseRightTabs}
+        onNewTab={onNewChat}
+        onNewChat={onNewChat}
         onToggleSessions={chatSessions.togglePanel}
         tools={
           mainText ? (
@@ -812,7 +516,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
           />
         )}
 
-        {!streamText && !isLoading && !error ? (
+        {conversationTurns.length === 0 && !isLoading && !error ? (
           /* 聚焦型新对话欢迎看板 (Empty State) */
           <div className="flex flex-col items-center justify-center h-full min-h-[220px] px-4 py-8 text-center select-none animate-in fade-in zoom-in-95 duration-200">
             <div className="flex size-12 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/60 shadow-xs mb-3">
@@ -846,36 +550,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
               ))}
             </div>
           </div>
-        ) : error ? (
-          /* BUI 错误提示卡 */
-          <div className="flex flex-col gap-2 rounded-[10px] border border-red-500/20 bg-red-500/5 p-3 text-red-600 dark:text-red-400 animate-fade-up">
-            <div className="flex items-center gap-2 text-[13px] font-medium">
-              <AlertCircle size={14} className="shrink-0" />
-              <span>{t('card.errorOccurred')}</span>
-            </div>
-            <p className="pl-6 text-[12px] leading-relaxed break-words opacity-90">
-              {error}
-            </p>
-            <div className="flex items-center gap-1.5 pl-6">
-              <button
-                type="button"
-                onClick={handleRegenerate}
-                className="inline-flex h-6 items-center gap-1 rounded-[6px] bg-red-500/90 px-2 text-[11.5px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-red-500 active:scale-[0.96] cursor-pointer"
-              >
-                <RotateCcw size={11} />
-                <span>{t('card.retry')}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => copy(error)}
-                className="inline-flex h-6 items-center gap-1 rounded-[6px] bg-field px-2 text-[11.5px] text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink active:scale-[0.96] cursor-pointer"
-              >
-                <Copy size={11} />
-                <span>{t('card.copyError')}</span>
-              </button>
-            </div>
-          </div>
-        ) : streamText ? (
+        ) : conversationTurns.length > 0 ? (
           /* 正常对话流渲染 */
           <div className="flex flex-col gap-3">
             {conversationTurns.map((turn, index) => {
@@ -886,9 +561,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                 isThinking: turnIsThinking,
               } = parseThinkingAndMain(turn.rawAssistantText);
 
-              const turnInfo = turnSnapshots[turn.id];
-              const displayTurnModel = turnInfo?.model || selectedModel;
-              const displayTurnDuration = turnInfo?.duration ?? (isLast && !isLoading ? totalDuration : undefined);
+              const displayTurnModel = turn.model;
+              const displayTurnDuration = turn.duration;
 
               return (
                 <div key={turn.id} className="flex flex-col gap-1.5">
@@ -954,6 +628,10 @@ export const ResultCard: React.FC<ResultCardProps> = ({
                         </div>
                       )}
 
+                      {isLast && isLoading && !turnThinking && !turnMain && !turnIsThinking && (
+                        <LoadingState onCancel={onCancel} />
+                      )}
+
                       {/* 最后一轮完成时的结果工具栏 */}
                       {isLast && !isLoading && turnMain && (
                         <ResponseToolbar
@@ -986,11 +664,42 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             <LoadingState onCancel={onCancel} />
           </div>
         ) : null}
+        {error && (
+          /* BUI 错误提示卡 */
+          <div className="flex flex-col gap-2 rounded-[10px] border border-red-500/20 bg-red-500/5 p-3 text-red-600 dark:text-red-400 animate-fade-up">
+            <div className="flex items-center gap-2 text-[13px] font-medium">
+              <AlertCircle size={14} className="shrink-0" />
+              <span>{t('card.errorOccurred')}</span>
+            </div>
+            <p className="pl-6 text-[12px] leading-relaxed break-words opacity-90">
+              {error}
+            </p>
+            <div className="flex items-center gap-1.5 pl-6">
+              <button
+                type="button"
+                onClick={handleRegenerate}
+                className="inline-flex h-6 items-center gap-1 rounded-[6px] bg-red-500/90 px-2 text-[11.5px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-red-500 active:scale-[0.96] cursor-pointer"
+              >
+                <RotateCcw size={11} />
+                <span>{t('card.retry')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => copy(error)}
+                className="inline-flex h-6 items-center gap-1 rounded-[6px] bg-field px-2 text-[11.5px] text-ink-2 transition-colors duration-100 hover:bg-hover hover:text-ink active:scale-[0.96] cursor-pointer"
+              >
+                <Copy size={11} />
+                <span>{t('card.copyError')}</span>
+              </button>
+            </div>
+          </div>
+
+        )}
         </div>
 
         <MessageRail
           scrollRef={bodyRef}
-          refreshKey={`${streamText.length}:${selectedText.length}:${activeTabId}`}
+          refreshKey={`${conversation.turns.length}:${conversation.turns[conversation.turns.length - 1]?.answer.length ?? 0}:${selectedText.length}:${activeTabId}`}
         />
         {showScrollToBottom && <button
           type="button"
@@ -1042,7 +751,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({
         y={contextMenu.y}
         visible={contextMenu.visible}
         hasSelectionText={Boolean(selectedText || window.getSelection()?.toString())}
-        hasAnswerText={Boolean(mainText || streamText)}
+        hasAnswerText={conversation.turns.some((turn) => Boolean(turn.answer))}
         isPinned={isPinned}
         isMaximized={isMaximized}
         currentTheme={theme}

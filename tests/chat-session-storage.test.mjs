@@ -119,3 +119,107 @@ test('an update that fails retains the previously committed session ID', async (
   assert.equal(h.value.currentSessionId, 'saved');
   assert.equal(h.value.storageError, 'save');
 });
+
+
+test('save acknowledgement belongs to the original workspace conversation after a tab switch', async (t) => {
+  const pending = deferred();
+  const h = mountSessionView('hook', async (command) => command === 'save_chat_session' ? pending.promise : []);
+  t.after(h.unmount);
+  const first = h.workspace.getSnapshot().activeId;
+  await h.save(); h.workspace.newTab(); h.render();
+  const second = h.workspace.getSnapshot().activeId;
+  pending.resolve('canonical-A'); await h.settle();
+  assert.equal(h.workspace.getSnapshot().activeId, second);
+  assert.equal(h.workspace.getSnapshot().tabs.find((tab) => tab.id === first).sessionId, 'canonical-A');
+  assert.equal(h.workspace.getSnapshot().active.sessionId, null);
+});
+
+test('only the latest history load restores a conversation, including A to B to A navigation', async (t) => {
+  const first = deferred(), second = deferred();
+  let loads = 0;
+  const h = mountSessionView('hook', async (command) => command === 'get_chat_session' ? (++loads === 1 ? first.promise : second.promise) : []);
+  t.after(h.unmount);
+  const loadingA = h.value.handleSwitchSession('A');
+  const loadingB = h.value.handleSwitchSession('B');
+  second.resolve({ ...saved, id: 'B', actionId: 'other', selectedText: 'selection B', model: 'model B' });
+  await loadingB; h.render();
+  first.resolve({ ...saved, id: 'A' }); await loadingA; h.render();
+  assert.equal(h.workspace.getSnapshot().active.sessionId, 'B');
+  assert.equal(h.workspace.getSnapshot().active.selectedText, 'selection B');
+  assert.equal(h.workspace.getSnapshot().active.action.id, 'other');
+
+  const delayed = deferred();
+  const other = mountSessionView('hook', async (command) => command === 'get_chat_session' ? delayed.promise : []);
+  t.after(other.unmount);
+  const original = other.workspace.getSnapshot().activeId;
+  const load = other.value.handleSwitchSession('saved');
+  other.workspace.newTab(); other.workspace.select(original);
+  delayed.resolve(saved); await load; other.render();
+  assert.equal(other.workspace.getSnapshot().activeId, original);
+  assert.equal(other.workspace.getSnapshot().active.sessionId, null);
+});
+
+test('save transport is serial per conversation and uses canonical identity for the next revision', async (t) => {
+  const first = deferred(); let writes = 0;
+  const h = mountSessionView('hook', async (command) => command === 'save_chat_session' ? (++writes === 1 ? first.promise : 'canonical') : []);
+  t.after(h.unmount); await h.save();
+  const plan = h.workspace.followUp('new question', 5);
+  h.workspace.append(plan.generationId, 'new answer'); h.workspace.finish(plan.generationId);
+  await h.save(); assert.equal(writes, 1);
+  first.resolve('canonical'); await h.settle(); await h.save();
+  assert.equal(writes, 2);
+  const latest = h.calls.filter((call) => call.command === 'save_chat_session').at(-1).args.session;
+  assert.equal(latest.id, 'canonical');
+  assert.equal(latest.conversation.turns.at(-1).answer, 'new answer');
+});
+
+test('closing a tab before save acknowledgement cannot bind the replacement tab', async (t) => {
+  const pending = deferred();
+  const h = mountSessionView('hook', async (command) => command === 'save_chat_session' ? pending.promise : []);
+  t.after(h.unmount); await h.save();
+  const old = h.workspace.getSnapshot().activeId;
+  h.workspace.close(old); h.render();
+  const replacement = h.workspace.getSnapshot().activeId;
+  pending.resolve('old-canonical'); await h.settle();
+  assert.equal(h.workspace.getSnapshot().activeId, replacement);
+  assert.equal(h.workspace.getSnapshot().active.sessionId, null);
+  assert.equal(h.value.storageError, null);
+});
+
+test('deleting waits for an in-flight update and does not auto-save deleted content again', async (t) => {
+  const pending = deferred(); let writes = 0;
+  const h = mountSessionView('hook', async (command) => {
+    if (command === 'save_chat_session') return ++writes === 1 ? 'saved' : pending.promise;
+    return [];
+  });
+  t.after(h.unmount); await h.save();
+  h.workspace.regenerate(5); await h.save();
+  const deleting = h.value.handleDeleteSession(event, 'saved'); await h.settle();
+  assert.equal(h.calls.filter((call) => call.command === 'delete_chat_session').length, 0);
+  pending.resolve('saved'); await deleting; await h.settle(); await h.save();
+  assert.equal(h.calls.filter((call) => call.command === 'delete_chat_session').length, 1);
+  assert.equal(writes, 2);
+  assert.equal(h.workspace.getSnapshot().active.sessionId, null);
+});
+
+test('unsupported structured history reports a load failure without replacing the active conversation', async (t) => {
+  const h = mountSessionView('hook', async (command) => command === 'get_chat_session' ? { ...saved, conversation: { version: 99 } } : []);
+  t.after(h.unmount); const original = h.workspace.getSnapshot();
+  await h.value.handleSwitchSession('saved'); h.render();
+  assert.equal(h.workspace.getSnapshot().activeId, original.activeId);
+  assert.equal(h.workspace.getSnapshot().active.turns[0].answer, original.active.turns[0].answer);
+  assert.equal(h.workspace.getSnapshot().active.generation, null);
+  assert.equal(h.value.storageError, 'load');
+});
+
+test('a history selection revokes the running generation before the read completes', async (t) => {
+  const pending = deferred();
+  const h = mountSessionView('hook', async (command) => command === 'get_chat_session' ? pending.promise : []);
+  t.after(h.unmount);
+  const existing = h.workspace.getSnapshot().active;
+  const loading = h.value.handleSwitchSession('saved');
+  assert.equal(h.workspace.getSnapshot().active.generation, null);
+  assert.equal(h.workspace.getSnapshot().active.id, existing.id);
+  assert.equal(h.workspace.getSnapshot().active.turns[0].answer, existing.turns[0].answer);
+  pending.resolve(saved); await loading;
+});

@@ -36,10 +36,6 @@ test('other providers and missing providers do not receive DeepSeek reasoning pa
 });
 
 test('initial answers, follow-ups and both regenerate paths use the selected effort', async () => {
-  const transcriptSource = readFileSync(new URL('../src/lib/chatTranscript.ts', import.meta.url), 'utf8');
-  const transcriptJs = ts.transpileModule(transcriptSource, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
-  const transcript = await import(`data:text/javascript;base64,${Buffer.from(transcriptJs).toString('base64')}`);
-
   for (const mode of THINKING_LEVELS) {
     const provider = { id: 'deepseek', baseUrl: 'https://api.deepseek.com', models: ['deepseek-flash'], defaultModel: 'deepseek-flash' };
     const action = { id: 'test', actionType: 'api', providerId: provider.id, promptTemplate: '{text}' };
@@ -52,7 +48,7 @@ test('initial answers, follow-ups and both regenerate paths use the selected eff
     await mounted.hook.handleTriggerAction(action);
     await mounted.hook.handleSendFollowUp('follow-up');
     await mounted.hook.handleRegenerateCurrentTurn();
-    const multiTurn = mountActionStream({ ...props, streamText: `answer${transcript.createFollowUpChunk('follow-up')}second answer` });
+    const multiTurn = mountActionStream({ ...props, streamText: `answer\n\n---\n**追问：** follow-up\n\n<!-- iox:answer -->\n\nsecond answer` });
     await multiTurn.hook.handleRegenerateCurrentTurn();
     const calls = [...mounted.calls, ...multiTurn.calls].filter((call) => call.command === 'trigger_api_action');
     assert.equal(calls.length, 4);
