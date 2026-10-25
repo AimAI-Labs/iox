@@ -48,7 +48,9 @@
 .web-floating-menu[data-expanded="true"]:has(.web-menu-grip:active) { border-color: hsl(var(--primary) / 40%); }
 /* The button shares one fixed canvas and offset with the hover actions. */
 .web-menu-header { display: flex; align-items: center; width: 44px; height: 44px; flex-shrink: 0; box-sizing: border-box; background: transparent; }
-.web-floating-menu[data-expanded="true"] .web-menu-header { width: auto; height: 46px; gap: 4px; padding: 6px; border: none; border-bottom: 1px solid var(--line); border-radius: 0; background: linear-gradient(180deg, hsl(var(--primary) / 4%), transparent); }
+.web-floating-menu[data-expanded="true"] .web-menu-header { width: auto; height: 44px; gap: 4px; padding: 5px 6px; border: none; border-bottom: 1px solid var(--line); border-radius: 0; background: linear-gradient(180deg, hsl(var(--primary) / 4%), transparent); }
+.web-floating-menu[data-upward="true"] { flex-direction: column-reverse; }
+.web-floating-menu[data-upward="true"] .web-menu-header { border-top: 1px solid var(--line); border-bottom: none; background: linear-gradient(0deg, hsl(var(--primary) / 4%), transparent); }
 .web-menu-trigger, .web-menu-grip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; height: 42px; color: var(--ink-2); touch-action: none; }
 .web-menu-trigger { position: relative; width: 42px; cursor: grab; }
 .web-floating-menu[data-expanded="false"] .web-menu-trigger { width: 44px; height: 44px; }

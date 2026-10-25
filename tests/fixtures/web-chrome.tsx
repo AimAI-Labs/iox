@@ -71,26 +71,41 @@ if (params.has('settings')) {
     hubState: { tabs: actions.slice(0, 3).map((action) => ({ actionId: action.id, name: action.name, icon: action.icon, url: 'https://example.test/' })), activeTabId: 'beta' },
     onChrome: (_layout: WebChromeLayout) => {},
     onHub: (_state: unknown) => {},
-    place(changes: WebMenuChange = {}) {
+    place(changes: WebMenuChange = {}, reflow = false) {
       const old = fixture.layout.menu;
       const wheel = fixture.layout.headless && (changes.wheel ?? (changes.expanded === undefined && old.wheel));
       const expanded = fixture.layout.headless && !wheel && (changes.expanded ?? old.expanded);
       const width = Math.max(1, Math.min(280, innerWidth - 24));
-      const height = Math.max(1, Math.min(expanded ? (hub ? 560 : 360) : 280, innerHeight - 24));
+      let height = Math.max(1, Math.min(expanded ? (hub ? 560 : 360) : 280, innerHeight - 24));
       const buttonPosition = !expanded && !wheel ? changes.position : undefined;
       const anchorX = buttonPosition?.[0] ?? old.x + old.buttonX;
-      const anchorY = buttonPosition?.[1] ?? old.y + old.buttonY;
+      let anchorY = buttonPosition?.[1] ?? old.y + old.buttonY;
+      let upward = expanded && old.expanded && old.buttonY > 0;
+      if (expanded) {
+        if (old.expanded && !reflow) height = Math.min(height, old.height);
+        if (!changes.position) {
+          const buttonHeight = Math.min(44, height);
+          const minAnchorY = Math.min(12, Math.max(0, innerHeight - buttonHeight));
+          anchorY = Math.max(minAnchorY, Math.min(anchorY, Math.max(minAnchorY, innerHeight - 12 - buttonHeight)));
+          const below = Math.max(1, innerHeight - 12 - anchorY);
+          const above = Math.max(1, anchorY + buttonHeight - 12);
+          const available = upward ? above : below;
+          const opposite = upward ? below : above;
+          if (opposite > available && (available < 160 || (reflow && available < height))) upward = !upward;
+          height = Math.min(height, upward ? above : below);
+        }
+      }
       const retained = !expanded && !old.expanded && !changes.position && width === old.width && height === old.height
         && old.x + width <= innerWidth && old.y + height <= innerHeight;
       const panelPosition = expanded || wheel ? changes.position : undefined;
       const [x, y] = retained ? [old.x, old.y] : panelPosition
-        ?? [anchorX - (expanded ? width - 44 : (width - 44) / 2), anchorY - (expanded ? 0 : (height - 44) / 2)];
+        ?? [anchorX - (expanded ? width - 44 : (width - 44) / 2), anchorY - (expanded ? (upward ? Math.max(0, height - 44) : 0) : (height - 44) / 2)];
       const left = Math.max(12, Math.min(x, innerWidth - width - 12));
       const top = Math.max(12, Math.min(y, innerHeight - height - 12));
       const menu = {
         x: left, y: top, width, height, expanded, wheel,
         buttonX: !expanded ? Math.max(0, Math.min(width - 44, anchorX - left)) : width - 44,
-        buttonY: !expanded ? Math.max(0, Math.min(height - 44, anchorY - top)) : 0,
+        buttonY: !expanded ? Math.max(0, Math.min(height - 44, anchorY - top)) : (upward ? Math.max(0, height - 44) : 0),
       };
       fixture.layout = { revision: fixture.layout.revision + 1, headless: fixture.layout.headless, menu };
       Object.assign(bar.style, fixture.layout.headless ? {
@@ -141,7 +156,7 @@ if (params.has('settings')) {
     },
   };
   Object.assign(window, { chromeFixture: fixture });
-  window.addEventListener('resize', () => fixture.place());
+  window.addEventListener('resize', () => fixture.place({}, true));
   window.addEventListener('storage', (event) => {
     if (event.key === 'web-wheel-fixture-pins' && event.newValue) fixture.setPins(JSON.parse(event.newValue));
   });

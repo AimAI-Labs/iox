@@ -9,6 +9,7 @@ use crate::AppState;
 pub const TITLEBAR_HEIGHT: f64 = 38.0;
 const MENU_BUTTON_SIZE: f64 = 44.0;
 const MENU_MARGIN: f64 = 12.0;
+const MENU_MIN_OPEN_HEIGHT: f64 = 160.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +40,7 @@ fn calculate_menu_layout(
     wheel: Option<bool>,
     position: Option<(f64, f64)>,
     hub: bool,
+    reflow: bool,
 ) -> Result<MenuLayout, String> {
     if !viewport.0.is_finite() || !viewport.1.is_finite() {
         return Err("Invalid menu viewport".into());
@@ -61,7 +63,46 @@ fn calculate_menu_layout(
         280.0
     };
     let width = f64::min(width, (viewport.0 - MENU_MARGIN * 2.0).max(1.0));
-    let height = f64::min(height, (viewport.1 - MENU_MARGIN * 2.0).max(1.0));
+    let mut height = f64::min(height, (viewport.1 - MENU_MARGIN * 2.0).max(1.0));
+    let mut anchor = previous.map_or(
+        (viewport.0 - MENU_BUTTON_SIZE - MENU_MARGIN, MENU_MARGIN),
+        |old| (old.x + old.button_x, old.y + old.button_y),
+    );
+    if !expanded && !wheel {
+        if let Some(button_position) = position {
+            // Collapsed dragging still receives the button's coordinates, not canvas bounds.
+            anchor = button_position;
+        }
+    }
+    let mut upward = previous.is_some_and(|old| old.expanded && old.button_y > 0.0);
+    if expanded {
+        if let Some(old) = previous.filter(|old| old.expanded && !reflow) {
+            // Keep an open panel's size stable while its header is dragged or queried.
+            height = height.min(old.height);
+        }
+        if position.is_none() {
+            let button_height = MENU_BUTTON_SIZE.min(height);
+            let min_anchor_y = MENU_MARGIN.min((viewport.1 - button_height).max(0.0));
+            anchor.1 = anchor.1.clamp(
+                min_anchor_y,
+                (viewport.1 - MENU_MARGIN - button_height).max(min_anchor_y),
+            );
+            let below = (viewport.1 - MENU_MARGIN - anchor.1).max(1.0);
+            let above = (anchor.1 + button_height - MENU_MARGIN).max(1.0);
+            let (available, opposite) = if upward {
+                (above, below)
+            } else {
+                (below, above)
+            };
+            // Prefer opening below; reflow may switch sides to restore useful list space.
+            if opposite > available
+                && (available < MENU_MIN_OPEN_HEIGHT || (reflow && available < height))
+            {
+                upward = !upward;
+            }
+            height = height.min(if upward { above } else { below });
+        }
+    }
     let max_button_x = (width - MENU_BUTTON_SIZE).max(0.0);
     let max_button_y = (height - MENU_BUTTON_SIZE).max(0.0);
     if !expanded && position.is_none() {
@@ -81,23 +122,16 @@ fn calculate_menu_layout(
             });
         }
     }
-    let mut anchor = previous.map_or(
-        (viewport.0 - MENU_BUTTON_SIZE - MENU_MARGIN, MENU_MARGIN),
-        |old| (old.x + old.button_x, old.y + old.button_y),
-    );
-    if !expanded && !wheel {
-        if let Some(button_position) = position {
-            // Collapsed dragging still receives the button's coordinates, not canvas bounds.
-            anchor = button_position;
-        }
-    }
     let panel_position = position.filter(|_| expanded || wheel);
     let (x, y) = panel_position.unwrap_or_else(|| {
         if !expanded {
             (anchor.0 - max_button_x / 2.0, anchor.1 - max_button_y / 2.0)
         } else {
-            // Full menus keep their trigger at the top right.
-            (anchor.0 - max_button_x, anchor.1)
+            // The header stays at the button, with scrollable content on the chosen side.
+            (
+                anchor.0 - max_button_x,
+                anchor.1 - if upward { max_button_y } else { 0.0 },
+            )
         }
     });
     let min_x = MENU_MARGIN.min((viewport.0 - width).max(0.0));
@@ -124,7 +158,7 @@ fn calculate_menu_layout(
             )
         }
     } else {
-        (max_button_x, 0.0)
+        (max_button_x, if upward { max_button_y } else { 0.0 })
     };
     Ok(MenuLayout {
         x,
@@ -217,6 +251,7 @@ fn apply_layout(
             if headless { wheel } else { Some(false) },
             position,
             hub,
+            relayout_content,
         )?;
         let layout = WebChromeLayout {
             revision: previous.map_or(1, |old| old.revision + 1),
@@ -455,7 +490,7 @@ mod tests {
     #[test]
     fn menu_starts_in_top_right_and_expands_without_leaving_window() {
         let collapsed =
-            calculate_menu_layout((860.0, 640.0), None, None, None, None, false).unwrap();
+            calculate_menu_layout((860.0, 640.0), None, None, None, None, false, false).unwrap();
         assert_eq!(trigger(collapsed), (804.0, 12.0));
         let open = calculate_menu_layout(
             (860.0, 640.0),
@@ -464,21 +499,29 @@ mod tests {
             None,
             None,
             false,
+            false,
         )
         .unwrap();
         assert!(open.expanded);
         assert_eq!(open.x + open.width, collapsed.x + collapsed.width);
         assert_eq!(open.width, 280.0);
-        let closed =
-            calculate_menu_layout((860.0, 640.0), Some(open), Some(false), None, None, false)
-                .unwrap();
+        let closed = calculate_menu_layout(
+            (860.0, 640.0),
+            Some(open),
+            Some(false),
+            None,
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(closed, collapsed);
     }
 
     #[test]
     fn menu_serialization_exposes_presentation_and_button_offset() {
         let collapsed =
-            calculate_menu_layout((860.0, 640.0), None, None, None, None, false).unwrap();
+            calculate_menu_layout((860.0, 640.0), None, None, None, None, false, false).unwrap();
         let value = serde_json::to_value(collapsed).unwrap();
         assert_eq!(value["wheel"], false);
         assert_eq!(value["buttonX"], 236.0);
@@ -496,6 +539,159 @@ mod tests {
     }
 
     #[test]
+    fn full_menu_shrinks_below_its_anchor_in_short_windows() {
+        for hub in [false, true] {
+            let viewport = (860.0, 400.0);
+            let button =
+                calculate_menu_layout(viewport, None, None, None, Some((400.0, 180.0)), hub, false)
+                    .unwrap();
+            let open =
+                calculate_menu_layout(viewport, Some(button), Some(true), None, None, hub, false)
+                    .unwrap();
+            assert_eq!(trigger(open), trigger(button));
+            assert_eq!(open.y, 180.0);
+            assert_eq!(open.height, 208.0);
+            assert_eq!(open.button_y, 0.0);
+            let closed =
+                calculate_menu_layout(viewport, Some(open), Some(false), None, None, hub, false)
+                    .unwrap();
+            assert_eq!(trigger(closed), trigger(button));
+        }
+    }
+
+    #[test]
+    fn full_menu_opens_above_a_low_anchor_without_moving_its_header() {
+        for hub in [false, true] {
+            let viewport = (860.0, 400.0);
+            let button =
+                calculate_menu_layout(viewport, None, None, None, Some((400.0, 332.0)), hub, false)
+                    .unwrap();
+            let open =
+                calculate_menu_layout(viewport, Some(button), Some(true), None, None, hub, false)
+                    .unwrap();
+            assert_eq!(trigger(open), trigger(button));
+            assert!(open.button_y > 0.0);
+            assert!(open.y >= MENU_MARGIN);
+            assert!(open.y + open.height <= viewport.1 - MENU_MARGIN);
+            assert_button_inside(open);
+            let retained =
+                calculate_menu_layout(viewport, Some(open), None, None, None, hub, false).unwrap();
+            assert_eq!(retained, open);
+            let closed =
+                calculate_menu_layout(viewport, Some(open), Some(false), None, None, hub, false)
+                    .unwrap();
+            assert_eq!(trigger(closed), trigger(button));
+        }
+    }
+
+    #[test]
+    fn full_menu_dragging_keeps_its_size_and_opening_direction() {
+        let viewport = (860.0, 400.0);
+        for y in [180.0, 332.0] {
+            let button =
+                calculate_menu_layout(viewport, None, None, None, Some((400.0, y)), false, false)
+                    .unwrap();
+            let open =
+                calculate_menu_layout(viewport, Some(button), Some(true), None, None, false, false)
+                    .unwrap();
+            let moved = calculate_menu_layout(
+                viewport,
+                Some(open),
+                None,
+                None,
+                Some((200.0, 20.0)),
+                false,
+                false,
+            )
+            .unwrap();
+            assert_eq!((moved.x, moved.y), (200.0, 20.0));
+            assert_eq!(moved.height, open.height);
+            assert_eq!(moved.button_y, open.button_y);
+            let retained =
+                calculate_menu_layout(viewport, Some(moved), None, None, None, false, false)
+                    .unwrap();
+            assert_eq!(retained, moved);
+        }
+    }
+
+    #[test]
+    fn resizing_an_open_menu_preserves_a_visible_anchor_and_scroll_room() {
+        let button = calculate_menu_layout(
+            (860.0, 400.0),
+            None,
+            None,
+            None,
+            Some((400.0, 180.0)),
+            false,
+            false,
+        )
+        .unwrap();
+        let open = calculate_menu_layout(
+            (860.0, 400.0),
+            Some(button),
+            Some(true),
+            None,
+            None,
+            false,
+            false,
+        )
+        .unwrap();
+        let resized =
+            calculate_menu_layout((860.0, 300.0), Some(open), None, None, None, false, true)
+                .unwrap();
+        assert_eq!(trigger(resized), trigger(button));
+        assert!(resized.button_y > 0.0);
+        assert_eq!(resized.height, 212.0);
+        assert!(resized.y >= MENU_MARGIN);
+        assert!(resized.y + resized.height <= 288.0);
+    }
+
+    #[test]
+    fn growing_the_window_restores_the_available_menu_height() {
+        let button = calculate_menu_layout(
+            (860.0, 400.0),
+            None,
+            None,
+            None,
+            Some((400.0, 220.0)),
+            false,
+            false,
+        )
+        .unwrap();
+        let open = calculate_menu_layout(
+            (860.0, 400.0),
+            Some(button),
+            Some(true),
+            None,
+            None,
+            false,
+            false,
+        )
+        .unwrap();
+        assert_eq!(open.height, 168.0);
+        let grown =
+            calculate_menu_layout((860.0, 640.0), Some(open), None, None, None, false, true)
+                .unwrap();
+        assert_eq!(trigger(grown), trigger(open));
+        assert_eq!(grown.height, 360.0);
+    }
+
+    #[test]
+    fn a_tiny_window_does_not_lock_the_menu_to_a_clipped_height() {
+        let open =
+            calculate_menu_layout((860.0, 640.0), None, Some(true), None, None, false, false)
+                .unwrap();
+        let tiny =
+            calculate_menu_layout((40.0, 30.0), Some(open), None, None, None, false, true).unwrap();
+        assert!(tiny.height < MENU_BUTTON_SIZE);
+        let restored =
+            calculate_menu_layout((860.0, 640.0), Some(tiny), None, None, None, false, true)
+                .unwrap();
+        assert_eq!(restored.height, 360.0);
+        assert_button_inside(restored);
+    }
+
+    #[test]
     fn wheel_keeps_trigger_in_place_at_all_corners_and_collapses_back() {
         for hub in [false, true] {
             for position in [
@@ -505,9 +701,16 @@ mod tests {
                 (804.0, 584.0),
                 (400.0, 300.0),
             ] {
-                let button =
-                    calculate_menu_layout((860.0, 640.0), None, None, None, Some(position), hub)
-                        .unwrap();
+                let button = calculate_menu_layout(
+                    (860.0, 640.0),
+                    None,
+                    None,
+                    None,
+                    Some(position),
+                    hub,
+                    false,
+                )
+                .unwrap();
                 let wheel = calculate_menu_layout(
                     (860.0, 640.0),
                     Some(button),
@@ -515,6 +718,7 @@ mod tests {
                     Some(true),
                     None,
                     hub,
+                    false,
                 )
                 .unwrap();
                 assert!(wheel.wheel && !wheel.expanded);
@@ -549,6 +753,7 @@ mod tests {
                     Some(false),
                     None,
                     hub,
+                    false,
                 )
                 .unwrap();
                 assert_eq!(closed, button);
@@ -565,18 +770,40 @@ mod tests {
             None,
             Some((500.0, 100.0)),
             false,
+            false,
         )
         .unwrap();
-        let full =
-            calculate_menu_layout((860.0, 640.0), Some(button), Some(true), None, None, false)
-                .unwrap();
-        let wheel =
-            calculate_menu_layout((860.0, 640.0), Some(button), None, Some(true), None, false)
-                .unwrap();
+        let full = calculate_menu_layout(
+            (860.0, 640.0),
+            Some(button),
+            Some(true),
+            None,
+            None,
+            false,
+            false,
+        )
+        .unwrap();
+        let wheel = calculate_menu_layout(
+            (860.0, 640.0),
+            Some(button),
+            None,
+            Some(true),
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         for previous in [button, full, wheel] {
-            let retained =
-                calculate_menu_layout((860.0, 640.0), Some(previous), None, None, None, false)
-                    .unwrap();
+            let retained = calculate_menu_layout(
+                (860.0, 640.0),
+                Some(previous),
+                None,
+                None,
+                None,
+                false,
+                false,
+            )
+            .unwrap();
             assert_eq!(retained, previous);
             for (expanded, wheel_flag, expected) in [
                 (Some(true), None, full),
@@ -592,6 +819,7 @@ mod tests {
                     wheel_flag,
                     None,
                     false,
+                    false,
                 )
                 .unwrap();
                 assert_eq!(layout, expected);
@@ -606,6 +834,7 @@ mod tests {
             Some(false),
             None,
             false,
+            false,
         )
         .unwrap();
         assert_eq!(no_headless, button);
@@ -613,16 +842,25 @@ mod tests {
 
     #[test]
     fn wheel_drag_positions_are_current_bounds_and_resize_clamps_button_inside() {
-        let button = calculate_menu_layout((860.0, 640.0), None, None, None, None, false).unwrap();
-        let wheel =
-            calculate_menu_layout((860.0, 640.0), Some(button), None, Some(true), None, false)
-                .unwrap();
+        let button =
+            calculate_menu_layout((860.0, 640.0), None, None, None, None, false, false).unwrap();
+        let wheel = calculate_menu_layout(
+            (860.0, 640.0),
+            Some(button),
+            None,
+            Some(true),
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         let moved = calculate_menu_layout(
             (860.0, 640.0),
             Some(wheel),
             None,
             None,
             Some((100.0, 140.0)),
+            false,
             false,
         )
         .unwrap();
@@ -631,14 +869,22 @@ mod tests {
             (moved.button_x, moved.button_y),
             (wheel.button_x, wheel.button_y)
         );
-        let closed =
-            calculate_menu_layout((860.0, 640.0), Some(moved), Some(false), None, None, false)
-                .unwrap();
+        let closed = calculate_menu_layout(
+            (860.0, 640.0),
+            Some(moved),
+            Some(false),
+            None,
+            None,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(trigger(closed), trigger(moved));
         assert_eq!((closed.x, closed.y), (moved.x, moved.y));
         for viewport in [(640.0, 480.0), (240.0, 220.0), (40.0, 30.0), (0.0, 0.0)] {
             let resized =
-                calculate_menu_layout(viewport, Some(wheel), None, None, None, false).unwrap();
+                calculate_menu_layout(viewport, Some(wheel), None, None, None, false, false)
+                    .unwrap();
             assert!(resized.wheel);
             assert_button_inside(resized);
             assert!(resized.x >= 0.0 && resized.y >= 0.0);
@@ -652,9 +898,10 @@ mod tests {
         let mut baseline = None;
         for scale in [1.0, 1.25, 1.5, 2.0] {
             let viewport = (860.0 * scale / scale, 640.0 * scale / scale);
-            let button = calculate_menu_layout(viewport, None, None, None, None, false).unwrap();
+            let button =
+                calculate_menu_layout(viewport, None, None, None, None, false, false).unwrap();
             let wheel =
-                calculate_menu_layout(viewport, Some(button), None, Some(true), None, false)
+                calculate_menu_layout(viewport, Some(button), None, Some(true), None, false, false)
                     .unwrap();
             assert_eq!(trigger(wheel), (804.0, 12.0));
             if let Some(expected) = baseline {
@@ -673,16 +920,18 @@ mod tests {
             None,
             Some((5000.0, -50.0)),
             true,
+            false,
         )
         .unwrap();
         assert_eq!(open.y, MENU_MARGIN);
         assert_eq!(open.x + open.width, 848.0);
         let smaller =
-            calculate_menu_layout((240.0, 220.0), Some(open), None, None, None, true).unwrap();
+            calculate_menu_layout((240.0, 220.0), Some(open), None, None, None, true, false)
+                .unwrap();
         assert_eq!((smaller.width, smaller.height), (216.0, 196.0));
         assert_eq!((smaller.x, smaller.y), (MENU_MARGIN, MENU_MARGIN));
-        let tiny =
-            calculate_menu_layout((0.0, 0.0), Some(smaller), None, None, None, true).unwrap();
+        let tiny = calculate_menu_layout((0.0, 0.0), Some(smaller), None, None, None, true, false)
+            .unwrap();
         assert_eq!((tiny.width, tiny.height), (1.0, 1.0));
         assert_eq!((tiny.x, tiny.y), (0.0, 0.0));
     }
@@ -696,6 +945,7 @@ mod tests {
                 None,
                 None,
                 Some((value, 0.0)),
+                false,
                 false
             )
             .is_err());
@@ -705,6 +955,7 @@ mod tests {
                 None,
                 None,
                 Some((0.0, value)),
+                false,
                 false
             )
             .is_err());

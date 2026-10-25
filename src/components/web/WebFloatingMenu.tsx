@@ -247,6 +247,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
 
   return (
     <div className="web-floating-menu" data-expanded={layout.expanded} data-wheel={layout.wheel} data-wheel-closing={wheel.closing}
+      data-upward={layout.expanded && layout.buttonY > 0}
       onPointerEnter={wheel.enter} onPointerLeave={wheel.leave}
       onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) wheel.leave(); }}
       role={layout.expanded ? 'dialog' : undefined} aria-label={t('settings.web.menu.title')}>

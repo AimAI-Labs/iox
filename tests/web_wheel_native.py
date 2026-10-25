@@ -50,6 +50,8 @@ USER32.GetDpiForWindow.argtypes = [wintypes.HWND]
 USER32.GetDpiForWindow.restype = wintypes.UINT
 USER32.IsWindowVisible.argtypes = [wintypes.HWND]
 USER32.IsWindowVisible.restype = wintypes.BOOL
+USER32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+USER32.SetWindowPos.restype = wintypes.BOOL
 USER32.GetWindowRgn.argtypes = [wintypes.HWND, wintypes.HANDLE]
 GDI32.CreateRectRgn.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int]
 GDI32.CreateRectRgn.restype = wintypes.HANDLE
@@ -186,8 +188,12 @@ def native_layout(pid, title, page):
     button_screen = [toolbar_rect[0] + trigger["x"] * scale, toolbar_rect[1] + trigger["y"] * scale]
     expected_button = [origin.x + (menu["x"] + menu["buttonX"]) * scale,
                        origin.y + (menu["y"] + menu["buttonY"]) * scale]
-    assert close_rect(button_screen, expected_button), ("DOM/native button anchor", button_screen, expected_button)
+    button_center = [button_screen[0] + trigger['width'] * scale / 2, button_screen[1] + trigger['height'] * scale / 2]
+    expected_center = [expected_button[0] + min(44, menu['width']) * scale / 2,
+                       expected_button[1] + min(44, menu['height']) * scale / 2]
+    assert close_rect(button_center, expected_center), ("DOM/native button anchor", button_center, expected_center)
     return dict(menu=menu, toolbar=toolbar_rect, buttonScreen=button_screen,
+                buttonCenter=button_center,
                 content=content_rect, contentHwnd=int(contents[0]), toolbarHwnd=int(bars[0]),
                 window=rectangle(hwnd), logicalClient=[client[2] / scale, client[3] / scale], scale=scale)
 
@@ -304,6 +310,73 @@ def collapse(bar):
     expect(bar.locator(".web-menu-trigger")).to_have_attribute("aria-expanded", "false")
 
 
+def short_window_menu_cases(pid, title, bar, output):
+    hwnd = native_window(pid, title)
+    original = rectangle(hwnd)
+    client = rectangle(hwnd, client=True)
+    scale = USER32.GetDpiForWindow(hwnd) / 96
+    frame_width, frame_height = original[2] - client[2], original[3] - client[3]
+
+    def resize(height):
+        # Only resize this test-owned window; never inject OS pointer/keyboard input.
+        assert USER32.SetWindowPos(hwnd, None, 0, 0, round(600 * scale) + frame_width,
+                                   round(height * scale) + frame_height, 0x0016)
+        wait_for(lambda: abs(rectangle(hwnd, client=True)[3] / scale - height) < 1,
+                 'Owned test window did not resize', pump=lambda: bar.wait_for_timeout(30))
+
+    results = []
+    try:
+        resize(400)
+        for y, upward in [(180, False), (332, True)]:
+            collapse(bar)
+            invoke(bar, 'layout_web_menu', dict(expanded=False, wheel=False, position=[300, y]))
+            before = native_layout(pid, title, bar)
+            bar.locator('.web-menu-trigger').click()
+            expect(bar.locator('.web-floating-menu')).to_have_attribute('data-upward', str(upward).lower())
+            opened = native_layout(pid, title, bar)
+            assert close_rect(before['buttonCenter'], opened['buttonCenter'])
+            assert opened['menu']['y'] >= 12 and opened['menu']['y'] + opened['menu']['height'] <= 388
+            if not upward:
+                assert opened['menu']['height'] == 208
+            assert before['contentHwnd'] == opened['contentHwnd']
+            assert before['content'] == opened['content']
+            bar.locator('[data-action-id="closeWindow"] .web-menu-pin').scroll_into_view_if_needed()
+            bar.screenshot(path=str(output / f'menu-anchor-{y}.png'))
+            assert close_rect(opened['buttonCenter'], native_layout(pid, title, bar)['buttonCenter'])
+            bar.locator('.web-menu-trigger').click()
+            restored = native_layout(pid, title, bar)
+            assert close_rect(before['buttonCenter'], restored['buttonCenter'])
+            results.append(dict(anchor=y, before=before, opened=opened, restored=restored))
+        collapse(bar)
+        invoke(bar, 'layout_web_menu', dict(expanded=False, wheel=False, position=[300, 180]))
+        bar.locator('.web-menu-trigger').click()
+        before_resize = native_layout(pid, title, bar)
+        resize(300)
+        expect(bar.locator('.web-floating-menu')).to_have_attribute('data-upward', 'true')
+        resized = native_layout(pid, title, bar)
+        assert close_rect(before_resize['buttonCenter'], resized['buttonCenter'])
+        assert resized['menu']['height'] == 212
+        results.append(dict(beforeResize=before_resize, resized=resized))
+        resize(640)
+        expect(bar.locator('.web-floating-menu')).to_have_attribute('data-upward', 'false')
+        grown = native_layout(pid, title, bar)
+        assert close_rect(before_resize['buttonCenter'], grown['buttonCenter'])
+        assert grown['menu']['height'] == 360
+        resize(80)
+        wait_for(lambda: invoke(bar, 'get_web_chrome')['menu']['height'] <= 56,
+                 'Menu did not shrink', pump=lambda: bar.wait_for_timeout(30))
+        resize(640)
+        wait_for(lambda: invoke(bar, 'get_web_chrome')['menu']['height'] == 360,
+                 'Menu did not recover after shrinking', pump=lambda: bar.wait_for_timeout(30))
+        expect(bar.locator('.web-menu-trigger')).to_be_visible()
+        results.append(dict(grown=grown, recovered=native_layout(pid, title, bar)))
+        return results
+    finally:
+        collapse(bar)
+        assert USER32.SetWindowPos(hwnd, None, 0, 0, original[2], original[3], 0x0016)
+        bar.wait_for_timeout(100)
+
+
 def open_menu(bar):
     collapse(bar)
     bar.locator(".web-menu-trigger").click()
@@ -380,6 +453,7 @@ def first_run(playwright, binary, profile, output, site_base):
         source_b.get_by_role("textbox").fill("Owned Beta conversation")
         sources = [(source_a, source_state(source_a)), (source_b, source_state(source_b))]
         collapse(beta)
+        menu_anchors = short_window_menu_cases(app.process.pid, "IOX Wheel Native Alpha", alpha, output)
         baseline = native_layout(app.process.pid, "IOX Wheel Native Alpha", alpha)
         width, height = baseline["logicalClient"]
         corners = [[12, 12], [width - 56, 12], [12, height - 56], [width - 56, height - 56]]
@@ -439,7 +513,7 @@ def first_run(playwright, binary, profile, output, site_base):
         expect(peer_wheel.get_by_role("menuitem", name="Web window settings", exact=True)).to_be_visible()
         for source, expected in sources:
             assert source_state(source) == expected, "Pinning or config save reloaded source input"
-        return dict(corners=results, pins=FINAL_PINS, sourcePreserved=True, peerSynchronized=True,
+        return dict(corners=results, menuAnchors=menu_anchors, pins=FINAL_PINS, sourcePreserved=True, peerSynchronized=True,
                     callerRejected=True, staleDraftPreserved=True)
     finally:
         try:
