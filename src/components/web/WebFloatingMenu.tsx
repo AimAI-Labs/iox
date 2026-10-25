@@ -24,11 +24,44 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
   const [hubState, setHubState] = useState<WebHubState>({ tabs: [], activeTabId: null });
   const [actionFailed, setActionFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [holding, setHolding] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const ignoreClick = useRef(false);
-  const dragRef = useRef<{ pointerId: number; x: number; y: number; originX: number; originY: number; moved: boolean } | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    originX: number;
+    originY: number;
+    moved: boolean;
+    windowDragging: boolean;
+    timer: ReturnType<typeof setTimeout> | null;
+  } | null>(null);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+
+  const cancelPress = () => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (drag.timer !== null) clearTimeout(drag.timer);
+    ignoreClick.current = true;
+    dragRef.current = null;
+    setHolding(false);
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') cancelPress();
+    };
+    window.addEventListener('blur', cancelPress);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('blur', cancelPress);
+      window.removeEventListener('keydown', onKeyDown);
+      if (dragRef.current?.timer != null) clearTimeout(dragRef.current.timer);
+      dragRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!hub) return;
@@ -68,32 +101,70 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
 
   const pointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
+    cancelPress();
     event.preventDefault();
-    event.currentTarget.focus();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    const target = event.currentTarget;
+    const pointerId = event.pointerId;
+    target.focus();
+    target.setPointerCapture(pointerId);
     ignoreClick.current = false;
-    dragRef.current = {
-      pointerId: event.pointerId, x: event.screenX, y: event.screenY,
-      originX: layoutRef.current.x, originY: layoutRef.current.y, moved: false,
+    const drag = {
+      pointerId, x: event.screenX, y: event.screenY,
+      originX: layoutRef.current.x, originY: layoutRef.current.y,
+      moved: false, windowDragging: false, timer: null as ReturnType<typeof setTimeout> | null,
     };
+    dragRef.current = drag;
+    if (target === triggerRef.current && !layoutRef.current.expanded) {
+      setHolding(true);
+      drag.timer = setTimeout(() => {
+        if (dragRef.current !== drag || drag.moved) return;
+        drag.timer = null;
+        drag.windowDragging = true;
+        ignoreClick.current = true;
+        setHolding(false);
+        // Transfer capture to the native window while the primary button is still held.
+        if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
+        void (async () => {
+          try {
+            await getCurrentWindow().startDragging();
+          } catch {
+            setActionFailed(true);
+            void update({ expanded: true });
+          } finally {
+            if (dragRef.current === drag) dragRef.current = null;
+          }
+        })();
+      }, 1000);
+    }
   };
   const pointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag || drag.pointerId !== event.pointerId || drag.windowDragging) return;
     // Client coordinates change when the native child moves; screen coordinates stay stable.
     const dx = event.screenX - drag.x;
     const dy = event.screenY - drag.y;
     if (!drag.moved && Math.hypot(dx, dy) < 4) return;
     drag.moved = true;
+    if (drag.timer !== null) clearTimeout(drag.timer);
+    drag.timer = null;
+    setHolding(false);
     void update({ position: [drag.originX + dx, drag.originY + dy] });
   };
   const pointerEnd = (event: PointerEvent<HTMLButtonElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
-    ignoreClick.current = dragRef.current.moved || event.type === 'pointercancel';
+    const drag = dragRef.current;
+    if (drag.timer !== null) clearTimeout(drag.timer);
+    ignoreClick.current = drag.moved || drag.windowDragging || event.type === 'pointercancel';
     dragRef.current = null;
+    setHolding(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
-  const dragHandlers = { onPointerDown: pointerDown, onPointerMove: pointerMove, onPointerUp: pointerEnd, onPointerCancel: pointerEnd };
+  const dragHandlers = {
+    onPointerDown: pointerDown, onPointerMove: pointerMove, onPointerUp: pointerEnd, onPointerCancel: pointerEnd,
+    onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) => {
+      if (dragRef.current?.pointerId === event.pointerId && !dragRef.current.windowDragging) cancelPress();
+    },
+  };
 
   const perform = async (operation: () => Promise<unknown>, collapse = true) => {
     setActionFailed(false);
@@ -135,7 +206,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
           </button>
           <span className="web-menu-title" title={activeTitle}>{activeTitle}</span>
         </>}
-        <button type="button" ref={triggerRef} className="web-menu-trigger" aria-expanded={layout.expanded}
+        <button type="button" ref={triggerRef} className="web-menu-trigger" aria-expanded={layout.expanded} data-holding={holding}
           aria-controls="web-floating-menu-actions" aria-label={t(layout.expanded ? 'settings.web.menu.collapse' : 'settings.web.menu.open')}
           title={t(layout.expanded ? 'settings.web.menu.collapse' : 'settings.web.menu.open')}
           {...dragHandlers} onClick={() => {

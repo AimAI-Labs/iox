@@ -291,7 +291,7 @@ export const zh = {
       headlessModeDesc: '隐藏导航栏和窗口标题栏，以可拖动的悬浮菜单操作网页；保存后立即生效',
       menu: {
         title: '网页菜单',
-        open: '打开网页菜单（可拖动）',
+        open: '单击打开菜单，拖动移动菜单，长按 1 秒拖动卡片',
         collapse: '收起菜单',
         drag: '拖动菜单',
         reload: '刷新页面',

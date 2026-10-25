@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import threading
 import time
 import urllib.request
@@ -19,6 +20,7 @@ from playwright.sync_api import sync_playwright, expect
 root = Path(__file__).resolve().parents[1]
 output = root / 'docs/verification/web-chrome/native'
 profile = output / 'profile'
+binary = Path(os.environ.get('IOX_NATIVE_TEST_BINARY', str(root / 'src-tauri/target/debug/iox.exe')))
 (profile / '.iox-dev').mkdir(parents=True, exist_ok=True)
 user32 = ctypes.WinDLL('user32', use_last_error=True)
 user32.SetProcessDPIAware()
@@ -37,6 +39,26 @@ user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
 user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
 user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.GetWindowLongW.restype = wintypes.LONG
+user32.GetForegroundWindow.restype = wintypes.HWND
+user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
+user32.WindowFromPoint.argtypes = [wintypes.POINT]
+user32.WindowFromPoint.restype = wintypes.HWND
+user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+user32.GetAncestor.restype = wintypes.HWND
+user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+user32.GetAsyncKeyState.restype = wintypes.SHORT
+user32.mouse_event.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ctypes.c_size_t]
+gdi32 = ctypes.WinDLL('gdi32', use_last_error=True)
+gdi32.CreateRectRgn.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+gdi32.CreateRectRgn.restype = wintypes.HRGN
+gdi32.PtInRegion.argtypes = [wintypes.HRGN, ctypes.c_int, ctypes.c_int]
+gdi32.DeleteObject.argtypes = [wintypes.HANDLE]
+user32.GetWindowRgn.argtypes = [wintypes.HWND, wintypes.HRGN]
+dwm = ctypes.WinDLL('dwmapi', use_last_error=True)
+dwm.DwmGetWindowAttribute.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+dwm.DwmGetWindowAttribute.restype = wintypes.LONG
 
 
 class Site(BaseHTTPRequestHandler):
@@ -112,11 +134,59 @@ def inspect_window(pid, title, headless):
         # Tao retains WS_CAPTION for top-level windows and removes the nonclient area
         # through WM_NCCALCSIZE. Verify the actual client origin, not just style bits.
         assert frame_top <= frame_left + 2, ('Headless window retained a titlebar', frame_left, frame_top)
+        region = gdi32.CreateRectRgn(0, 0, 0, 0)
+        try:
+            assert user32.GetWindowRgn(contents[0], region) > 0, 'Headless page needs a rounded native clip'
+            assert not gdi32.PtInRegion(region, 0, 0), 'Top-left corner remained square'
+            assert not gdi32.PtInRegion(region, width - 1, 0), 'Top-right corner remained square'
+            assert not gdi32.PtInRegion(region, 0, height - 1), 'Bottom-left corner remained square'
+            assert not gdi32.PtInRegion(region, width - 1, height - 1), 'Bottom-right corner remained square'
+            assert gdi32.PtInRegion(region, width // 2, height // 2), 'Rounded clip removed page content'
+        finally:
+            gdi32.DeleteObject(region)
+        if sys.getwindowsversion().build >= 22000:
+            preference = wintypes.DWORD()
+            assert dwm.DwmGetWindowAttribute(hwnd, 33, ctypes.byref(preference), ctypes.sizeof(preference)) == 0
+            assert preference.value == 2, 'Headless window must opt into DWM rounded corners'
     else:
         assert content_rect[2] == width and content_rect[3] < height
         assert toolbar_rect[2] == width and toolbar_rect[3] == height - content_rect[3]
         assert frame_top > frame_left + 10, ('Windows titlebar was not restored', frame_left, frame_top)
     return {'title': title, 'client': [width, height], 'frame': [frame_left, frame_top], 'toolbar': toolbar_rect, 'content': content_rect}
+
+
+def hold_and_drag_window(pid, title):
+    """Inject a real held mouse only after verifying the point belongs to our test process."""
+    assert not user32.GetAsyncKeyState(1) & 0x8000, 'A user mouse gesture is already in progress'
+    hwnd = native_window(pid, title)
+    original_cursor = wintypes.POINT()
+    user32.GetCursorPos(ctypes.byref(original_cursor))
+    before = rect(hwnd)
+    snapshot = inspect_window(pid, title, True)
+    x, y, width, height = snapshot['toolbar']
+    point = wintypes.POINT(x + width // 2, y + height // 2)
+    pressed = False
+    try:
+        user32.SetForegroundWindow(hwnd)
+        time.sleep(0.15)
+        assert user32.GetAncestor(user32.WindowFromPoint(point), 2) == hwnd, 'Test window is occluded; no input sent'
+        user32.SetCursorPos(point.x, point.y)
+        user32.mouse_event(0x0002, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTDOWN
+        pressed = True
+        time.sleep(1.2)
+        user32.SetCursorPos(point.x + 120, point.y + 70)
+        time.sleep(0.15)
+        user32.mouse_event(0x0004, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTUP
+        pressed = False
+        time.sleep(0.15)
+        after = rect(hwnd)
+        assert abs(after[0] - before[0] - 120) <= 2 and abs(after[1] - before[1] - 70) <= 2, (before, after)
+        assert before[2:] == after[2:], 'Window drag unexpectedly changed card size'
+        return {'windowDrag': {'before': before, 'after': after}}
+    finally:
+        if pressed:
+            user32.mouse_event(0x0004, 0, 0, 0, 0)
+        user32.SetCursorPos(original_cursor.x, original_cursor.y)
 
 
 server = ThreadingHTTPServer(('127.0.0.1', 0), Site)
@@ -140,7 +210,7 @@ startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 startup.wShowWindow = 0
 results = []
 with (output / 'app.log').open('w', encoding='utf-8') as log:
-    process = subprocess.Popen([str(root / 'src-tauri/target/debug/iox.exe')], cwd=root, env=environment,
+    process = subprocess.Popen([str(binary)], cwd=root, env=environment,
         stdout=log, stderr=log, startupinfo=startup, creationflags=subprocess.CREATE_NO_WINDOW)
     try:
         endpoint = f'http://127.0.0.1:{debug_port}'
@@ -155,7 +225,13 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
         with sync_playwright() as p:
             browser = p.chromium.connect_over_cdp(endpoint)
             context = browser.contexts[0]
-            local_pages = [page for page in context.pages if 'localhost:1420' in page.url]
+            local_pages = []
+            for _ in range(100):
+                local_pages = [page for page in context.pages if 'localhost:1420' in page.url]
+                if local_pages:
+                    break
+                time.sleep(0.1)
+            assert local_pages, [page.url for page in context.pages]
             main = next((page for page in local_pages if page.evaluate('window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label') == 'main'), local_pages[0])
             assert main.evaluate('typeof window.__TAURI_INTERNALS__?.invoke === "function"')
             invoke = lambda page, command, args={}: page.evaluate('([command,args]) => window.__TAURI_INTERNALS__.invoke(command,args)', [command, args])
@@ -184,6 +260,10 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             invoke(bar, 'toggle_maximize_web_window', {'label': 'web_win_alpha'})
             assert not invoke(main, 'plugin:window|is_maximized', {'label': 'web_win_alpha'})
             invoke(bar, 'layout_web_menu', {'expanded': False})
+            menu_before_drag = invoke(bar, 'get_web_chrome')['menu']
+            results.append(hold_and_drag_window(process.pid, 'IOX Native Alpha'))
+            expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-expanded', 'false')
+            assert invoke(bar, 'get_web_chrome')['menu'] == menu_before_drag, 'Window drag moved only the floating menu'
             before = invoke(bar, 'get_web_chrome')['menu']
             invoke(bar, 'minimize_web_window', {'label': 'web_win_alpha'})
             main.wait_for_timeout(100)
@@ -221,9 +301,13 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             hub.wait_for_selector('.web-menu-trigger')
             main.wait_for_timeout(150)
             results.append(inspect_window(process.pid, 'IOX Web Hub', True))
+            config['general']['uiStyle'] = 'classic'
+            invoke(main, 'save_config', {'newConfig': config})
+            main.wait_for_timeout(150)
+            results.append(inspect_window(process.pid, 'IOX Web Hub', True))
             (output / 'result.json').write_text(json.dumps(results, indent=2), encoding='utf-8')
             browser.close()
-        print('Native Windows checks passed: full content, local toolbar Z order, live decorations, preserved input, maximize/restore, minimize anchor, caller validation, Hub add/switch/close-last/reopen.')
+        print('Native Windows checks passed: rounded page and window corners, one-second hold moving the real window, full content, toolbar Z order, live mode, preserved input, maximize/restore, minimize anchor, caller validation, Hub reopen.')
     finally:
         process.terminate()
         try:

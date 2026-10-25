@@ -293,7 +293,7 @@ export const en: TranslationTree = {
       headlessModeDesc: 'Hide navigation and window title bars; use a draggable floating menu. Applies when saved.',
       menu: {
         title: 'Web menu',
-        open: 'Open web menu (drag to move)',
+        open: 'Click for menu, drag to move menu, hold 1 second to move window',
         collapse: 'Collapse menu',
         drag: 'Drag menu',
         reload: 'Reload page',

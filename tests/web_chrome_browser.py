@@ -1,5 +1,6 @@
 """Run against pnpm dev: uv run --offline --with playwright python tests/web_chrome_browser.py."""
 from pathlib import Path
+from datetime import datetime, timezone
 from playwright.sync_api import sync_playwright, expect
 
 base = 'http://localhost:1420/tests/fixtures/web-chrome.html'
@@ -11,6 +12,72 @@ with sync_playwright() as p:
     page = browser.new_page(viewport={'width': 860, 'height': 640}, reduced_motion='reduce')
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
+
+    gesture_page = browser.new_page(viewport={'width': 860, 'height': 640}, reduced_motion='reduce')
+    gesture_page.goto(f'{base}?lang=en-US')
+    gesture_page.wait_for_load_state('networkidle')
+    gesture_page.clock.install(time=datetime(2030, 1, 1, tzinfo=timezone.utc))
+    gesture_page.clock.pause_at(datetime(2030, 1, 1, 0, 0, 1, tzinfo=timezone.utc))
+    gesture_bar = gesture_page.frame_locator('#bar')
+    gesture_trigger = gesture_bar.locator('.web-menu-trigger')
+    expect(gesture_trigger).to_have_attribute('aria-expanded', 'false')
+    box = gesture_page.locator('#bar').bounding_box()
+    gesture_page.mouse.move(box['x'] + 22, box['y'] + 22)
+    gesture_page.mouse.down()
+    gesture_page.clock.fast_forward(999)
+    assert gesture_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 0
+    gesture_page.clock.fast_forward(1)
+    assert gesture_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 1, 'A one-second hold must start native window dragging'
+    gesture_page.mouse.up()
+    expect(gesture_trigger).to_have_attribute('aria-expanded', 'false')
+    gesture_trigger.click()
+    expect(gesture_trigger).to_have_attribute('aria-expanded', 'true')
+    gesture_trigger.press('Escape')
+
+    # A press released before the threshold remains a normal click, with no delayed drag.
+    gesture_trigger.hover()
+    gesture_page.mouse.down()
+    gesture_page.clock.fast_forward(900)
+    gesture_page.mouse.up()
+    expect(gesture_trigger).to_have_attribute('aria-expanded', 'true')
+    gesture_page.clock.fast_forward(200)
+    assert gesture_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 1
+    gesture_trigger.press('Escape')
+
+    # Starting to move before the threshold commits to menu dragging for this gesture.
+    box = gesture_page.locator('#bar').bounding_box()
+    gesture_page.mouse.move(box['x'] + 22, box['y'] + 22)
+    gesture_page.mouse.down()
+    gesture_page.mouse.move(500, 150, steps=4)
+    gesture_page.clock.fast_forward(1500)
+    gesture_page.mouse.up()
+    assert gesture_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 1
+    expect(gesture_trigger).to_have_attribute('aria-expanded', 'false')
+
+    # Losing focus or unmounting the headless view must cancel the pending hold.
+    gesture_trigger.hover()
+    gesture_page.mouse.down()
+    gesture_page.clock.fast_forward(500)
+    gesture_bar.locator('body').evaluate("() => window.dispatchEvent(new Event('blur'))")
+    gesture_page.clock.fast_forward(600)
+    gesture_page.mouse.up()
+    assert gesture_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 1
+    gesture_trigger.hover()
+    gesture_page.mouse.down()
+    gesture_page.clock.fast_forward(500)
+    gesture_page.evaluate('chromeFixture.setHeadless(false)')
+    gesture_page.clock.fast_forward(600)
+    gesture_page.mouse.up()
+    assert gesture_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 1
+    gesture_page.evaluate('chromeFixture.setHeadless(true); chromeFixture.failNext = true')
+    expect(gesture_trigger).to_be_visible()
+    gesture_trigger.hover()
+    gesture_page.mouse.down()
+    gesture_page.clock.fast_forward(1000)
+    gesture_page.mouse.up()
+    expect(gesture_bar.get_by_role('alert')).to_be_visible()
+    gesture_page.close()
+
     for theme in ['dark', 'light']:
         for lang in ['en-US', 'zh-CN']:
             page.goto(f'{base}?theme={theme}&lang={lang}')
@@ -76,4 +143,4 @@ with sync_playwright() as p:
     page.screenshot(path=str(output / 'hub-windows.png'))
     assert not errors, errors
     browser.close()
-    print('Web menu browser checks passed: pointer dragging, live mode, operations, Hub, themes, languages, bounds.')
+    print('Web menu browser checks passed: exact one-second hold, cancellation, drag errors, pointer dragging, live mode, operations, Hub, themes, languages, bounds.')

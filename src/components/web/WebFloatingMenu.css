@@ -17,7 +17,23 @@
 .web-menu-header { display: flex; align-items: center; min-height: 42px; flex-shrink: 0; }
 .web-floating-menu[data-expanded="true"] .web-menu-header { border-bottom: 1px solid var(--line); }
 .web-menu-trigger, .web-menu-grip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; height: 42px; color: var(--ink-2); touch-action: none; }
-.web-menu-trigger { width: 42px; cursor: grab; }
+.web-menu-trigger { position: relative; width: 42px; cursor: grab; }
+.web-menu-trigger[data-holding="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 2px solid #529cff;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: web-menu-hold 1s linear forwards;
+}
+@keyframes web-menu-hold {
+  from { opacity: .2; transform: scale(.7); }
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .web-menu-trigger[data-holding="true"]::after { animation: none; opacity: .7; }
+}
 .web-menu-grip { width: 30px; cursor: grab; }
 .web-menu-trigger:active, .web-menu-grip:active { cursor: grabbing; }
 .web-menu-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 11px; }

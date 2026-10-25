@@ -158,7 +158,7 @@ pub fn raise_web_toolbar(view: &tauri::Webview) {
     });
 }
 
-pub fn set_web_content_round(view: &tauri::Webview, radius: Option<i32>) {
+pub fn set_web_content_round(view: &tauri::Webview, radius: Option<i32>, all_corners: bool) {
     with_web_child(view, move |child| {
         // This exact content container clips all its descendants. On success Windows takes
         // ownership of the region; on failure we must release it. None also clears old clips.
@@ -174,7 +174,7 @@ pub fn set_web_content_round(view: &tauri::Webview, radius: Option<i32>) {
             let diameter = radius * 2;
             let region = CreateRoundRectRgn(
                 0,
-                -diameter,
+                if all_corners { 0 } else { -diameter },
                 rect.right + 1,
                 rect.bottom + 1,
                 diameter,
@@ -190,17 +190,8 @@ pub fn set_web_content_round(view: &tauri::Webview, radius: Option<i32>) {
 /// 为主设置窗口与浮窗启用 Windows 11/10 原生 DWM 硬件级抗锯齿圆角与亚克力材质。
 /// Windows 原生标题栏样式下改为直角边框。
 pub fn apply_main_window_native_style(hwnd: HWND) {
+    set_window_corner_preference(hwnd, !is_native_chrome());
     unsafe {
-        // DWMWA_WINDOW_CORNER_PREFERENCE = 33
-        // DWMWCP_DONOTROUND = 1 (直角), DWMWCP_ROUND = 2 (圆角)
-        let corner_preference: u32 = if is_native_chrome() { 1 } else { 2 };
-        let _ = DwmSetWindowAttribute(
-            hwnd,
-            33, // DWMWA_WINDOW_CORNER_PREFERENCE
-            &corner_preference as *const _ as *const _,
-            std::mem::size_of::<u32>() as u32,
-        );
-
         // DWMWA_SYSTEMBACKDROP_TYPE = 38
         // 3 = DWMSBT_ACRYLIC (亚克力), 2 = DWMSBT_MICA (云母)
         let backdrop_type: u32 = 3;
@@ -208,6 +199,20 @@ pub fn apply_main_window_native_style(hwnd: HWND) {
             hwnd,
             38, // DWMWA_SYSTEMBACKDROP_TYPE
             &backdrop_type as *const _ as *const _,
+            std::mem::size_of::<u32>() as u32,
+        );
+    }
+}
+
+/// Per-window policy: headless Web cards round independently of the global titlebar style.
+pub fn set_window_corner_preference(hwnd: HWND, rounded: bool) {
+    let preference: u32 = if rounded { 2 } else { 1 };
+    // The caller borrows a live window HWND; DWM copies the preference during this call.
+    unsafe {
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            33, // DWMWA_WINDOW_CORNER_PREFERENCE
+            &preference as *const _ as *const _,
             std::mem::size_of::<u32>() as u32,
         );
     }

@@ -181,15 +181,19 @@ fn apply_layout(
         Some(format!("{}_web", window.label()))
     };
     let (top, height) = content_layout(size.height, scale, headless);
-    let radius = if headless
-        || window.is_maximized().unwrap_or(false)
-        || crate::window_manager::is_native_chrome()
+    let radius = if window.is_maximized().unwrap_or(false)
+        || (!headless && crate::window_manager::is_native_chrome())
     {
         None
     } else {
         Some((12.0 * scale).round() as i32)
     };
     // No config, menu or Hub lock is held while touching native views.
+    if relayout_content {
+        if let Ok(hwnd) = window.hwnd() {
+            crate::window_manager::set_window_corner_preference(hwnd.0 as _, radius.is_some());
+        }
+    }
     let bar_label = format!("{}_bar", window.label());
     for view in window.webviews().into_iter().filter(|_| relayout_content) {
         if view.label() == bar_label {
@@ -205,7 +209,7 @@ fn apply_layout(
             size: tauri::PhysicalSize::new(size.width, height).into(),
         })
         .map_err(|e| e.to_string())?;
-        crate::window_manager::set_web_content_round(&view, radius);
+        crate::window_manager::set_web_content_round(&view, radius, headless);
     }
     if let Some(bar) = app.get_webview(&bar_label) {
         let bounds = if headless {
