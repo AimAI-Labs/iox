@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { WebMenuChange, WebMenuLayout } from '@/lib/webChromeClient';
 
 type Update = (change: WebMenuChange) => Promise<boolean>;
 
 export function useWebWheel(layout: WebMenuLayout, update: Update, enabled: boolean) {
+  const [closing, setClosing] = useState(false);
   const state = useRef({ layout, update, enabled, inside: false, suspended: false, requested: false,
     openTimer: null as ReturnType<typeof setTimeout> | null,
     closeTimer: null as ReturnType<typeof setTimeout> | null });
@@ -33,6 +34,14 @@ export function useWebWheel(layout: WebMenuLayout, update: Update, enabled: bool
     current.inside = true;
     if (current.closeTimer !== null) clearTimeout(current.closeTimer);
     current.closeTimer = null;
+    if (closing) {
+      setClosing(false);
+      if (current.enabled && !current.suspended && !current.layout.expanded) {
+        // Reentry reverses the fade and supersedes any close already queued over IPC.
+        current.requested = true;
+        void current.update({ wheel: true }).then((accepted) => { if (!accepted) current.requested = false; });
+      }
+    }
     if (!current.enabled || current.suspended || current.layout.expanded || current.layout.wheel || current.requested || current.openTimer !== null) return;
     current.openTimer = setTimeout(() => {
       current.openTimer = null;
@@ -40,7 +49,7 @@ export function useWebWheel(layout: WebMenuLayout, update: Update, enabled: bool
       current.requested = true;
       void current.update({ wheel: true }).then((accepted) => { if (!accepted) current.requested = false; });
     }, 250);
-  }, []);
+  }, [closing]);
 
   const leave = useCallback(() => {
     const current = state.current;
@@ -48,7 +57,11 @@ export function useWebWheel(layout: WebMenuLayout, update: Update, enabled: bool
     current.inside = false;
     current.suspended = false;
     if (current.layout.wheel || current.requested) {
-      current.closeTimer = setTimeout(dismiss, 180);
+      // Preserve the 180ms leave grace and use its final 90ms for a reversible fade.
+      current.closeTimer = setTimeout(() => {
+        setClosing(true);
+        current.closeTimer = setTimeout(dismiss, 90);
+      }, 90);
     }
   }, [clearTimers, dismiss]);
 
@@ -64,6 +77,7 @@ export function useWebWheel(layout: WebMenuLayout, update: Update, enabled: bool
   }, [clearTimers, dismiss, suspend]);
 
   useEffect(() => { if (!enabled) dismiss(); }, [enabled, dismiss]);
+  useEffect(() => { if (!layout.wheel) setClosing(false); }, [layout.wheel]);
 
-  return { enter, leave, suspend, dismiss };
+  return { enter, leave, suspend, dismiss, closing };
 }

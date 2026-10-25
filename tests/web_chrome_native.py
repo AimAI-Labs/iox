@@ -283,7 +283,7 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             assert disk_delay == 175, ('Ctrl+S did not persist the new delay', disk_delay)
             main.screenshot(path=str(output / 'settings-hold-delay.png'))
             config['general']['webDragHoldDelayMs'] = 175
-            expect(bar.locator('.web-menu-trigger')).to_have_attribute('title', 'Click for menu, drag to move menu, hold 175 ms to move window')
+            expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-label', 'Click for menu, drag to move menu, hold 175 ms to move window')
             menu_before_drag = invoke(bar, 'get_web_chrome')['menu']
             results.append(hold_and_drag_window(process.pid, 'IOX Native Alpha', 175))
             expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-expanded', 'false')
@@ -303,7 +303,7 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             expect(direct_toggle).to_have_attribute('aria-pressed', 'true')
             direct_toggle.click()
             bar.locator('.web-menu-trigger').click()
-            expect(bar.locator('.web-menu-trigger')).to_have_attribute('title', 'Click for menu, drag to move menu, hold 175 ms to move window')
+            expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-label', 'Click for menu, drag to move menu, hold 175 ms to move window')
             before = invoke(bar, 'get_web_chrome')['menu']
             invoke(bar, 'minimize_web_window', {'label': 'web_win_alpha'})
             main.wait_for_timeout(100)

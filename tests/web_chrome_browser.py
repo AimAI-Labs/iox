@@ -35,7 +35,8 @@ with sync_playwright() as p:
     other_page.close()
     toggle_trigger.click()
     expect(toggle_trigger).to_have_attribute('aria-expanded', 'false')
-    expect(toggle_trigger).to_have_attribute('title', 'Click for menu, drag to move window')
+    expect(toggle_trigger).not_to_have_attribute('title')
+    expect(toggle_trigger).to_have_attribute('aria-label', 'Click for menu, drag to move window')
     expect(toggle_trigger.locator('.lucide-move')).to_have_count(1)
     original_menu = toggle_page.evaluate('structuredClone(chromeFixture.layout.menu)')
     toggle_trigger.hover()
@@ -54,7 +55,7 @@ with sync_playwright() as p:
     drag_toggle.press('Space')
     expect(drag_toggle).to_have_attribute('aria-pressed', 'false')
     toggle_trigger.click()
-    expect(toggle_trigger).to_have_attribute('title', 'Click for menu, drag to move menu, hold 1000 ms to move window')
+    expect(toggle_trigger).to_have_attribute('aria-label', 'Click for menu, drag to move menu, hold 1000 ms to move window')
     toggle_trigger.hover()
     toggle_page.mouse.down()
     toggle_page.clock.fast_forward(999)
@@ -74,7 +75,7 @@ with sync_playwright() as p:
     expect(zero_toggle).to_have_attribute('aria-pressed', 'true')
     zero_toggle.click()
     zero_trigger.click()
-    expect(zero_trigger).to_have_attribute('title', 'Click for menu, drag to move menu, hold 300 ms to move window')
+    expect(zero_trigger).to_have_attribute('aria-label', 'Click for menu, drag to move menu, hold 300 ms to move window')
     zero_page.close()
 
     # Custom values affect new presses without recreating the toolbar or page.
@@ -86,7 +87,7 @@ with sync_playwright() as p:
     delay_trigger = delay_page.frame_locator('#bar').locator('.web-menu-trigger')
     for count, delay in enumerate([125, 450], start=1):
         delay_page.evaluate('(delay) => chromeFixture.setDelay(delay)', delay)
-        expect(delay_trigger).to_have_attribute('title', f'Click for menu, drag to move menu, hold {delay} ms to move window')
+        expect(delay_trigger).to_have_attribute('aria-label', f'Click for menu, drag to move menu, hold {delay} ms to move window')
         delay_trigger.hover()
         delay_page.mouse.down()
         if delay:
@@ -98,7 +99,7 @@ with sync_playwright() as p:
         delay_page.mouse.up()
         expect(delay_trigger).to_have_attribute('aria-expanded', 'false')
     delay_page.evaluate('chromeFixture.setDelay(0)')
-    expect(delay_trigger).to_have_attribute('title', 'Click for menu, drag to move window')
+    expect(delay_trigger).to_have_attribute('aria-label', 'Click for menu, drag to move window')
     delay_trigger.click()
     expect(delay_trigger).to_have_attribute('aria-expanded', 'true')
     delay_trigger.press('Escape')
@@ -113,12 +114,12 @@ with sync_playwright() as p:
 
     # A saved change during a press applies on the next press; its current ring/timer agree.
     delay_page.evaluate('chromeFixture.setDelay(450)')
-    expect(delay_trigger).to_have_attribute('title', 'Click for menu, drag to move menu, hold 450 ms to move window')
+    expect(delay_trigger).to_have_attribute('aria-label', 'Click for menu, drag to move menu, hold 450 ms to move window')
     delay_trigger.hover()
     delay_page.mouse.down()
     delay_page.clock.fast_forward(100)
     delay_page.evaluate('chromeFixture.setDelay(125)')
-    expect(delay_trigger).to_have_attribute('title', 'Click for menu, drag to move menu, hold 125 ms to move window')
+    expect(delay_trigger).to_have_attribute('aria-label', 'Click for menu, drag to move menu, hold 125 ms to move window')
     assert delay_trigger.evaluate("el => getComputedStyle(el, '::after').animationDuration") == '0.45s'
     delay_page.clock.fast_forward(349)
     assert delay_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 3

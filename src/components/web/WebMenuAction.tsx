@@ -16,7 +16,7 @@ export function WebMenuAction({ operation, radial = false, beforeRun }: {
 }) {
   const run = () => { beforeRun?.(); operation.run(); };
   return <button type="button" className={radial ? 'web-wheel-action' : 'web-menu-action'}
-    role={radial ? 'menuitem' : undefined} aria-label={operation.label} title={radial ? operation.label : undefined}
+    role={radial ? 'menuitem' : undefined} aria-label={operation.label}
     disabled={operation.disabled} data-danger={operation.danger || undefined}
     onPointerDown={(event) => {
       if (operation.id === 'moveWindow' && event.button === 0) run();
@@ -28,6 +28,7 @@ export function WebMenuAction({ operation, radial = false, beforeRun }: {
         run();
       }
     }}>
-    {operation.icon}{!radial && <span>{operation.label}</span>}
+    {radial ? <span className="web-wheel-action-reveal" aria-hidden="true"><span className="web-wheel-action-surface">{operation.icon}</span></span>
+      : <>{operation.icon}<span>{operation.label}</span></>}
   </button>;
 }

@@ -246,19 +246,18 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
   const TriggerIcon = directDrag ? Move : Menu;
 
   return (
-    <div className="web-floating-menu" data-expanded={layout.expanded} data-wheel={layout.wheel}
+    <div className="web-floating-menu" data-expanded={layout.expanded} data-wheel={layout.wheel} data-wheel-closing={wheel.closing}
       onPointerEnter={wheel.enter} onPointerLeave={wheel.leave}
       onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) wheel.leave(); }}
       role={layout.expanded ? 'dialog' : undefined} aria-label={t('settings.web.menu.title')}>
       <header className="web-menu-header" style={!layout.expanded ? { left: layout.buttonX, top: layout.buttonY } : undefined}>
         {layout.expanded && <>
-          <button type="button" className="web-menu-grip" aria-label={t('settings.web.menu.drag')} title={t('settings.web.menu.drag')} {...dragHandlers}>
-            <GripVertical size={15} />
+          <button type="button" className="web-menu-grip" aria-label={t('settings.web.menu.drag')} {...dragHandlers}>
+            <GripVertical size={15} aria-hidden="true" />
+            <span className="web-menu-title">{activeTitle}</span>
           </button>
-          <span className="web-menu-title" title={activeTitle}>{activeTitle}</span>
           <button type="button" className="web-menu-drag-toggle" aria-pressed={directDrag}
             aria-label={t('settings.web.menu.directDrag')}
-            title={directDrag ? t('settings.web.menu.disableDirectDrag', { delay: holdDelayMs }) : t('settings.web.menu.enableDirectDrag')}
             onClick={() => { cancelPress(); setDirectDragOverride(!directDrag); }}>
             <Move size={15} />
           </button>
@@ -266,16 +265,18 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
         <button type="button" ref={triggerRef} className="web-menu-trigger" aria-expanded={layout.expanded} data-holding={holdingDelayMs !== null}
           data-window-drag={directDrag}
           style={{ '--web-hold-delay': `${holdingDelayMs ?? dragHoldDelayMs}ms` } as CSSProperties}
-          aria-controls="web-floating-menu-actions" aria-label={triggerLabel} title={triggerLabel}
+          aria-controls="web-floating-menu-actions" aria-label={triggerLabel}
           {...dragHandlers} onClick={() => {
             if (ignoreClick.current) { ignoreClick.current = false; return; }
             wheel.suspend();
             void update({ expanded: !layoutRef.current.expanded });
           }}>
-          {layout.expanded ? <X size={16} /> : <TriggerIcon size={18} />}
+          <span className="web-menu-trigger-surface" aria-hidden="true">
+            <span className="web-menu-trigger-glyph">{layout.expanded ? <X size={16} /> : <TriggerIcon size={18} />}</span>
+          </span>
         </button>
       </header>
-      {layout.wheel && <WebQuickWheel layout={layout}
+      {layout.wheel && <WebQuickWheel layout={layout} closing={wheel.closing}
         operations={pinnedActions.flatMap((id) => operations.find((operation) => operation.id === id) ?? [])}
         dismiss={wheel.dismiss} />}
       {layout.expanded && <div id="web-floating-menu-actions" className="web-menu-body">
@@ -306,7 +307,6 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
             <button type="button" disabled={currentIndex < 0 || currentIndex >= hubState.tabs.length - 1} onClick={() => void closeTabs(hubState.tabs.slice(currentIndex + 1).map((tab) => tab.actionId))}>{t('settings.web.menu.closeRight')}</button>
           </div>
         </section>}
-        <p className="web-menu-pin-hint">{t('settings.web.menu.pinHint')}</p>
         {operations.map((operation) => <Fragment key={operation.id}>
           {operation.id === 'moveWindow' && <div className="web-menu-separator" />}
           <div className="web-menu-action-row" data-action-id={operation.id}>
@@ -314,7 +314,6 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
             <button type="button" className="web-menu-pin" aria-pressed={pinnedActions.includes(operation.id)}
               disabled={pinning !== null}
               aria-label={t(pinnedActions.includes(operation.id) ? 'settings.web.menu.unpin' : 'settings.web.menu.pin', { name: operation.label })}
-              title={t(pinnedActions.includes(operation.id) ? 'settings.web.menu.unpin' : 'settings.web.menu.pin', { name: operation.label })}
               onClick={() => { void togglePin(operation.id); }}><Pin size={12} /></button>
           </div>
         </Fragment>)}
