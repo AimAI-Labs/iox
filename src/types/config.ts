@@ -10,6 +10,10 @@ export const DEFAULT_API_CARD_SIZE: [number, number] = [600, 900];
 export const DEFAULT_WEB_WINDOW_SIZE: [number, number] = [860, 640];
 export const DEFAULT_WEB_DRAG_HOLD_DELAY_MS = 300;
 export const MAX_WEB_DRAG_HOLD_DELAY_MS = 10000;
+export const WEB_MENU_ACTION_IDS = ['reload', 'openExternal', 'history', 'settings', 'moveWindow', 'minimize', 'maximize', 'closeWindow'] as const;
+export const webMenuActionIdSchema = z.enum(WEB_MENU_ACTION_IDS);
+export type WebMenuActionId = z.infer<typeof webMenuActionIdSchema>;
+export const DEFAULT_WEB_MENU_PINNED_ACTIONS: WebMenuActionId[] = ['reload', 'openExternal', 'history', 'minimize'];
 export const DEFAULT_OVERLAY_OPACITY = 90;
 export const DEFAULT_CONTEXT_TURNS = 5;
 export const DEFAULT_FONT_SIZE = 13;
@@ -64,6 +68,9 @@ export const generalConfigSchema = z.object({
   webWindowMode: webWindowModeSchema.default('multi_window'),
   webHeadlessMode: z.boolean().default(false),
   webDragHoldDelayMs: z.number().int().min(0).max(MAX_WEB_DRAG_HOLD_DELAY_MS).default(DEFAULT_WEB_DRAG_HOLD_DELAY_MS),
+  webMenuPinnedActions: z.array(webMenuActionIdSchema).max(8)
+    .refine((items) => new Set(items).size === items.length, 'Pinned actions must be unique')
+    .default(() => [...DEFAULT_WEB_MENU_PINNED_ACTIONS]),
   autoCopyOnWebAction: z.boolean().default(false),
   overlayOpacity: z.number().int().nonnegative().default(DEFAULT_OVERLAY_OPACITY),
   webWindowSize: sizePairSchema(DEFAULT_WEB_WINDOW_SIZE),

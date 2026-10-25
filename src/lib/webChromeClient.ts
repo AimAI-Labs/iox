@@ -4,6 +4,9 @@ export interface WebMenuLayout {
   width: number;
   height: number;
   expanded: boolean;
+  wheel: boolean;
+  buttonX: number;
+  buttonY: number;
 }
 
 export interface WebChromeLayout {
@@ -15,6 +18,7 @@ export interface WebChromeLayout {
 export interface WebMenuChange {
   expanded?: boolean;
   position?: [number, number];
+  wheel?: boolean;
 }
 
 interface ChromeTransport {
@@ -78,7 +82,10 @@ export function createWebChromeClient(
     ready,
     update(changes: WebMenuChange): Promise<boolean> {
       if (disposed) return Promise.resolve(false);
-      pending = { ...pending, ...changes };
+      const presentation = { ...changes };
+      if (presentation.wheel === true) presentation.expanded = false;
+      else if (presentation.expanded !== undefined) presentation.wheel ??= false;
+      pending = { ...pending, ...presentation };
       const result = new Promise<boolean>((resolve) => waiters.push(resolve));
       void flush();
       return result;

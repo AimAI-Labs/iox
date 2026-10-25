@@ -28,6 +28,7 @@ const {
   DEFAULT_WEB_WINDOW_SIZE,
   DEFAULT_WEB_DRAG_HOLD_DELAY_MS,
   MAX_WEB_DRAG_HOLD_DELAY_MS,
+  DEFAULT_WEB_MENU_PINNED_ACTIONS,
 } = configModule;
 
 const fixture = JSON.parse(
@@ -65,6 +66,7 @@ test('shared default constants stay equal to the Rust serialized defaults', () =
   assert.equal(DEFAULT_FLOATING_BALL_HIDE_DELAY_MS, fixture.general.floatingBallHideDelayMs);
   assert.equal(DEFAULT_FLOATING_BALL_HOVER_DELAY_MS, fixture.general.floatingBallHoverDelayMs);
   assert.equal(DEFAULT_WEB_DRAG_HOLD_DELAY_MS, fixture.general.webDragHoldDelayMs);
+  assert.deepEqual(DEFAULT_WEB_MENU_PINNED_ACTIONS, fixture.general.webMenuPinnedActions);
 });
 
 test('legacy omissions get the same defaults as the Rust serde defaults', () => {
@@ -158,5 +160,18 @@ test('Web window drag delay defaults for legacy configs and preserves custom mil
     assert.equal(appConfigSchema.safeParse({
       ...fixture, general: { ...general, webDragHoldDelayMs: invalid },
     }).success, false, `delay ${invalid} must be rejected`);
+  }
+});
+
+test('Web wheel pins preserve empty and ordered choices with a legacy default', () => {
+  const general = { ...fixture.general };
+  delete general.webMenuPinnedActions;
+  assert.deepEqual(parseOrFail({ ...fixture, general }).general.webMenuPinnedActions, ['reload', 'openExternal', 'history', 'minimize']);
+  for (const pins of [[], ['closeWindow', 'reload'], ['reload', 'openExternal', 'history', 'settings', 'moveWindow', 'minimize', 'maximize', 'closeWindow']]) {
+    const parsed = parseOrFail({ ...fixture, general: { ...general, webMenuPinnedActions: pins } });
+    assert.deepEqual(parseOrFail(JSON.parse(JSON.stringify(parsed))).general.webMenuPinnedActions, pins);
+  }
+  for (const pins of [['unknown'], ['reload', 'reload'], null, 'reload']) {
+    assert.equal(appConfigSchema.safeParse({ ...fixture, general: { ...general, webMenuPinnedActions: pins } }).success, false);
   }
 });

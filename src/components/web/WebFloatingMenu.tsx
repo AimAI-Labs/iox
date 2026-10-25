@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { ExternalLink, GripVertical, Maximize2, Menu, MessagesSquare, Minus, Move, RotateCw, Settings, X } from 'lucide-react';
+import { ExternalLink, GripVertical, Maximize2, Menu, MessagesSquare, Minus, Move, Pin, RotateCw, Settings, X } from 'lucide-react';
 import { DynamicIcon } from '@/components/Icons';
 import { useTranslation } from '@/hooks/useTranslation';
-import { DEFAULT_WEB_DRAG_HOLD_DELAY_MS, type ActionConfig, type WebHubState } from '@/types/config';
+import { DEFAULT_WEB_DRAG_HOLD_DELAY_MS, type ActionConfig, type WebHubState, type WebMenuActionId } from '@/types/config';
 import type { WebMenuChange, WebMenuLayout } from '@/lib/webChromeClient';
+import { useWebWheel } from '@/hooks/useWebWheel';
+import { WebMenuAction, type WebMenuOperation } from './WebMenuAction';
+import { WebQuickWheel } from './WebQuickWheel';
 import './WebFloatingMenu.css';
 
 interface WebFloatingMenuProps {
@@ -17,14 +20,18 @@ interface WebFloatingMenuProps {
   update: (changes: WebMenuChange) => Promise<boolean>;
   failed: boolean;
   dragHoldDelayMs: number;
+  pinnedActions: WebMenuActionId[];
 }
 
-export function WebFloatingMenu({ windowLabel, title, actions, layout, update, failed, dragHoldDelayMs }: WebFloatingMenuProps) {
+export function WebFloatingMenu({ windowLabel, title, actions, layout, update, failed, dragHoldDelayMs, pinnedActions }: WebFloatingMenuProps) {
   const { t } = useTranslation();
   const hub = windowLabel === 'web_hub';
   const [hubState, setHubState] = useState<WebHubState>({ tabs: [], activeTabId: null });
   const [actionFailed, setActionFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [pinning, setPinning] = useState<WebMenuActionId | null>(null);
+  const pinBusy = useRef(false);
+  const wheel = useWebWheel(layout, update, pinnedActions.length > 0);
   const [holdingDelayMs, setHoldingDelayMs] = useState<number | null>(null);
   // Follow settings until this toolbar explicitly overrides its own drag mode.
   const [directDragOverride, setDirectDragOverride] = useState<boolean | null>(null);
@@ -88,7 +95,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
   }, [hub]);
 
   useEffect(() => {
-    if (!layout.expanded) return;
+    if (!layout.expanded && !layout.wheel) return;
     const collapse = () => { void update({ expanded: false }); };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -103,7 +110,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('blur', collapse);
     };
-  }, [layout.expanded, update]);
+  }, [layout.expanded, layout.wheel, update]);
 
   const startWindowDrag = (drag: NonNullable<typeof dragRef.current>, target: HTMLButtonElement) => {
     drag.windowDragging = true;
@@ -125,6 +132,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
 
   const pointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
+    wheel.suspend();
     cancelPress();
     event.preventDefault();
     const target = event.currentTarget;
@@ -135,7 +143,8 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     const canDragWindow = target === triggerRef.current && !layoutRef.current.expanded;
     const drag = {
       pointerId, x: event.screenX, y: event.screenY,
-      originX: layoutRef.current.x, originY: layoutRef.current.y,
+      originX: layoutRef.current.x + (canDragWindow ? layoutRef.current.buttonX ?? 0 : 0),
+      originY: layoutRef.current.y + (canDragWindow ? layoutRef.current.buttonY ?? 0 : 0),
       moved: false, windowDragging: false, timer: null as ReturnType<typeof setTimeout> | null,
       windowDragOnMove: canDragWindow && directDrag,
     };
@@ -164,7 +173,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     if (drag.timer !== null) clearTimeout(drag.timer);
     drag.timer = null;
     setHoldingDelayMs(null);
-    void update({ position: [drag.originX + dx, drag.originY + dy] });
+    void update({ wheel: false, position: [drag.originX + dx, drag.originY + dy] });
   };
   const pointerEnd = (event: PointerEvent<HTMLButtonElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
@@ -206,20 +215,42 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
   const closeTabs = (ids: string[]) => perform(async () => {
     for (const actionId of ids) await invoke('close_web_hub_tab', { actionId });
   }, false);
-  const row = (label: string, icon: ReactNode, onClick: () => void, disabled = false, danger = false) => (
-    <button type="button" className="web-menu-action" onClick={onClick} disabled={disabled} data-danger={danger || undefined}>
-      {icon}<span>{label}</span>
-    </button>
-  );
+  const togglePin = async (id: WebMenuActionId) => {
+    if (pinBusy.current) return;
+    pinBusy.current = true;
+    setPinning(id);
+    setActionFailed(false);
+    try {
+      await invoke('set_web_menu_action_pinned', { actionId: id, pinned: !pinnedActions.includes(id) });
+    } catch {
+      setActionFailed(true);
+      void update({ expanded: true });
+    } finally {
+      pinBusy.current = false;
+      setPinning(null);
+    }
+  };
+  const operations: WebMenuOperation[] = [
+    { id: 'reload', label: t('settings.web.menu.reload'), icon: <RotateCw size={14} className={refreshing ? 'animate-spin' : undefined} />, run: () => { void reload(); }, disabled: refreshing },
+    { id: 'openExternal', label: t('settings.web.menu.openExternal'), icon: <ExternalLink size={14} />, run: () => { void perform(() => invoke('open_web_page_in_browser')); } },
+    { id: 'history', label: t('settings.web.menu.history'), icon: <MessagesSquare size={14} />, run: () => { void perform(() => invoke('show_main_window', { targetTab: 'web_sessions' })); } },
+    { id: 'settings', label: t('settings.web.menu.settings'), icon: <Settings size={14} />, run: () => { void perform(() => invoke('show_main_window', { targetTab: 'web' })); } },
+    { id: 'moveWindow', label: t('settings.web.menu.moveWindow'), icon: <Move size={14} />, run: () => { wheel.suspend(); void perform(() => getCurrentWindow().startDragging(), false); } },
+    { id: 'minimize', label: t('settings.web.menu.minimize'), icon: <Minus size={14} />, run: () => { void perform(() => invoke('minimize_web_window', { label: windowLabel })); } },
+    { id: 'maximize', label: t('settings.web.menu.maximize'), icon: <Maximize2 size={14} />, run: () => { void perform(() => invoke('toggle_maximize_web_window', { label: windowLabel })); } },
+    { id: 'closeWindow', label: t('settings.web.menu.closeWindow'), icon: <X size={14} />, run: () => { void perform(() => invoke('close_web_window', { label: windowLabel })); }, danger: true },
+  ];
   const openLabel = directDrag ? t('settings.web.menu.openImmediate')
     : t('settings.web.menu.open', { delay: holdDelayMs });
   const triggerLabel = layout.expanded ? t('settings.web.menu.collapse') : openLabel;
   const TriggerIcon = directDrag ? Move : Menu;
 
   return (
-    <div className="web-floating-menu" data-expanded={layout.expanded}
+    <div className="web-floating-menu" data-expanded={layout.expanded} data-wheel={layout.wheel}
+      onPointerEnter={wheel.enter} onPointerLeave={wheel.leave}
+      onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) wheel.leave(); }}
       role={layout.expanded ? 'dialog' : undefined} aria-label={t('settings.web.menu.title')}>
-      <header className="web-menu-header">
+      <header className="web-menu-header" style={layout.wheel ? { left: layout.buttonX, top: layout.buttonY } : undefined}>
         {layout.expanded && <>
           <button type="button" className="web-menu-grip" aria-label={t('settings.web.menu.drag')} title={t('settings.web.menu.drag')} {...dragHandlers}>
             <GripVertical size={15} />
@@ -238,11 +269,15 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
           aria-controls="web-floating-menu-actions" aria-label={triggerLabel} title={triggerLabel}
           {...dragHandlers} onClick={() => {
             if (ignoreClick.current) { ignoreClick.current = false; return; }
+            wheel.suspend();
             void update({ expanded: !layoutRef.current.expanded });
           }}>
           {layout.expanded ? <X size={16} /> : <TriggerIcon size={18} />}
         </button>
       </header>
+      {layout.wheel && <WebQuickWheel layout={layout}
+        operations={pinnedActions.flatMap((id) => operations.find((operation) => operation.id === id) ?? [])}
+        dismiss={wheel.dismiss} />}
       {layout.expanded && <div id="web-floating-menu-actions" className="web-menu-body">
         {(failed || actionFailed) && <p className="web-menu-error" role="alert">{t('settings.web.menu.failed')}</p>}
         {hub && <section className="web-menu-tabs" aria-label={t('settings.web.menu.tabs')}>
@@ -271,22 +306,18 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
             <button type="button" disabled={currentIndex < 0 || currentIndex >= hubState.tabs.length - 1} onClick={() => void closeTabs(hubState.tabs.slice(currentIndex + 1).map((tab) => tab.actionId))}>{t('settings.web.menu.closeRight')}</button>
           </div>
         </section>}
-        {row(t('settings.web.menu.reload'), <RotateCw size={14} className={refreshing ? 'animate-spin' : undefined} />, () => void reload(), refreshing)}
-        {row(t('settings.web.menu.openExternal'), <ExternalLink size={14} />, () => void perform(() => invoke('open_web_page_in_browser')))}
-        {row(t('settings.web.menu.history'), <MessagesSquare size={14} />, () => void perform(() => invoke('show_main_window', { targetTab: 'web_sessions' })))}
-        {row(t('settings.web.menu.settings'), <Settings size={14} />, () => void perform(() => invoke('show_main_window', { targetTab: 'web' })))}
-        <div className="web-menu-separator" />
-        <button type="button" className="web-menu-action" onMouseDown={(event) => {
-          if (event.button === 0) void perform(() => getCurrentWindow().startDragging(), false);
-        }} onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            void perform(() => getCurrentWindow().startDragging(), false);
-          }
-        }}><Move size={14} /><span>{t('settings.web.menu.moveWindow')}</span></button>
-        {row(t('settings.web.menu.minimize'), <Minus size={14} />, () => void perform(() => invoke('minimize_web_window', { label: windowLabel })))}
-        {row(t('settings.web.menu.maximize'), <Maximize2 size={14} />, () => void perform(() => invoke('toggle_maximize_web_window', { label: windowLabel })))}
-        {row(t('settings.web.menu.closeWindow'), <X size={14} />, () => void perform(() => invoke('close_web_window', { label: windowLabel })), false, true)}
+        <p className="web-menu-pin-hint">{t('settings.web.menu.pinHint')}</p>
+        {operations.map((operation) => <Fragment key={operation.id}>
+          {operation.id === 'moveWindow' && <div className="web-menu-separator" />}
+          <div className="web-menu-action-row" data-action-id={operation.id}>
+            <WebMenuAction operation={operation} />
+            <button type="button" className="web-menu-pin" aria-pressed={pinnedActions.includes(operation.id)}
+              disabled={pinning !== null}
+              aria-label={t(pinnedActions.includes(operation.id) ? 'settings.web.menu.unpin' : 'settings.web.menu.pin', { name: operation.label })}
+              title={t(pinnedActions.includes(operation.id) ? 'settings.web.menu.unpin' : 'settings.web.menu.pin', { name: operation.label })}
+              onClick={() => { void togglePin(operation.id); }}><Pin size={12} /></button>
+          </div>
+        </Fragment>)}
       </div>}
     </div>
   );

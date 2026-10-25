@@ -6,7 +6,7 @@ import { WebTitleBar } from '../../src/components/web/WebTitleBar';
 import { ThemeProvider } from '../../src/themes/ThemeProvider';
 import { WebviewTab } from '../../src/components/settings/WebviewTab';
 import { I18nProvider } from '../../src/hooks/useTranslation';
-import { appConfigSchema } from '../../src/types/config';
+import { appConfigSchema, DEFAULT_WEB_MENU_PINNED_ACTIONS, type WebMenuActionId } from '../../src/types/config';
 import defaultConfig from './config/default-config.zh.json';
 import '../../src/App.css';
 import type { WebChromeLayout, WebMenuChange } from '../../src/lib/webChromeClient';
@@ -52,22 +52,37 @@ if (params.has('settings')) {
     calls: [] as { command: string; args: Record<string, unknown> }[],
     pageClicks: 0,
     failNext: false,
+    heldLayout: null as Promise<void> | null,
+    releaseLayout: () => {},
+    holdLayouts() { fixture.heldLayout = new Promise<void>((resolve) => { fixture.releaseLayout = () => { fixture.heldLayout = null; resolve(); }; }); },
+    heldPin: null as Promise<void> | null,
+    rejectPin: () => {},
+    holdPin() { fixture.heldPin = new Promise<void>((_, reject) => { fixture.rejectPin = () => { fixture.heldPin = null; reject(new Error('Controlled pin failure')); }; }); },
+    pins: JSON.parse(localStorage.getItem('web-wheel-fixture-pins') ?? JSON.stringify(DEFAULT_WEB_MENU_PINNED_ACTIONS)) as WebMenuActionId[],
+    onPins: (_pins: WebMenuActionId[]) => {},
+    setPins(pins: WebMenuActionId[]) { fixture.pins = pins; fixture.onPins([...pins]); },
     holdDelay: Number(params.get('holdDelay') ?? 300),
     onDelay: (_delay: number) => {},
     setDelay(delay: number) { fixture.holdDelay = delay; fixture.onDelay(delay); },
-    layout: { revision: 0, headless: true, menu: { x: innerWidth - 56, y: 12, width: 44, height: 44, expanded: false } } as WebChromeLayout,
+    layout: { revision: 0, headless: true, menu: { x: innerWidth - 56, y: 12, width: 44, height: 44, expanded: false, wheel: false, buttonX: 0, buttonY: 0 } } as WebChromeLayout,
     hubState: { tabs: actions.slice(0, 3).map((action) => ({ actionId: action.id, name: action.name, icon: action.icon, url: 'https://example.test/' })), activeTabId: 'beta' },
     onChrome: (_layout: WebChromeLayout) => {},
     onHub: (_state: unknown) => {},
     place(changes: WebMenuChange = {}) {
       const old = fixture.layout.menu;
-      const expanded = fixture.layout.headless && (changes.expanded ?? old.expanded);
-      const width = Math.max(1, Math.min(expanded ? 280 : 44, innerWidth - 24));
-      const height = Math.max(1, Math.min(expanded ? (hub ? 560 : 360) : 44, innerHeight - 24));
-      const [x, y] = changes.position ?? [old.x + old.width - width, old.y];
+      const wheel = fixture.layout.headless && (changes.wheel ?? (changes.expanded === undefined && old.wheel));
+      const expanded = fixture.layout.headless && !wheel && (changes.expanded ?? old.expanded);
+      const width = Math.max(1, Math.min(expanded || wheel ? 280 : 44, innerWidth - 24));
+      const height = Math.max(1, Math.min(expanded ? (hub ? 560 : 360) : wheel ? 280 : 44, innerHeight - 24));
+      const anchorX = old.x + old.buttonX;
+      const anchorY = old.y + old.buttonY;
+      const [x, y] = changes.position ?? [anchorX + 44 - (wheel ? width / 2 + 22 : width), anchorY - (wheel ? height / 2 - 22 : 0)];
+      const left = Math.max(12, Math.min(x, innerWidth - width - 12));
+      const top = Math.max(12, Math.min(y, innerHeight - height - 12));
       const menu = {
-        x: Math.max(12, Math.min(x, innerWidth - width - 12)),
-        y: Math.max(12, Math.min(y, innerHeight - height - 12)), width, height, expanded,
+        x: left, y: top, width, height, expanded, wheel,
+        buttonX: wheel ? Math.max(0, Math.min(width - 44, anchorX - left)) : expanded ? width - 44 : 0,
+        buttonY: wheel ? Math.max(0, Math.min(height - 44, anchorY - top)) : 0,
       };
       fixture.layout = { revision: fixture.layout.revision + 1, headless: fixture.layout.headless, menu };
       Object.assign(bar.style, fixture.layout.headless ? {
@@ -82,9 +97,16 @@ if (params.has('settings')) {
     async invoke(command: string, args: Record<string, unknown> = {}) {
       fixture.calls.push({ command, args });
       if (command === 'get_web_chrome') return structuredClone(fixture.layout);
-      if (command === 'layout_web_menu') return fixture.place(args as WebMenuChange);
+      if (command === 'layout_web_menu') { if (fixture.heldLayout) await fixture.heldLayout; return fixture.place(args as WebMenuChange); }
       if (command === 'get_web_hub_state') return structuredClone(fixture.hubState);
       if (fixture.failNext) { fixture.failNext = false; throw new Error('Controlled operation failure'); }
+      if (command === 'set_web_menu_action_pinned') {
+        if (fixture.heldPin) await fixture.heldPin;
+        const id = args.actionId as WebMenuActionId;
+        fixture.setPins(args.pinned ? [...fixture.pins.filter(item => item !== id), id] : fixture.pins.filter(item => item !== id));
+        localStorage.setItem('web-wheel-fixture-pins', JSON.stringify(fixture.pins));
+        return [...fixture.pins];
+      }
       if (command === 'switch_web_hub_tab') fixture.hubState.activeTabId = args.actionId as string;
       if (command === 'close_web_hub_tab') {
         fixture.hubState.tabs = fixture.hubState.tabs.filter((tab) => tab.actionId !== args.actionId);
@@ -103,6 +125,9 @@ if (params.has('settings')) {
   };
   Object.assign(window, { chromeFixture: fixture });
   window.addEventListener('resize', () => fixture.place());
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'web-wheel-fixture-pins' && event.newValue) fixture.setPins(JSON.parse(event.newValue));
+  });
   fixture.place();
 } else {
   Object.defineProperty(navigator, 'languages', { value: [language] });
@@ -111,6 +136,7 @@ if (params.has('settings')) {
     onChrome: (layout: WebChromeLayout) => void; onHub: (state: unknown) => void;
     invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
     holdDelay: number; onDelay: (delay: number) => void;
+    pins: WebMenuActionId[]; onPins: (pins: WebMenuActionId[]) => void;
   } }).chromeFixture;
   fixture.onChrome = (layout) => { void emit('web_chrome_layout_changed', layout); };
   fixture.onHub = (state) => { void emit('web_hub_state_changed', state); };
@@ -118,8 +144,10 @@ if (params.has('settings')) {
   mockWindows(label);
   function ToolbarFixture() {
     const [delay, setDelay] = useState(fixture.holdDelay);
+    const [pins, setPins] = useState(fixture.pins);
     fixture.onDelay = setDelay;
-    return <WebTitleBar label={label} title="Web workspace" url="https://example.test/" actions={actions} dragHoldDelayMs={delay} />;
+    fixture.onPins = setPins;
+    return <WebTitleBar label={label} title="Web workspace" url="https://example.test/" actions={actions} dragHoldDelayMs={delay} pinnedActions={pins} />;
   }
   createRoot(document.getElementById('root')!).render(
     <StrictMode><ThemeProvider style={params.get('style') ?? 'classic'}>

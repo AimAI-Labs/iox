@@ -293,6 +293,10 @@ export const zh = {
       dragHoldDelayDesc: '长按悬浮按钮多久后拖动整个卡片（0–10000ms）；0 为直接拖动卡片，保存后生效',
       menu: {
         title: '网页菜单',
+        quickActions: '快捷操作',
+        pin: '固定 {name}',
+        unpin: '取消固定 {name}',
+        pinHint: '固定常用操作，悬停按钮时环绕显示，所有 Web 卡片共用',
         open: '单击打开菜单，拖动移动菜单，长按 {delay} 毫秒拖动卡片',
         openImmediate: '单击打开菜单，直接拖动卡片',
         collapse: '收起菜单',

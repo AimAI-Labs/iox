@@ -50,7 +50,7 @@ export function useConfig() {
     try {
       // 后端只在持久化成功后广播 config_updated；本地不预写，
       // 避免保存失败或并发即时更新时用旧快照覆盖已提交状态。
-      await invoke('save_config', { newConfig: parsed.data });
+      await invoke('save_config', { newConfig: parsed.data, preserveWebMenuPins: true });
       setError(null);
       return true;
     } catch (err) {

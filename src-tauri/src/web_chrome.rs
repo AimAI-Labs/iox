@@ -18,6 +18,9 @@ pub struct MenuLayout {
     pub width: f64,
     pub height: f64,
     pub expanded: bool,
+    pub wheel: bool,
+    pub button_x: f64,
+    pub button_y: f64,
 }
 
 fn content_layout(height: u32, scale: f64, headless: bool) -> (u32, u32) {
@@ -33,15 +36,27 @@ fn calculate_menu_layout(
     viewport: (f64, f64),
     previous: Option<MenuLayout>,
     expanded: Option<bool>,
+    wheel: Option<bool>,
     position: Option<(f64, f64)>,
     hub: bool,
 ) -> Result<MenuLayout, String> {
+    if !viewport.0.is_finite() || !viewport.1.is_finite() {
+        return Err("Invalid menu viewport".into());
+    }
     if position.is_some_and(|(x, y)| !x.is_finite() || !y.is_finite()) {
         return Err("Invalid menu position".into());
     }
-    let expanded = expanded.unwrap_or(previous.is_some_and(|layout| layout.expanded));
-    let width = if expanded { 280.0 } else { MENU_BUTTON_SIZE };
-    let height = if expanded {
+    let wheel =
+        wheel.unwrap_or_else(|| expanded.is_none() && previous.is_some_and(|layout| layout.wheel));
+    let expanded = !wheel && expanded.unwrap_or(previous.is_some_and(|layout| layout.expanded));
+    let width = if expanded || wheel {
+        280.0
+    } else {
+        MENU_BUTTON_SIZE
+    };
+    let height = if wheel {
+        280.0
+    } else if expanded {
         if hub {
             560.0
         } else {
@@ -52,19 +67,55 @@ fn calculate_menu_layout(
     };
     let width = f64::min(width, (viewport.0 - MENU_MARGIN * 2.0).max(1.0));
     let height = f64::min(height, (viewport.1 - MENU_MARGIN * 2.0).max(1.0));
-    let (x, y) = position.unwrap_or_else(|| match previous {
-        // Keep the right edge in place when opening/closing the menu.
-        Some(old) => (old.x + old.width - width, old.y),
-        None => (viewport.0 - width - MENU_MARGIN, MENU_MARGIN),
+    let max_button_x = (width - MENU_BUTTON_SIZE).max(0.0);
+    let max_button_y = (height - MENU_BUTTON_SIZE).max(0.0);
+    let anchor = previous.map_or(
+        (viewport.0 - MENU_BUTTON_SIZE - MENU_MARGIN, MENU_MARGIN),
+        |old| (old.x + old.button_x, old.y + old.button_y),
+    );
+    let (x, y) = position.unwrap_or_else(|| {
+        if wheel {
+            (anchor.0 - max_button_x / 2.0, anchor.1 - max_button_y / 2.0)
+        } else {
+            // Full menus keep their trigger at the top right; button mode has zero offsets.
+            (anchor.0 - max_button_x, anchor.1)
+        }
     });
     let min_x = MENU_MARGIN.min((viewport.0 - width).max(0.0));
     let min_y = MENU_MARGIN.min((viewport.1 - height).max(0.0));
+    let x = x.clamp(min_x, (viewport.0 - width - MENU_MARGIN).max(min_x));
+    let y = y.clamp(min_y, (viewport.1 - height - MENU_MARGIN).max(min_y));
+    let (button_x, button_y) = if wheel {
+        if position.is_some() {
+            // Drag positions describe the panel bounds, so its button moves with the panel.
+            previous.filter(|old| old.wheel).map_or(
+                (max_button_x / 2.0, max_button_y / 2.0),
+                |old| {
+                    (
+                        old.button_x.clamp(0.0, max_button_x),
+                        old.button_y.clamp(0.0, max_button_y),
+                    )
+                },
+            )
+        } else {
+            // Clamp the panel while retaining the trigger under the pointer whenever it fits.
+            (
+                (anchor.0 - x).clamp(0.0, max_button_x),
+                (anchor.1 - y).clamp(0.0, max_button_y),
+            )
+        }
+    } else {
+        (max_button_x, 0.0)
+    };
     Ok(MenuLayout {
-        x: x.clamp(min_x, (viewport.0 - width - MENU_MARGIN).max(min_x)),
-        y: y.clamp(min_y, (viewport.1 - height - MENU_MARGIN).max(min_y)),
+        x,
+        y,
         width,
         height,
         expanded,
+        wheel,
+        button_x,
+        button_y,
     })
 }
 
@@ -119,6 +170,7 @@ fn caller_window(webview: &tauri::Webview) -> Result<tauri::Window, String> {
 fn apply_layout(
     window: &tauri::Window,
     expanded: Option<bool>,
+    wheel: Option<bool>,
     position: Option<(f64, f64)>,
     relayout_content: bool,
 ) -> Result<WebChromeLayout, String> {
@@ -143,6 +195,7 @@ fn apply_layout(
             (size.width as f64 / scale, size.height as f64 / scale),
             previous.map(|old| old.menu),
             if headless { expanded } else { Some(false) },
+            if headless { wheel } else { Some(false) },
             position,
             hub,
         )?;
@@ -242,7 +295,7 @@ pub fn layout_window(window: &tauri::Window) {
         if window.is_minimized().unwrap_or(false) {
             return;
         }
-        if let Err(error) = apply_layout(&window, None, None, true) {
+        if let Err(error) = apply_layout(&window, None, None, None, true) {
             eprintln!("Web window layout failed: {error}");
         }
     });
@@ -259,6 +312,7 @@ pub fn layout_all(app: &tauri::AppHandle) {
 async fn menu_layout(
     webview: tauri::Webview,
     expanded: Option<bool>,
+    wheel: Option<bool>,
     position: Option<(f64, f64)>,
     require_headless: bool,
 ) -> Result<WebChromeLayout, String> {
@@ -270,7 +324,7 @@ async fn menu_layout(
             let result = if require_headless && !headless(window.app_handle()) {
                 Err("Web headless mode is disabled".into())
             } else {
-                apply_layout(&window, expanded, position, false)
+                apply_layout(&window, expanded, wheel, position, false)
             };
             let _ = send.send(result);
         })
@@ -280,16 +334,31 @@ async fn menu_layout(
 
 #[tauri::command]
 pub async fn get_web_chrome(webview: tauri::Webview) -> Result<WebChromeLayout, String> {
-    menu_layout(webview, None, None, false).await
+    menu_layout(webview, None, None, None, false).await
 }
 
 #[tauri::command]
 pub async fn layout_web_menu(
     webview: tauri::Webview,
     expanded: Option<bool>,
+    wheel: Option<bool>,
     position: Option<(f64, f64)>,
 ) -> Result<WebChromeLayout, String> {
-    menu_layout(webview, expanded, position, true).await
+    menu_layout(webview, expanded, wheel, position, true).await
+}
+
+#[tauri::command]
+pub fn set_web_menu_action_pinned(
+    webview: tauri::Webview,
+    action_id: String,
+    pinned: bool,
+) -> Result<Vec<String>, String> {
+    let window = caller_window(&webview)?;
+    window
+        .app_handle()
+        .state::<AppState>()
+        .config
+        .set_web_menu_action_pinned(&action_id, pinned)
 }
 
 #[tauri::command]
@@ -344,16 +413,194 @@ mod tests {
 
     #[test]
     fn menu_starts_in_top_right_and_expands_without_leaving_window() {
-        let collapsed = calculate_menu_layout((860.0, 640.0), None, None, None, false).unwrap();
+        let collapsed =
+            calculate_menu_layout((860.0, 640.0), None, None, None, None, false).unwrap();
         assert_eq!((collapsed.x, collapsed.y), (804.0, 12.0));
-        let open = calculate_menu_layout((860.0, 640.0), Some(collapsed), Some(true), None, false)
-            .unwrap();
+        let open = calculate_menu_layout(
+            (860.0, 640.0),
+            Some(collapsed),
+            Some(true),
+            None,
+            None,
+            false,
+        )
+        .unwrap();
         assert!(open.expanded);
         assert_eq!(open.x + open.width, collapsed.x + collapsed.width);
         assert_eq!(open.width, 280.0);
         let closed =
-            calculate_menu_layout((860.0, 640.0), Some(open), Some(false), None, false).unwrap();
+            calculate_menu_layout((860.0, 640.0), Some(open), Some(false), None, None, false)
+                .unwrap();
         assert_eq!(closed, collapsed);
+    }
+
+    #[test]
+    fn menu_serialization_exposes_presentation_and_button_offset() {
+        let collapsed =
+            calculate_menu_layout((860.0, 640.0), None, None, None, None, false).unwrap();
+        let value = serde_json::to_value(collapsed).unwrap();
+        assert_eq!(value["wheel"], false);
+        assert_eq!(value["buttonX"], 0.0);
+        assert_eq!(value["buttonY"], 0.0);
+    }
+
+    fn trigger(layout: MenuLayout) -> (f64, f64) {
+        (layout.x + layout.button_x, layout.y + layout.button_y)
+    }
+
+    fn assert_button_inside(layout: MenuLayout) {
+        assert!(layout.button_x >= 0.0 && layout.button_y >= 0.0);
+        assert!(layout.button_x + MENU_BUTTON_SIZE.min(layout.width) <= layout.width);
+        assert!(layout.button_y + MENU_BUTTON_SIZE.min(layout.height) <= layout.height);
+    }
+
+    #[test]
+    fn wheel_keeps_trigger_in_place_at_all_corners_and_collapses_back() {
+        for hub in [false, true] {
+            for position in [
+                (12.0, 12.0),
+                (804.0, 12.0),
+                (12.0, 584.0),
+                (804.0, 584.0),
+                (400.0, 300.0),
+            ] {
+                let button =
+                    calculate_menu_layout((860.0, 640.0), None, None, None, Some(position), hub)
+                        .unwrap();
+                let wheel = calculate_menu_layout(
+                    (860.0, 640.0),
+                    Some(button),
+                    None,
+                    Some(true),
+                    None,
+                    hub,
+                )
+                .unwrap();
+                assert!(wheel.wheel && !wheel.expanded);
+                assert_eq!((wheel.width, wheel.height), (280.0, 280.0));
+                assert_eq!(trigger(wheel), trigger(button));
+                assert!(wheel.x >= 12.0 && wheel.y >= 12.0);
+                assert!(wheel.x + wheel.width <= 848.0 && wheel.y + wheel.height <= 628.0);
+                assert_button_inside(wheel);
+                let closed = calculate_menu_layout(
+                    (860.0, 640.0),
+                    Some(wheel),
+                    None,
+                    Some(false),
+                    None,
+                    hub,
+                )
+                .unwrap();
+                assert_eq!(closed, button);
+            }
+        }
+    }
+
+    #[test]
+    fn all_presentation_transitions_keep_modes_exclusive_and_preserve_trigger() {
+        let button = calculate_menu_layout(
+            (860.0, 640.0),
+            None,
+            None,
+            None,
+            Some((500.0, 100.0)),
+            false,
+        )
+        .unwrap();
+        let full =
+            calculate_menu_layout((860.0, 640.0), Some(button), Some(true), None, None, false)
+                .unwrap();
+        let wheel =
+            calculate_menu_layout((860.0, 640.0), Some(button), None, Some(true), None, false)
+                .unwrap();
+        for previous in [button, full, wheel] {
+            let retained =
+                calculate_menu_layout((860.0, 640.0), Some(previous), None, None, None, false)
+                    .unwrap();
+            assert_eq!(retained, previous);
+            for (expanded, wheel_flag, expected) in [
+                (Some(true), None, full),
+                (Some(false), None, button),
+                (None, Some(true), wheel),
+                (Some(true), Some(true), wheel),
+                (Some(false), Some(true), wheel),
+            ] {
+                let layout = calculate_menu_layout(
+                    (860.0, 640.0),
+                    Some(previous),
+                    expanded,
+                    wheel_flag,
+                    None,
+                    false,
+                )
+                .unwrap();
+                assert_eq!(layout, expected);
+                assert_eq!(trigger(layout), trigger(button));
+                assert!(!(layout.expanded && layout.wheel));
+            }
+        }
+        let no_headless = calculate_menu_layout(
+            (860.0, 640.0),
+            Some(wheel),
+            Some(false),
+            Some(false),
+            None,
+            false,
+        )
+        .unwrap();
+        assert_eq!(no_headless, button);
+    }
+
+    #[test]
+    fn wheel_drag_positions_are_current_bounds_and_resize_clamps_button_inside() {
+        let button = calculate_menu_layout((860.0, 640.0), None, None, None, None, false).unwrap();
+        let wheel =
+            calculate_menu_layout((860.0, 640.0), Some(button), None, Some(true), None, false)
+                .unwrap();
+        let moved = calculate_menu_layout(
+            (860.0, 640.0),
+            Some(wheel),
+            None,
+            None,
+            Some((100.0, 140.0)),
+            false,
+        )
+        .unwrap();
+        assert_eq!((moved.x, moved.y), (100.0, 140.0));
+        assert_eq!(
+            (moved.button_x, moved.button_y),
+            (wheel.button_x, wheel.button_y)
+        );
+        let closed =
+            calculate_menu_layout((860.0, 640.0), Some(moved), Some(false), None, None, false)
+                .unwrap();
+        assert_eq!((closed.x, closed.y), trigger(moved));
+        for viewport in [(640.0, 480.0), (240.0, 220.0), (40.0, 30.0), (0.0, 0.0)] {
+            let resized =
+                calculate_menu_layout(viewport, Some(wheel), None, None, None, false).unwrap();
+            assert!(resized.wheel);
+            assert_button_inside(resized);
+            assert!(resized.x >= 0.0 && resized.y >= 0.0);
+            assert!(resized.width <= (viewport.0 - 24.0).max(1.0));
+            assert!(resized.height <= (viewport.1 - 24.0).max(1.0));
+        }
+    }
+
+    #[test]
+    fn wheel_geometry_uses_logical_client_coordinates_at_every_dpi() {
+        let mut baseline = None;
+        for scale in [1.0, 1.25, 1.5, 2.0] {
+            let viewport = (860.0 * scale / scale, 640.0 * scale / scale);
+            let button = calculate_menu_layout(viewport, None, None, None, None, false).unwrap();
+            let wheel =
+                calculate_menu_layout(viewport, Some(button), None, Some(true), None, false)
+                    .unwrap();
+            assert_eq!(trigger(wheel), (804.0, 12.0));
+            if let Some(expected) = baseline {
+                assert_eq!(wheel, expected);
+            }
+            baseline = Some(wheel);
+        }
     }
 
     #[test]
@@ -362,16 +609,19 @@ mod tests {
             (860.0, 640.0),
             None,
             Some(true),
+            None,
             Some((5000.0, -50.0)),
             true,
         )
         .unwrap();
         assert_eq!(open.y, MENU_MARGIN);
         assert_eq!(open.x + open.width, 848.0);
-        let smaller = calculate_menu_layout((240.0, 220.0), Some(open), None, None, true).unwrap();
+        let smaller =
+            calculate_menu_layout((240.0, 220.0), Some(open), None, None, None, true).unwrap();
         assert_eq!((smaller.width, smaller.height), (216.0, 196.0));
         assert_eq!((smaller.x, smaller.y), (MENU_MARGIN, MENU_MARGIN));
-        let tiny = calculate_menu_layout((0.0, 0.0), Some(smaller), None, None, true).unwrap();
+        let tiny =
+            calculate_menu_layout((0.0, 0.0), Some(smaller), None, None, None, true).unwrap();
         assert_eq!((tiny.width, tiny.height), (1.0, 1.0));
         assert_eq!((tiny.x, tiny.y), (0.0, 0.0));
     }
@@ -379,14 +629,24 @@ mod tests {
     #[test]
     fn menu_rejects_non_finite_drag_coordinates() {
         for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            assert!(
-                calculate_menu_layout((860.0, 640.0), None, None, Some((value, 0.0)), false)
-                    .is_err()
-            );
-            assert!(
-                calculate_menu_layout((860.0, 640.0), None, None, Some((0.0, value)), false)
-                    .is_err()
-            );
+            assert!(calculate_menu_layout(
+                (860.0, 640.0),
+                None,
+                None,
+                None,
+                Some((value, 0.0)),
+                false
+            )
+            .is_err());
+            assert!(calculate_menu_layout(
+                (860.0, 640.0),
+                None,
+                None,
+                None,
+                Some((0.0, value)),
+                false
+            )
+            .is_err());
         }
     }
 }

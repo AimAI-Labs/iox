@@ -55,8 +55,16 @@ fn get_config(state: State<AppState>) -> AppConfig {
 }
 
 #[tauri::command]
-fn save_config(new_config: AppConfig, state: State<AppState>) -> Result<(), String> {
-    state.config.replace(new_config)?;
+fn save_config(
+    new_config: AppConfig,
+    preserve_web_menu_pins: Option<bool>,
+    state: State<AppState>,
+) -> Result<(), String> {
+    if preserve_web_menu_pins.unwrap_or(false) {
+        state.config.replace_preserving_web_menu_pins(new_config)?;
+    } else {
+        state.config.replace(new_config)?;
+    }
     Ok(())
 }
 
@@ -731,6 +739,7 @@ pub fn run() {
             reload_web_webview,
             web_chrome::get_web_chrome,
             web_chrome::layout_web_menu,
+            web_chrome::set_web_menu_action_pinned,
             web_chrome::open_web_page_in_browser,
             open_in_browser,
             set_pin_state,

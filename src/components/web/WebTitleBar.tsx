@@ -8,7 +8,7 @@ import { HubTabBar } from './HubTabBar';
 import { WebFloatingMenu } from './WebFloatingMenu';
 import { useWebChrome } from '@/hooks/useWebChrome';
 import { useTranslation } from '@/hooks/useTranslation';
-import { DEFAULT_WEB_DRAG_HOLD_DELAY_MS, type ActionConfig } from '@/types/config';
+import { DEFAULT_WEB_DRAG_HOLD_DELAY_MS, DEFAULT_WEB_MENU_PINNED_ACTIONS, type ActionConfig, type WebMenuActionId } from '@/types/config';
 
 interface WebTitleBarProps {
   label?: string;
@@ -16,6 +16,7 @@ interface WebTitleBarProps {
   url?: string;
   actions?: ActionConfig[];
   dragHoldDelayMs?: number;
+  pinnedActions?: WebMenuActionId[];
 }
 
 export const WebTitleBar: React.FC<WebTitleBarProps> = (props) => {
@@ -30,7 +31,8 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = (props) => {
   if (layout.headless) {
     return <WebFloatingMenu windowLabel={label} title={props.title || params.get('title') || 'IOX Web Hub'}
       actions={props.actions ?? []} layout={layout.menu} update={update} failed={failed}
-      dragHoldDelayMs={props.dragHoldDelayMs ?? DEFAULT_WEB_DRAG_HOLD_DELAY_MS} />;
+      dragHoldDelayMs={props.dragHoldDelayMs ?? DEFAULT_WEB_DRAG_HOLD_DELAY_MS}
+      pinnedActions={props.pinnedActions ?? DEFAULT_WEB_MENU_PINNED_ACTIONS} />;
   }
   return label === 'web_hub' || label === 'web_hub_bar' ? <HubTabBar /> : <SingleWebTitleBar {...props} />;
 };

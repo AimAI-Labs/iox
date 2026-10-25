@@ -61,7 +61,7 @@ test('drag updates coalesce while IPC is pending and preserve the last toggle an
   assert.deepEqual(await Promise.all([start, middle, last, open]), [true, true, true, true]);
   assert.deepEqual(calls, [
     { position: [700, 20] },
-    { position: [500, 40], expanded: true },
+    { position: [500, 40], expanded: true, wheel: false },
   ]);
   client.dispose();
 });
@@ -96,5 +96,29 @@ test('a failed layout surfaces an error and subsequent updates can recover', asy
   fail = false;
   assert.equal(await client.update({ expanded: false }), true);
   assert.equal(errors.length, 1);
+  client.dispose();
+});
+
+test('opening the full menu overrides an earlier queued hover wheel', async () => {
+  const first = deferred();
+  const calls = [];
+  let revision = 1;
+  const client = createWebChromeClient({
+    listen: async () => () => {},
+    invoke: async (command, args) => {
+      if (command === 'get_web_chrome') return layout(1);
+      calls.push(args);
+      if (calls.length === 1) await first.promise;
+      return layout(++revision);
+    },
+  }, () => {}, assert.fail);
+  await client.ready;
+  const moving = client.update({ position: [500, 40] });
+  await Promise.resolve();
+  const hover = client.update({ wheel: true });
+  const click = client.update({ expanded: true });
+  first.resolve();
+  await Promise.all([moving, hover, click]);
+  assert.deepEqual(calls[1], { wheel: false, expanded: true });
   client.dispose();
 });

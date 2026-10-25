@@ -13,6 +13,22 @@
   user-select: none;
   font-size: 12px;
 }
+.web-menu-action-row { display: flex; align-items: center; gap: 2px; }
+.web-menu-action-row > .web-menu-action { flex: 1; min-width: 0; }
+.web-menu-pin { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 28px; flex-shrink: 0; margin-right: 2px; border-radius: var(--web-menu-item-radius); color: var(--ink-2); opacity: .55; cursor: pointer; }
+.web-menu-pin[aria-pressed="true"] { color: #438ff3; opacity: 1; background: rgb(82 156 255 / 10%); }
+.web-menu-action-row:hover .web-menu-pin { opacity: 1; }
+.web-menu-pin-hint { margin: 2px 9px 7px; color: var(--ink-2); font-size: 10px; line-height: 1.5; }
+.web-floating-menu[data-wheel="true"] { position: relative; display: block; background: transparent; border: none; border-radius: 0; }
+.web-floating-menu[data-wheel="true"] .web-menu-header { position: absolute; z-index: 3; width: 44px; min-height: 44px; overflow: hidden; box-sizing: border-box; background: var(--bg-overlay-card); border: 1px solid var(--line); border-radius: 50%; }
+.web-quick-wheel { position: absolute; inset: 0; animation: web-wheel-in 120ms ease-out; }
+.web-wheel-slot { position: absolute; width: var(--web-wheel-action-size); height: var(--web-wheel-action-size); transform: translate(-50%, -50%); }
+.web-wheel-action { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 50%; color: var(--ink); background: var(--bg-overlay-card); box-shadow: 0 2px 8px rgb(0 0 0 / 10%); cursor: pointer; }
+.web-wheel-action > svg { width: 18px; height: 18px; }
+.web-wheel-action[data-danger="true"] { color: #d45353; }
+.dark .web-wheel-action[data-danger="true"] { color: #f08080; }
+@keyframes web-wheel-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .web-quick-wheel { animation: none; } }
 .web-floating-menu[data-expanded="true"] { border-radius: var(--ui-popover-radius); }
 .web-menu-header { display: flex; align-items: center; min-height: 42px; flex-shrink: 0; }
 .web-floating-menu[data-expanded="true"] .web-menu-header { border-bottom: 1px solid var(--line); }

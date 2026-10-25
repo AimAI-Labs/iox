@@ -122,6 +122,8 @@ pub struct GeneralConfig {
     pub web_headless_mode: bool,
     #[serde(default = "default_web_drag_hold_delay_ms")]
     pub web_drag_hold_delay_ms: u64,
+    #[serde(default = "default_web_menu_pinned_actions")]
+    pub web_menu_pinned_actions: Vec<String>,
     #[serde(default)]
     pub auto_copy_on_web_action: bool,
     #[serde(default = "default_overlay_opacity")]
@@ -156,6 +158,24 @@ fn default_web_drag_hold_delay_ms() -> u64 {
 
 const MAX_WEB_DRAG_HOLD_DELAY_MS: u64 = 10000;
 
+const WEB_MENU_ACTION_IDS: [&str; 8] = [
+    "reload",
+    "openExternal",
+    "history",
+    "settings",
+    "moveWindow",
+    "minimize",
+    "maximize",
+    "closeWindow",
+];
+
+fn default_web_menu_pinned_actions() -> Vec<String> {
+    ["reload", "openExternal", "history", "minimize"]
+        .into_iter()
+        .map(String::from)
+        .collect()
+}
+
 fn default_floating_ball_hide_delay_ms() -> u64 { 2500 }
 fn default_floating_ball_hover_delay_ms() -> u64 { 220 }
 
@@ -174,6 +194,7 @@ impl Default for GeneralConfig {
             web_window_mode: "multi_window".to_string(),
             web_headless_mode: false,
             web_drag_hold_delay_ms: default_web_drag_hold_delay_ms(),
+            web_menu_pinned_actions: default_web_menu_pinned_actions(),
             auto_copy_on_web_action: false,
             overlay_opacity: 90,
             web_window_size: (860.0, 640.0),
@@ -830,7 +851,16 @@ fn migrate(config: &mut AppConfig) -> bool {
     }
 
     modified |= normalize_web_drag_hold_delay(config);
+    modified |= normalize_web_menu_pinned_actions(config);
     modified
+}
+
+fn normalize_web_menu_pinned_actions(config: &mut AppConfig) -> bool {
+    let actions = &mut config.general.web_menu_pinned_actions;
+    let previous_len = actions.len();
+    let mut seen = std::collections::HashSet::new();
+    actions.retain(|id| WEB_MENU_ACTION_IDS.contains(&id.as_str()) && seen.insert(id.clone()));
+    actions.len() != previous_len
 }
 
 fn normalize_web_drag_hold_delay(config: &mut AppConfig) -> bool {
@@ -840,12 +870,13 @@ fn normalize_web_drag_hold_delay(config: &mut AppConfig) -> bool {
     previous != *delay
 }
 
-/// 提交前归一化长按时长与遗留尺寸字段。
+/// 提交前归一化菜单偏好、长按时长与遗留尺寸字段。
 fn normalize_for_commit(config: &mut AppConfig) -> bool {
     let previous = config.general.api_card_size;
     config.general.api_card_size = default_api_card_size();
     let delay_changed = normalize_web_drag_hold_delay(config);
-    previous != config.general.api_card_size || delay_changed
+    let pins_changed = normalize_web_menu_pinned_actions(config);
+    previous != config.general.api_card_size || delay_changed || pins_changed
 }
 
 /// 配置文件的完整读写规则：原子替换、迁移写回与损坏文件保全。
@@ -1020,6 +1051,47 @@ impl ConfigStore {
         })
     }
 
+    /// 设置草稿不拥有工具栏即时保存的固定动作，在同一提交锁内保留当前值。
+    pub fn replace_preserving_web_menu_pins(
+        &self,
+        mut config: AppConfig,
+    ) -> Result<AppConfig, String> {
+        self.commit(move |current| {
+            config.general.web_menu_pinned_actions =
+                current.general.web_menu_pinned_actions.clone();
+            if *current == config {
+                false
+            } else {
+                *current = config;
+                true
+            }
+        })
+    }
+
+    pub fn set_web_menu_action_pinned(
+        &self,
+        action_id: &str,
+        pinned: bool,
+    ) -> Result<Vec<String>, String> {
+        if !WEB_MENU_ACTION_IDS.contains(&action_id) {
+            return Err("Unknown Web menu action".into());
+        }
+        let committed = self.commit(|config| {
+            let actions = &mut config.general.web_menu_pinned_actions;
+            let present = actions.iter().any(|id| id == action_id);
+            if present == pinned {
+                return false;
+            }
+            if pinned {
+                actions.push(action_id.to_string());
+            } else {
+                actions.retain(|id| id != action_id);
+            }
+            true
+        })?;
+        Ok(committed.general.web_menu_pinned_actions)
+    }
+
     fn lock(&self) -> MutexGuard<'_, AppConfig> {
         self.state
             .lock()
@@ -1124,6 +1196,163 @@ mod tests {
         fn publish(&self, _previous: &AppConfig, current: &AppConfig) {
             self.published.lock().unwrap().push(current.clone());
         }
+    }
+
+    #[test]
+    fn web_menu_pins_default_for_legacy_config_and_preserve_explicit_empty() {
+        let mut value = serde_json::to_value(AppConfig::default()).unwrap();
+        assert_eq!(
+            value["general"]["webMenuPinnedActions"],
+            serde_json::json!(["reload", "openExternal", "history", "minimize"])
+        );
+        value["general"]
+            .as_object_mut()
+            .unwrap()
+            .remove("webMenuPinnedActions");
+        let legacy: AppConfig = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(
+            serde_json::to_value(legacy).unwrap()["general"]["webMenuPinnedActions"],
+            serde_json::json!(["reload", "openExternal", "history", "minimize"])
+        );
+        value["general"]["webMenuPinnedActions"] = serde_json::json!([]);
+        let empty: AppConfig = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            serde_json::to_value(empty).unwrap()["general"]["webMenuPinnedActions"],
+            serde_json::json!([])
+        );
+    }
+
+    #[test]
+    fn web_menu_pins_normalize_on_load_and_full_commit() {
+        let fixture = Fixture::new();
+        let mut value = serde_json::to_value(AppConfig::default()).unwrap();
+        value["general"]["webMenuPinnedActions"] =
+            serde_json::json!(["settings", "unknown", "reload", "settings", "closeWindow"]);
+        fixture.seed(&serde_json::to_string(&value).unwrap());
+        let store = fixture.store();
+        let loaded = serde_json::to_value(store.snapshot()).unwrap();
+        assert_eq!(
+            loaded["general"]["webMenuPinnedActions"],
+            serde_json::json!(["settings", "reload", "closeWindow"])
+        );
+        assert_eq!(fixture.saved(), store.snapshot());
+
+        value["general"]["webMenuPinnedActions"] =
+            serde_json::json!(["moveWindow", "invalid", "maximize", "moveWindow"]);
+        let committed = store
+            .replace(serde_json::from_value(value).unwrap())
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(&committed).unwrap()["general"]["webMenuPinnedActions"],
+            serde_json::json!(["moveWindow", "maximize"])
+        );
+        assert_eq!(fixture.saved(), committed);
+        assert_eq!(fixture.store().snapshot(), committed);
+    }
+
+    #[test]
+    fn web_menu_pin_intents_persist_preserve_other_settings_and_are_idempotent() {
+        let fixture = Fixture::new();
+        let publisher = RecordingPublisher::default();
+        let published = publisher.published.clone();
+        let store = ConfigStore::at(fixture.path(), Box::new(publisher));
+        let before = store.snapshot();
+        let initial_bytes = fs::read(fixture.path()).unwrap();
+        assert!(store.set_web_menu_action_pinned("unknown", true).is_err());
+        assert_eq!(store.snapshot(), before);
+        assert_eq!(fs::read(fixture.path()).unwrap(), initial_bytes);
+
+        assert_eq!(
+            store.set_web_menu_action_pinned("reload", true).unwrap(),
+            before.general.web_menu_pinned_actions
+        );
+        assert!(published.lock().unwrap().is_empty());
+        let pinned = store.set_web_menu_action_pinned("settings", true).unwrap();
+        assert_eq!(pinned.last().map(String::as_str), Some("settings"));
+        let mut expected = before;
+        expected.general.web_menu_pinned_actions = pinned.clone();
+        assert_eq!(store.snapshot(), expected);
+        assert_eq!(fixture.saved(), expected);
+        assert_eq!(fixture.store().snapshot(), expected);
+        assert_eq!(published.lock().unwrap().len(), 1);
+
+        assert_eq!(
+            store.set_web_menu_action_pinned("settings", true).unwrap(),
+            pinned
+        );
+        store.set_web_menu_action_pinned("settings", false).unwrap();
+        store.set_web_menu_action_pinned("settings", false).unwrap();
+        assert_eq!(published.lock().unwrap().len(), 2);
+        for id in ["reload", "openExternal", "history", "minimize"] {
+            store.set_web_menu_action_pinned(id, false).unwrap();
+        }
+        assert!(fixture
+            .store()
+            .snapshot()
+            .general
+            .web_menu_pinned_actions
+            .is_empty());
+    }
+
+    #[test]
+    fn failed_web_menu_pin_persistence_keeps_memory_and_events_unchanged() {
+        let fixture = Fixture::new();
+        let blocked_parent = fixture.root.join("blocked");
+        fs::write(&blocked_parent, b"not a directory").unwrap();
+        let publisher = RecordingPublisher::default();
+        let published = publisher.published.clone();
+        let store = ConfigStore::at(blocked_parent.join("config.json"), Box::new(publisher));
+        let before = store.snapshot();
+        assert!(store.set_web_menu_action_pinned("settings", true).is_err());
+        assert_eq!(store.snapshot(), before);
+        assert!(published.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn concurrent_distinct_web_menu_pin_intents_are_merged() {
+        let fixture = Fixture::new();
+        let store = std::sync::Arc::new(fixture.store());
+        let start = std::sync::Arc::new(std::sync::Barrier::new(4));
+        let intents = [
+            ("reload", false),
+            ("history", false),
+            ("settings", true),
+            ("maximize", true),
+        ];
+        let threads: Vec<_> = intents
+            .into_iter()
+            .map(|(id, pinned)| {
+                let store = store.clone();
+                let start = start.clone();
+                std::thread::spawn(move || {
+                    start.wait();
+                    store.set_web_menu_action_pinned(id, pinned).unwrap();
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        let result = store.snapshot();
+        let mut pins = result.general.web_menu_pinned_actions.clone();
+        pins.sort();
+        assert_eq!(pins, ["maximize", "minimize", "openExternal", "settings"]);
+        assert_eq!(fixture.saved(), result);
+    }
+
+    #[test]
+    fn settings_save_preserves_pins_committed_after_the_draft_was_read() {
+        let fixture = Fixture::new();
+        let store = fixture.store();
+        let mut old_draft = store.snapshot();
+        old_draft.general.theme = "dark".into();
+        store.set_web_menu_action_pinned("settings", true).unwrap();
+        store.set_web_menu_action_pinned("reload", false).unwrap();
+        let expected_pins = store.snapshot().general.web_menu_pinned_actions;
+        let saved = store.replace_preserving_web_menu_pins(old_draft).unwrap();
+        assert_eq!(saved.general.web_menu_pinned_actions, expected_pins);
+        assert_eq!(saved.general.theme, "dark");
+        assert_eq!(fixture.saved(), saved);
     }
 
     #[test]

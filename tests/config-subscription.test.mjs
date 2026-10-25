@@ -24,6 +24,7 @@ const config = (delay) => ({ ...fixture, general: { ...fixture.general, webDragH
 function setup() {
   const registration = deferred();
   const reads = [];
+  const writes = [];
   const values = [];
   const effects = [];
   const exports = {};
@@ -36,13 +37,16 @@ function setup() {
       useEffect: (effect) => effects.push(effect),
     };
     if (name === '@/types/config') return configModule;
-    if (name === '@tauri-apps/api/core') return { invoke: () => { const read = deferred(); reads.push(read); return read.promise; } };
+    if (name === '@tauri-apps/api/core') return { invoke: (command, args) => {
+      if (command !== 'get_config') { writes.push({ command, args }); return Promise.resolve(null); }
+      const read = deferred(); reads.push(read); return read.promise;
+    } };
     if (name === '@tauri-apps/api/event') return { listen: (_event, handler) => { emit = handler; return registration.promise; } };
     throw new Error(`Unexpected import ${name}`);
   } });
   const hook = exports.useConfig();
   const cleanup = effects[0]();
-  return { hook, values, reads, cleanup, emit: (payload) => emit({ payload }),
+  return { hook, values, reads, writes, cleanup, emit: (payload) => emit({ payload }),
     subscribe: () => registration.resolve(() => { unlistened++; }), unlistened: () => unlistened };
 }
 
@@ -68,4 +72,15 @@ test('late listener registration is cleaned up without fetching after unmount', 
   await flush();
   assert.equal(h.reads.length, 0);
   assert.equal(h.unlistened(), 1);
+});
+
+test('ordinary config saves preserve toolbar-owned pins inside the native commit', async () => {
+  const h = setup();
+  assert.equal(await h.hook.updateConfig(config(125)), true);
+  assert.equal(h.writes[0].command, 'save_config');
+  assert.equal(h.writes[0].args.preserveWebMenuPins, true);
+  assert.equal(h.writes[0].args.newConfig.general.webDragHoldDelayMs, 125);
+  h.cleanup();
+  h.subscribe();
+  await flush();
 });

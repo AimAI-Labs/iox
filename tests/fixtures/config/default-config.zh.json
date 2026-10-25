@@ -12,6 +12,12 @@
     "webWindowMode": "multi_window",
     "webHeadlessMode": false,
     "webDragHoldDelayMs": 300,
+    "webMenuPinnedActions": [
+      "reload",
+      "openExternal",
+      "history",
+      "minimize"
+    ],
     "autoCopyOnWebAction": false,
     "overlayOpacity": 90,
     "webWindowSize": [

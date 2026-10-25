@@ -295,6 +295,10 @@ export const en: TranslationTree = {
       dragHoldDelayDesc: 'Hold the floating button before moving the whole card (0–10000 ms). Set 0 to drag immediately. Applies when saved.',
       menu: {
         title: 'Web menu',
+        quickActions: 'Quick actions',
+        pin: 'Pin {name}',
+        unpin: 'Unpin {name}',
+        pinHint: 'Pin actions around the floating button on hover. Shared across Web cards.',
         open: 'Click for menu, drag to move menu, hold {delay} ms to move window',
         openImmediate: 'Click for menu, drag to move window',
         collapse: 'Collapse menu',
