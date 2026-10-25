@@ -291,9 +291,12 @@ export const en: TranslationTree = {
       windowMode: 'Web Window Mode',
       headlessMode: 'Web Card Headless Mode',
       headlessModeDesc: 'Hide navigation and window title bars; use a draggable floating menu. Applies when saved.',
+      dragHoldDelay: 'Window drag hold delay',
+      dragHoldDelayDesc: 'Hold the floating button before moving the whole card (0–10000 ms). Set 0 to drag immediately. Applies when saved.',
       menu: {
         title: 'Web menu',
-        open: 'Click for menu, drag to move menu, hold 1 second to move window',
+        open: 'Click for menu, drag to move menu, hold {delay} ms to move window',
+        openImmediate: 'Click for menu, drag to move window',
         collapse: 'Collapse menu',
         drag: 'Drag menu',
         reload: 'Reload page',

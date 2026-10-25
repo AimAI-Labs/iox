@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { AppConfig, appConfigSchema } from '@/types/config';
@@ -22,18 +22,21 @@ export function useConfig() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const readVersion = useRef(0);
 
   const fetchConfig = useCallback(async () => {
+    const version = ++readVersion.current;
     try {
       setLoading(true);
       const data = await invoke<unknown>('get_config');
+      if (version !== readVersion.current) return;
       const result = readConfig(data);
       setConfig(result.config);
       setError(result.error);
     } catch (err) {
-      setError(String(err));
+      if (version === readVersion.current) setError(String(err));
     } finally {
-      setLoading(false);
+      if (version === readVersion.current) setLoading(false);
     }
   }, []);
 
@@ -57,20 +60,27 @@ export function useConfig() {
   };
 
   useEffect(() => {
-    fetchConfig();
-
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     listen<unknown>('config_updated', (event) => {
+      if (disposed) return;
+      readVersion.current++;
       const result = readConfig(event.payload);
       setConfig(result.config);
       setError(result.error);
+      setLoading(false);
     }).then((fn) => {
+      if (disposed) { fn(); return; }
       unlisten = fn;
+      void fetchConfig();
     }).catch((err) => {
       console.warn('Failed to listen to config_updated:', err);
+      if (!disposed) void fetchConfig();
     });
 
     return () => {
+      disposed = true;
+      readVersion.current++;
       if (unlisten) unlisten();
     };
   }, [fetchConfig]);

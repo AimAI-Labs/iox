@@ -13,8 +13,89 @@ with sync_playwright() as p:
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
 
+    # Custom values affect new presses without recreating the toolbar or page.
+    delay_page = browser.new_page(viewport={'width': 860, 'height': 640})
+    delay_page.goto(f'{base}?holdDelay=125')
+    delay_page.wait_for_load_state('networkidle')
+    delay_page.clock.install(time=datetime(2030, 1, 1, tzinfo=timezone.utc))
+    delay_page.clock.pause_at(datetime(2030, 1, 1, 0, 0, 1, tzinfo=timezone.utc))
+    delay_trigger = delay_page.frame_locator('#bar').locator('.web-menu-trigger')
+    for count, delay in enumerate([125, 450], start=1):
+        delay_page.evaluate('(delay) => chromeFixture.setDelay(delay)', delay)
+        expect(delay_trigger).to_have_attribute('title', f'Click for menu, drag to move menu, hold {delay} ms to move window')
+        delay_trigger.hover()
+        delay_page.mouse.down()
+        if delay:
+            assert delay_trigger.evaluate("el => getComputedStyle(el, '::after').animationDuration") == f'{delay / 1000:g}s'
+            delay_page.clock.fast_forward(delay - 1)
+            assert delay_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == count - 1
+        delay_page.clock.fast_forward(1)
+        assert delay_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == count
+        delay_page.mouse.up()
+        expect(delay_trigger).to_have_attribute('aria-expanded', 'false')
+    delay_page.evaluate('chromeFixture.setDelay(0)')
+    expect(delay_trigger).to_have_attribute('title', 'Click for menu, drag to move window')
+    delay_trigger.click()
+    expect(delay_trigger).to_have_attribute('aria-expanded', 'true')
+    delay_trigger.press('Escape')
+    delay_trigger.hover()
+    delay_page.mouse.down()
+    delay_page.clock.fast_forward(100)
+    assert delay_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 2
+    delay_page.mouse.move(500, 150, steps=4)
+    assert delay_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 3
+    delay_page.mouse.up()
+    expect(delay_trigger).to_have_attribute('aria-expanded', 'false')
+
+    # A saved change during a press applies on the next press; its current ring/timer agree.
+    delay_page.evaluate('chromeFixture.setDelay(450)')
+    expect(delay_trigger).to_have_attribute('title', 'Click for menu, drag to move menu, hold 450 ms to move window')
+    delay_trigger.hover()
+    delay_page.mouse.down()
+    delay_page.clock.fast_forward(100)
+    delay_page.evaluate('chromeFixture.setDelay(125)')
+    expect(delay_trigger).to_have_attribute('title', 'Click for menu, drag to move menu, hold 125 ms to move window')
+    assert delay_trigger.evaluate("el => getComputedStyle(el, '::after').animationDuration") == '0.45s'
+    delay_page.clock.fast_forward(349)
+    assert delay_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 3
+    delay_page.clock.fast_forward(1)
+    assert delay_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 4
+    delay_page.mouse.up()
+    delay_trigger.hover()
+    delay_page.mouse.down()
+    delay_page.clock.fast_forward(125)
+    assert delay_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 5
+    delay_page.mouse.up()
+    delay_page.close()
+
+    for lang, name in [('en-US', 'Window drag hold delay'), ('zh-CN', '整窗拖动长按时长')]:
+        page.goto(f'{base}?settings&lang={lang}')
+        field = page.get_by_role('spinbutton', name=name, exact=True)
+        expect(field).to_have_count(0)
+        headless = page.get_by_role('switch').nth(0)
+        headless.click()
+        expect(field).to_have_value('300')
+        field.fill('175')
+        assert page.evaluate('testGeneral.webDragHoldDelayMs') == 175, 'Valid edits must reach the settings draft before blur for Ctrl+S'
+        field.press('Tab')
+        assert page.evaluate('testGeneral.webDragHoldDelayMs') == 175
+        headless.click()
+        expect(field).to_have_count(0)
+        headless.click()
+        expect(field).to_have_value('175')
+        field.fill('')
+        field.press('Tab')
+        expect(field).to_have_value('175')
+        field.fill('-1')
+        field.press('Tab')
+        expect(field).to_have_value('0')
+        field.fill('15000')
+        field.press('Enter')
+        expect(field).to_have_value('10000')
+        page.screenshot(path=str(output / f'hold-settings-{lang}.png'))
+
     gesture_page = browser.new_page(viewport={'width': 860, 'height': 640}, reduced_motion='reduce')
-    gesture_page.goto(f'{base}?lang=en-US')
+    gesture_page.goto(f'{base}?lang=en-US&holdDelay=1000')
     gesture_page.wait_for_load_state('networkidle')
     gesture_page.clock.install(time=datetime(2030, 1, 1, tzinfo=timezone.utc))
     gesture_page.clock.pause_at(datetime(2030, 1, 1, 0, 0, 1, tzinfo=timezone.utc))
@@ -143,4 +224,4 @@ with sync_playwright() as p:
     page.screenshot(path=str(output / 'hub-windows.png'))
     assert not errors, errors
     browser.close()
-    print('Web menu browser checks passed: exact one-second hold, cancellation, drag errors, pointer dragging, live mode, operations, Hub, themes, languages, bounds.')
+    print('Web menu browser checks passed: configurable delay, zero-delay click/drag, settings child and validation, exact hold timing, cancellation, drag errors, pointer dragging, live mode, operations, Hub, themes, languages, bounds.')

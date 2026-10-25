@@ -26,6 +26,8 @@ const {
   DEFAULT_SHOW_DURATION,
   DEFAULT_THINKING_OPEN,
   DEFAULT_WEB_WINDOW_SIZE,
+  DEFAULT_WEB_DRAG_HOLD_DELAY_MS,
+  MAX_WEB_DRAG_HOLD_DELAY_MS,
 } = configModule;
 
 const fixture = JSON.parse(
@@ -62,6 +64,7 @@ test('shared default constants stay equal to the Rust serialized defaults', () =
   assert.equal(DEFAULT_FILE_DRAG_HOVER_DELAY_MS, fixture.general.fileDragHoverDelayMs);
   assert.equal(DEFAULT_FLOATING_BALL_HIDE_DELAY_MS, fixture.general.floatingBallHideDelayMs);
   assert.equal(DEFAULT_FLOATING_BALL_HOVER_DELAY_MS, fixture.general.floatingBallHoverDelayMs);
+  assert.equal(DEFAULT_WEB_DRAG_HOLD_DELAY_MS, fixture.general.webDragHoldDelayMs);
 });
 
 test('legacy omissions get the same defaults as the Rust serde defaults', () => {
@@ -140,4 +143,20 @@ test('Web headless mode is opt-in for existing configs and survives serializatio
   assert.equal(appConfigSchema.safeParse({
     ...fixture, general: { ...general, webHeadlessMode: 'true' },
   }).success, false);
+});
+
+test('Web window drag delay defaults for legacy configs and preserves custom milliseconds', () => {
+  const general = { ...fixture.general };
+  delete general.webDragHoldDelayMs;
+  assert.equal(parseOrFail({ ...fixture, general }).general.webDragHoldDelayMs, 300);
+  for (const delay of [0, 125, 450, 10000]) {
+    const config = parseOrFail({ ...fixture, general: { ...general, webDragHoldDelayMs: delay } });
+    assert.equal(parseOrFail(JSON.parse(JSON.stringify(config))).general.webDragHoldDelayMs, delay);
+  }
+  assert.equal(MAX_WEB_DRAG_HOLD_DELAY_MS, 10000);
+  for (const invalid of [-1, 1.5, 10001, '300', null]) {
+    assert.equal(appConfigSchema.safeParse({
+      ...fixture, general: { ...general, webDragHoldDelayMs: invalid },
+    }).success, false, `delay ${invalid} must be rejected`);
+  }
 });

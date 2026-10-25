@@ -289,9 +289,12 @@ export const zh = {
       windowMode: '网页打开模式',
       headlessMode: 'Web 卡片无头模式',
       headlessModeDesc: '隐藏导航栏和窗口标题栏，以可拖动的悬浮菜单操作网页；保存后立即生效',
+      dragHoldDelay: '整窗拖动长按时长',
+      dragHoldDelayDesc: '长按悬浮按钮多久后拖动整个卡片（0–10000ms）；0 为直接拖动卡片，保存后生效',
       menu: {
         title: '网页菜单',
-        open: '单击打开菜单，拖动移动菜单，长按 1 秒拖动卡片',
+        open: '单击打开菜单，拖动移动菜单，长按 {delay} 毫秒拖动卡片',
+        openImmediate: '单击打开菜单，直接拖动卡片',
         collapse: '收起菜单',
         drag: '拖动菜单',
         reload: '刷新页面',

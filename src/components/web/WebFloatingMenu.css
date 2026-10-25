@@ -25,7 +25,7 @@
   border: 2px solid #529cff;
   border-radius: 50%;
   pointer-events: none;
-  animation: web-menu-hold 1s linear forwards;
+  animation: web-menu-hold var(--web-hold-delay) linear forwards;
 }
 @keyframes web-menu-hold {
   from { opacity: .2; transform: scale(.7); }

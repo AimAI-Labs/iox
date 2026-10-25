@@ -11,6 +11,7 @@
     "autoStart": false,
     "webWindowMode": "multi_window",
     "webHeadlessMode": false,
+    "webDragHoldDelayMs": 300,
     "autoCopyOnWebAction": false,
     "overlayOpacity": 90,
     "webWindowSize": [

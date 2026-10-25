@@ -155,7 +155,7 @@ def inspect_window(pid, title, headless):
     return {'title': title, 'client': [width, height], 'frame': [frame_left, frame_top], 'toolbar': toolbar_rect, 'content': content_rect}
 
 
-def hold_and_drag_window(pid, title):
+def hold_and_drag_window(pid, title, delay_ms):
     """Inject a real held mouse only after verifying the point belongs to our test process."""
     assert not user32.GetAsyncKeyState(1) & 0x8000, 'A user mouse gesture is already in progress'
     hwnd = native_window(pid, title)
@@ -173,7 +173,7 @@ def hold_and_drag_window(pid, title):
         user32.SetCursorPos(point.x, point.y)
         user32.mouse_event(0x0002, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTDOWN
         pressed = True
-        time.sleep(1.2)
+        time.sleep(delay_ms / 1000 + 0.15)
         user32.SetCursorPos(point.x + 120, point.y + 70)
         time.sleep(0.15)
         user32.mouse_event(0x0004, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTUP
@@ -182,7 +182,7 @@ def hold_and_drag_window(pid, title):
         after = rect(hwnd)
         assert abs(after[0] - before[0] - 120) <= 2 and abs(after[1] - before[1] - 70) <= 2, (before, after)
         assert before[2:] == after[2:], 'Window drag unexpectedly changed card size'
-        return {'windowDrag': {'before': before, 'after': after}}
+        return {'windowDrag': {'delayMs': delay_ms, 'before': before, 'after': after}}
     finally:
         if pressed:
             user32.mouse_event(0x0004, 0, 0, 0, 0)
@@ -260,8 +260,25 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             invoke(bar, 'toggle_maximize_web_window', {'label': 'web_win_alpha'})
             assert not invoke(main, 'plugin:window|is_maximized', {'label': 'web_win_alpha'})
             invoke(bar, 'layout_web_menu', {'expanded': False})
+            invoke(main, 'show_main_window', {'targetTab': 'web'})
+            main.get_by_role('navigation').get_by_role('button', name='Web Hub', exact=True).click()
+            delay_field = main.get_by_role('spinbutton', name='Window drag hold delay', exact=True)
+            expect(delay_field).to_have_value('300')
+            delay_field.fill('175')
+            delay_field.press('Control+s')
+            for _ in range(50):
+                saved_delay = invoke(main, 'get_config')['general']['webDragHoldDelayMs']
+                if saved_delay == 175:
+                    break
+                main.wait_for_timeout(100)
+            assert saved_delay == 175, ('Ctrl+S saved an old draft', saved_delay)
+            disk_delay = json.loads((profile / '.iox-dev/config.json').read_text(encoding='utf-8'))['general']['webDragHoldDelayMs']
+            assert disk_delay == 175, ('Ctrl+S did not persist the new delay', disk_delay)
+            main.screenshot(path=str(output / 'settings-hold-delay.png'))
+            config['general']['webDragHoldDelayMs'] = 175
+            expect(bar.locator('.web-menu-trigger')).to_have_attribute('title', 'Click for menu, drag to move menu, hold 175 ms to move window')
             menu_before_drag = invoke(bar, 'get_web_chrome')['menu']
-            results.append(hold_and_drag_window(process.pid, 'IOX Native Alpha'))
+            results.append(hold_and_drag_window(process.pid, 'IOX Native Alpha', 175))
             expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-expanded', 'false')
             assert invoke(bar, 'get_web_chrome')['menu'] == menu_before_drag, 'Window drag moved only the floating menu'
             before = invoke(bar, 'get_web_chrome')['menu']
@@ -307,7 +324,7 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             results.append(inspect_window(process.pid, 'IOX Web Hub', True))
             (output / 'result.json').write_text(json.dumps(results, indent=2), encoding='utf-8')
             browser.close()
-        print('Native Windows checks passed: rounded page and window corners, one-second hold moving the real window, full content, toolbar Z order, live mode, preserved input, maximize/restore, minimize anchor, caller validation, Hub reopen.')
+        print('Native Windows checks passed: rounded page and window corners, live-configured 175ms hold moving the real window, full content, toolbar Z order, live mode, preserved input, maximize/restore, minimize anchor, caller validation, Hub reopen.')
     finally:
         process.terminate()
         try:

@@ -1,9 +1,13 @@
-import { StrictMode } from 'react';
+import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { WebTitleBar } from '../../src/components/web/WebTitleBar';
 import { ThemeProvider } from '../../src/themes/ThemeProvider';
+import { WebviewTab } from '../../src/components/settings/WebviewTab';
+import { I18nProvider } from '../../src/hooks/useTranslation';
+import { appConfigSchema } from '../../src/types/config';
+import defaultConfig from './config/default-config.zh.json';
 import '../../src/App.css';
 import type { WebChromeLayout, WebMenuChange } from '../../src/lib/webChromeClient';
 
@@ -15,7 +19,19 @@ const actions = ['Alpha', 'Beta', 'Gamma', 'Delta'].map((name) => ({
   id: name.toLowerCase(), name, icon: 'Globe', enabled: true, actionType: 'web' as const,
 }));
 
-if (!params.has('bar')) {
+if (params.has('settings')) {
+  const initial = appConfigSchema.parse(defaultConfig);
+  function SettingsFixture() {
+    const [general, setGeneral] = useState(initial.general);
+    Object.assign(window, { testGeneral: general });
+    return <ThemeProvider style="classic"><I18nProvider languageSetting={language.startsWith('zh') ? 'zh' : 'en'}>
+      <main style={{ maxWidth: 800, margin: '24px auto' }}>
+        <WebviewTab general={general} actions={[]} onUpdateGeneral={(changes) => setGeneral((current) => ({ ...current, ...changes }))} />
+      </main>
+    </I18nProvider></ThemeProvider>;
+  }
+  createRoot(document.getElementById('root')!).render(<SettingsFixture />);
+} else if (!params.has('bar')) {
   const page = document.createElement('iframe');
   page.id = 'site';
   page.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;background:#edf0f4';
@@ -36,6 +52,9 @@ if (!params.has('bar')) {
     calls: [] as { command: string; args: Record<string, unknown> }[],
     pageClicks: 0,
     failNext: false,
+    holdDelay: Number(params.get('holdDelay') ?? 300),
+    onDelay: (_delay: number) => {},
+    setDelay(delay: number) { fixture.holdDelay = delay; fixture.onDelay(delay); },
     layout: { revision: 0, headless: true, menu: { x: innerWidth - 56, y: 12, width: 44, height: 44, expanded: false } } as WebChromeLayout,
     hubState: { tabs: actions.slice(0, 3).map((action) => ({ actionId: action.id, name: action.name, icon: action.icon, url: 'https://example.test/' })), activeTabId: 'beta' },
     onChrome: (_layout: WebChromeLayout) => {},
@@ -91,14 +110,20 @@ if (!params.has('bar')) {
   const fixture = (parent as unknown as { chromeFixture: {
     onChrome: (layout: WebChromeLayout) => void; onHub: (state: unknown) => void;
     invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+    holdDelay: number; onDelay: (delay: number) => void;
   } }).chromeFixture;
   fixture.onChrome = (layout) => { void emit('web_chrome_layout_changed', layout); };
   fixture.onHub = (state) => { void emit('web_hub_state_changed', state); };
   mockIPC((command, args) => fixture.invoke(command, args as Record<string, unknown>), { shouldMockEvents: true });
   mockWindows(label);
+  function ToolbarFixture() {
+    const [delay, setDelay] = useState(fixture.holdDelay);
+    fixture.onDelay = setDelay;
+    return <WebTitleBar label={label} title="Web workspace" url="https://example.test/" actions={actions} dragHoldDelayMs={delay} />;
+  }
   createRoot(document.getElementById('root')!).render(
     <StrictMode><ThemeProvider style={params.get('style') ?? 'classic'}>
-      <WebTitleBar label={label} title="Web workspace" url="https://example.test/" actions={actions} />
+      <ToolbarFixture />
     </ThemeProvider></StrictMode>,
   );
 }

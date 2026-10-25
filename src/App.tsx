@@ -57,7 +57,7 @@ export function App() {
     return withTheme(
       <I18nProvider languageSetting={config.general.language}>
         <Suspense fallback={null}>
-          <WebTitleBar actions={config.actions} />
+          <WebTitleBar actions={config.actions} dragHoldDelayMs={config.general.webDragHoldDelayMs} />
         </Suspense>
       </I18nProvider>
     );

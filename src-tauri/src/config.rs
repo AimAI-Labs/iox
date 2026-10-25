@@ -120,6 +120,8 @@ pub struct GeneralConfig {
     pub web_window_mode: String,  // "multi_window" | "tabbed"
     #[serde(default)]
     pub web_headless_mode: bool,
+    #[serde(default = "default_web_drag_hold_delay_ms")]
+    pub web_drag_hold_delay_ms: u64,
     #[serde(default)]
     pub auto_copy_on_web_action: bool,
     #[serde(default = "default_overlay_opacity")]
@@ -148,6 +150,12 @@ fn default_file_drag_hover_delay_ms() -> u64 {
     1000
 }
 
+fn default_web_drag_hold_delay_ms() -> u64 {
+    300
+}
+
+const MAX_WEB_DRAG_HOLD_DELAY_MS: u64 = 10000;
+
 fn default_floating_ball_hide_delay_ms() -> u64 { 2500 }
 fn default_floating_ball_hover_delay_ms() -> u64 { 220 }
 
@@ -165,6 +173,7 @@ impl Default for GeneralConfig {
             auto_start: false,
             web_window_mode: "multi_window".to_string(),
             web_headless_mode: false,
+            web_drag_hold_delay_ms: default_web_drag_hold_delay_ms(),
             auto_copy_on_web_action: false,
             overlay_opacity: 90,
             web_window_size: (860.0, 640.0),
@@ -820,14 +829,23 @@ fn migrate(config: &mut AppConfig) -> bool {
         modified = true;
     }
 
+    modified |= normalize_web_drag_hold_delay(config);
     modified
 }
 
-/// 提交前规范化遗留字段，避免旧字段再次与 `api_card.card_size` 分叉。
+fn normalize_web_drag_hold_delay(config: &mut AppConfig) -> bool {
+    let delay = &mut config.general.web_drag_hold_delay_ms;
+    let previous = *delay;
+    *delay = (*delay).min(MAX_WEB_DRAG_HOLD_DELAY_MS);
+    previous != *delay
+}
+
+/// 提交前归一化长按时长与遗留尺寸字段。
 fn normalize_for_commit(config: &mut AppConfig) -> bool {
     let previous = config.general.api_card_size;
     config.general.api_card_size = default_api_card_size();
-    previous != config.general.api_card_size
+    let delay_changed = normalize_web_drag_hold_delay(config);
+    previous != config.general.api_card_size || delay_changed
 }
 
 /// 配置文件的完整读写规则：原子替换、迁移写回与损坏文件保全。
@@ -1363,6 +1381,42 @@ mod tests {
             assert_eq!(config.web_headless_mode, enabled);
             assert_eq!(serde_json::to_value(config).unwrap()["webHeadlessMode"], enabled);
         }
+    }
+
+    #[test]
+    fn web_drag_hold_delay_defaults_and_persists_custom_milliseconds() {
+        let fixture = Fixture::new();
+        let mut legacy = serde_json::to_value(AppConfig::default()).unwrap();
+        legacy["general"]
+            .as_object_mut()
+            .unwrap()
+            .remove("webDragHoldDelayMs");
+        let config: AppConfig = serde_json::from_value(legacy).unwrap();
+        assert_eq!(
+            serde_json::to_value(&config).unwrap()["general"]["webDragHoldDelayMs"],
+            300
+        );
+        let store = fixture.store();
+        for delay in [0, 125, 450, 10000] {
+            let mut json = serde_json::to_value(&config).unwrap();
+            json["general"]["webDragHoldDelayMs"] = serde_json::json!(delay);
+            store
+                .replace(serde_json::from_value(json).unwrap())
+                .unwrap();
+            assert_eq!(
+                serde_json::to_value(fixture.saved()).unwrap()["general"]["webDragHoldDelayMs"],
+                delay
+            );
+        }
+        let mut json = serde_json::to_value(config).unwrap();
+        json["general"]["webDragHoldDelayMs"] = serde_json::json!(10001);
+        store
+            .replace(serde_json::from_value(json).unwrap())
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(fixture.saved()).unwrap()["general"]["webDragHoldDelayMs"],
+            10000
+        );
     }
 
     #[test]

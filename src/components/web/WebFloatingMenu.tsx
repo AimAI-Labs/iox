@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -16,15 +16,16 @@ interface WebFloatingMenuProps {
   layout: WebMenuLayout;
   update: (changes: WebMenuChange) => Promise<boolean>;
   failed: boolean;
+  dragHoldDelayMs: number;
 }
 
-export function WebFloatingMenu({ windowLabel, title, actions, layout, update, failed }: WebFloatingMenuProps) {
+export function WebFloatingMenu({ windowLabel, title, actions, layout, update, failed, dragHoldDelayMs }: WebFloatingMenuProps) {
   const { t } = useTranslation();
   const hub = windowLabel === 'web_hub';
   const [hubState, setHubState] = useState<WebHubState>({ tabs: [], activeTabId: null });
   const [actionFailed, setActionFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [holding, setHolding] = useState(false);
+  const [holdingDelayMs, setHoldingDelayMs] = useState<number | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const ignoreClick = useRef(false);
   const dragRef = useRef<{
@@ -35,6 +36,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     originY: number;
     moved: boolean;
     windowDragging: boolean;
+    windowDragOnMove: boolean;
     timer: ReturnType<typeof setTimeout> | null;
   } | null>(null);
   const layoutRef = useRef(layout);
@@ -46,7 +48,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     if (drag.timer !== null) clearTimeout(drag.timer);
     ignoreClick.current = true;
     dragRef.current = null;
-    setHolding(false);
+    setHoldingDelayMs(null);
   };
 
   useEffect(() => {
@@ -99,6 +101,24 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     };
   }, [layout.expanded, update]);
 
+  const startWindowDrag = (drag: NonNullable<typeof dragRef.current>, target: HTMLButtonElement) => {
+    drag.windowDragging = true;
+    ignoreClick.current = true;
+    setHoldingDelayMs(null);
+    // Transfer capture to the native window while the primary button is still held.
+    if (target.hasPointerCapture(drag.pointerId)) target.releasePointerCapture(drag.pointerId);
+    void (async () => {
+      try {
+        await getCurrentWindow().startDragging();
+      } catch {
+        setActionFailed(true);
+        void update({ expanded: true });
+      } finally {
+        if (dragRef.current === drag) dragRef.current = null;
+      }
+    })();
+  };
+
   const pointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
     cancelPress();
@@ -108,33 +128,21 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     target.focus();
     target.setPointerCapture(pointerId);
     ignoreClick.current = false;
+    const canDragWindow = target === triggerRef.current && !layoutRef.current.expanded;
     const drag = {
       pointerId, x: event.screenX, y: event.screenY,
       originX: layoutRef.current.x, originY: layoutRef.current.y,
       moved: false, windowDragging: false, timer: null as ReturnType<typeof setTimeout> | null,
+      windowDragOnMove: canDragWindow && dragHoldDelayMs === 0,
     };
     dragRef.current = drag;
-    if (target === triggerRef.current && !layoutRef.current.expanded) {
-      setHolding(true);
+    if (canDragWindow && dragHoldDelayMs > 0) {
+      setHoldingDelayMs(dragHoldDelayMs);
       drag.timer = setTimeout(() => {
         if (dragRef.current !== drag || drag.moved) return;
         drag.timer = null;
-        drag.windowDragging = true;
-        ignoreClick.current = true;
-        setHolding(false);
-        // Transfer capture to the native window while the primary button is still held.
-        if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
-        void (async () => {
-          try {
-            await getCurrentWindow().startDragging();
-          } catch {
-            setActionFailed(true);
-            void update({ expanded: true });
-          } finally {
-            if (dragRef.current === drag) dragRef.current = null;
-          }
-        })();
-      }, 1000);
+        startWindowDrag(drag, target);
+      }, dragHoldDelayMs);
     }
   };
   const pointerMove = (event: PointerEvent<HTMLButtonElement>) => {
@@ -145,9 +153,13 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     const dy = event.screenY - drag.y;
     if (!drag.moved && Math.hypot(dx, dy) < 4) return;
     drag.moved = true;
+    if (drag.windowDragOnMove) {
+      startWindowDrag(drag, event.currentTarget);
+      return;
+    }
     if (drag.timer !== null) clearTimeout(drag.timer);
     drag.timer = null;
-    setHolding(false);
+    setHoldingDelayMs(null);
     void update({ position: [drag.originX + dx, drag.originY + dy] });
   };
   const pointerEnd = (event: PointerEvent<HTMLButtonElement>) => {
@@ -156,7 +168,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     if (drag.timer !== null) clearTimeout(drag.timer);
     ignoreClick.current = drag.moved || drag.windowDragging || event.type === 'pointercancel';
     dragRef.current = null;
-    setHolding(false);
+    setHoldingDelayMs(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
   const dragHandlers = {
@@ -195,6 +207,9 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
       {icon}<span>{label}</span>
     </button>
   );
+  const openLabel = dragHoldDelayMs === 0 ? t('settings.web.menu.openImmediate')
+    : t('settings.web.menu.open', { delay: dragHoldDelayMs });
+  const triggerLabel = layout.expanded ? t('settings.web.menu.collapse') : openLabel;
 
   return (
     <div className="web-floating-menu" data-expanded={layout.expanded}
@@ -206,9 +221,9 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
           </button>
           <span className="web-menu-title" title={activeTitle}>{activeTitle}</span>
         </>}
-        <button type="button" ref={triggerRef} className="web-menu-trigger" aria-expanded={layout.expanded} data-holding={holding}
-          aria-controls="web-floating-menu-actions" aria-label={t(layout.expanded ? 'settings.web.menu.collapse' : 'settings.web.menu.open')}
-          title={t(layout.expanded ? 'settings.web.menu.collapse' : 'settings.web.menu.open')}
+        <button type="button" ref={triggerRef} className="web-menu-trigger" aria-expanded={layout.expanded} data-holding={holdingDelayMs !== null}
+          style={{ '--web-hold-delay': `${holdingDelayMs ?? dragHoldDelayMs}ms` } as CSSProperties}
+          aria-controls="web-floating-menu-actions" aria-label={triggerLabel} title={triggerLabel}
           {...dragHandlers} onClick={() => {
             if (ignoreClick.current) { ignoreClick.current = false; return; }
             void update({ expanded: !layoutRef.current.expanded });

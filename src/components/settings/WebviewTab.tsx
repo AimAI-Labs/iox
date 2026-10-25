@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Globe, LayoutGrid, Layers, RefreshCcw, ArrowUpRight, Zap } from "lucide-react";
-import { GeneralConfig, ActionConfig, DEFAULT_WEB_WINDOW_SIZE, WebWindowMode } from "@/types/config";
+import { GeneralConfig, ActionConfig, DEFAULT_WEB_WINDOW_SIZE, DEFAULT_WEB_DRAG_HOLD_DELAY_MS, MAX_WEB_DRAG_HOLD_DELAY_MS, WebWindowMode } from "@/types/config";
 import { useTranslation } from "@/hooks/useTranslation";
 import {
   Card,
@@ -36,6 +36,27 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
 
   const [widthInput, setWidthInput] = useState(String(Math.round(currentW)));
   const [heightInput, setHeightInput] = useState(String(Math.round(currentH)));
+  const dragHoldDelayMs = general.webDragHoldDelayMs ?? DEFAULT_WEB_DRAG_HOLD_DELAY_MS;
+  const [holdDelayInput, setHoldDelayInput] = useState(String(dragHoldDelayMs));
+
+  useEffect(() => { setHoldDelayInput(String(dragHoldDelayMs)); }, [dragHoldDelayMs]);
+
+  const changeHoldDelay = (input: string) => {
+    setHoldDelayInput(input);
+    if (input.trim() === '') return;
+    const value = Number(input);
+    if (Number.isInteger(value) && value >= 0 && value <= MAX_WEB_DRAG_HOLD_DELAY_MS && value !== dragHoldDelayMs) {
+      // Keep valid edits in the settings draft so Ctrl+S also saves without blurring.
+      onUpdateGeneral({ webDragHoldDelayMs: value });
+    }
+  };
+
+  const commitHoldDelay = () => {
+    const value = holdDelayInput.trim() === '' ? NaN : Number(holdDelayInput);
+    const delay = Number.isFinite(value) ? Math.min(MAX_WEB_DRAG_HOLD_DELAY_MS, Math.max(0, Math.round(value))) : dragHoldDelayMs;
+    setHoldDelayInput(String(delay));
+    if (delay !== dragHoldDelayMs) onUpdateGeneral({ webDragHoldDelayMs: delay });
+  };
 
   // 当外部配置改变时（如拖拽调整窗口大小），同步更新输入框
   useEffect(() => {
@@ -141,6 +162,24 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
               onCheckedChange={(checked) => onUpdateGeneral({ webHeadlessMode: checked })}
             />
           </div>
+
+          {general.webHeadlessMode && <div className="ml-3 border-l border-border/60 pl-4 flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="web-drag-hold-delay" className="text-xs text-foreground font-medium">
+                {t('settings.web.dragHoldDelay')}
+              </Label>
+              <p className="text-[11px] text-muted-foreground" id="web-drag-hold-delay-desc">
+                {t('settings.web.dragHoldDelayDesc')}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Input id="web-drag-hold-delay" type="number" min={0} max={MAX_WEB_DRAG_HOLD_DELAY_MS} step={1}
+                value={holdDelayInput} onChange={(event) => changeHoldDelay(event.target.value)}
+                onBlur={commitHoldDelay} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                aria-describedby="web-drag-hold-delay-desc" className="h-7 w-24 text-xs font-mono" />
+              <span className="text-[11px] text-muted-foreground">ms</span>
+            </div>
+          </div>}
 
           <Separator />
 

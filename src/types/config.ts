@@ -8,6 +8,8 @@ import { z } from 'zod';
  */
 export const DEFAULT_API_CARD_SIZE: [number, number] = [600, 900];
 export const DEFAULT_WEB_WINDOW_SIZE: [number, number] = [860, 640];
+export const DEFAULT_WEB_DRAG_HOLD_DELAY_MS = 300;
+export const MAX_WEB_DRAG_HOLD_DELAY_MS = 10000;
 export const DEFAULT_OVERLAY_OPACITY = 90;
 export const DEFAULT_CONTEXT_TURNS = 5;
 export const DEFAULT_FONT_SIZE = 13;
@@ -61,6 +63,7 @@ export const generalConfigSchema = z.object({
   autoStart: z.boolean(),
   webWindowMode: webWindowModeSchema.default('multi_window'),
   webHeadlessMode: z.boolean().default(false),
+  webDragHoldDelayMs: z.number().int().min(0).max(MAX_WEB_DRAG_HOLD_DELAY_MS).default(DEFAULT_WEB_DRAG_HOLD_DELAY_MS),
   autoCopyOnWebAction: z.boolean().default(false),
   overlayOpacity: z.number().int().nonnegative().default(DEFAULT_OVERLAY_OPACITY),
   webWindowSize: sizePairSchema(DEFAULT_WEB_WINDOW_SIZE),
