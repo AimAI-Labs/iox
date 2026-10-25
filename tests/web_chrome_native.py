@@ -155,7 +155,7 @@ def inspect_window(pid, title, headless):
     return {'title': title, 'client': [width, height], 'frame': [frame_left, frame_top], 'toolbar': toolbar_rect, 'content': content_rect}
 
 
-def hold_and_drag_window(pid, title, delay_ms):
+def hold_and_drag_window(pid, title, delay_ms, direct=False):
     """Inject a real held mouse only after verifying the point belongs to our test process."""
     assert not user32.GetAsyncKeyState(1) & 0x8000, 'A user mouse gesture is already in progress'
     hwnd = native_window(pid, title)
@@ -173,7 +173,13 @@ def hold_and_drag_window(pid, title, delay_ms):
         user32.SetCursorPos(point.x, point.y)
         user32.mouse_event(0x0002, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTDOWN
         pressed = True
-        time.sleep(delay_ms / 1000 + 0.15)
+        if direct:
+            # Move past the pointer threshold first; native dragging anchors at this point.
+            user32.SetCursorPos(point.x + 8, point.y)
+            point.x += 8
+            time.sleep(0.15)
+        else:
+            time.sleep(delay_ms / 1000 + 0.15)
         user32.SetCursorPos(point.x + 120, point.y + 70)
         time.sleep(0.15)
         user32.mouse_event(0x0004, 0, 0, 0, 0)  # MOUSEEVENTF_LEFTUP
@@ -182,7 +188,7 @@ def hold_and_drag_window(pid, title, delay_ms):
         after = rect(hwnd)
         assert abs(after[0] - before[0] - 120) <= 2 and abs(after[1] - before[1] - 70) <= 2, (before, after)
         assert before[2:] == after[2:], 'Window drag unexpectedly changed card size'
-        return {'windowDrag': {'delayMs': delay_ms, 'before': before, 'after': after}}
+        return {'windowDrag': {'delayMs': delay_ms, 'direct': direct, 'before': before, 'after': after}}
     finally:
         if pressed:
             user32.mouse_event(0x0004, 0, 0, 0, 0)
@@ -265,6 +271,7 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             delay_field = main.get_by_role('spinbutton', name='Window drag hold delay', exact=True)
             expect(delay_field).to_have_value('300')
             delay_field.fill('175')
+            expect(delay_field).to_have_value('175')
             delay_field.press('Control+s')
             for _ in range(50):
                 saved_delay = invoke(main, 'get_config')['general']['webDragHoldDelayMs']
@@ -281,6 +288,22 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             results.append(hold_and_drag_window(process.pid, 'IOX Native Alpha', 175))
             expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-expanded', 'false')
             assert invoke(bar, 'get_web_chrome')['menu'] == menu_before_drag, 'Window drag moved only the floating menu'
+            bar.locator('.web-menu-trigger').click()
+            direct_toggle = bar.get_by_role('button', name='Drag whole card', exact=True)
+            expect(direct_toggle).to_have_attribute('aria-pressed', 'false')
+            direct_toggle.click()
+            expect(direct_toggle).to_have_attribute('aria-pressed', 'true')
+            bar.screenshot(path=str(output / 'direct-drag-toggle.png'))
+            bar.locator('.web-menu-trigger').click()
+            menu_before_drag = invoke(bar, 'get_web_chrome')['menu']
+            results.append(hold_and_drag_window(process.pid, 'IOX Native Alpha', 0, direct=True))
+            expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-expanded', 'false')
+            assert invoke(bar, 'get_web_chrome')['menu'] == menu_before_drag, 'Direct drag moved only the floating menu'
+            bar.locator('.web-menu-trigger').click()
+            expect(direct_toggle).to_have_attribute('aria-pressed', 'true')
+            direct_toggle.click()
+            bar.locator('.web-menu-trigger').click()
+            expect(bar.locator('.web-menu-trigger')).to_have_attribute('title', 'Click for menu, drag to move menu, hold 175 ms to move window')
             before = invoke(bar, 'get_web_chrome')['menu']
             invoke(bar, 'minimize_web_window', {'label': 'web_win_alpha'})
             main.wait_for_timeout(100)
@@ -324,7 +347,7 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             results.append(inspect_window(process.pid, 'IOX Web Hub', True))
             (output / 'result.json').write_text(json.dumps(results, indent=2), encoding='utf-8')
             browser.close()
-        print('Native Windows checks passed: rounded page and window corners, live-configured 175ms hold moving the real window, full content, toolbar Z order, live mode, preserved input, maximize/restore, minimize anchor, caller validation, Hub reopen.')
+        print('Native Windows checks passed: direct-drag toggle moving the real window, rounded corners, live-configured 175ms hold, full content, toolbar Z order, live mode, preserved input, maximize/restore, minimize anchor, caller validation, Hub reopen.')
     finally:
         process.terminate()
         try:

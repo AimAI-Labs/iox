@@ -5,7 +5,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ExternalLink, GripVertical, Maximize2, Menu, MessagesSquare, Minus, Move, RotateCw, Settings, X } from 'lucide-react';
 import { DynamicIcon } from '@/components/Icons';
 import { useTranslation } from '@/hooks/useTranslation';
-import type { ActionConfig, WebHubState } from '@/types/config';
+import { DEFAULT_WEB_DRAG_HOLD_DELAY_MS, type ActionConfig, type WebHubState } from '@/types/config';
 import type { WebMenuChange, WebMenuLayout } from '@/lib/webChromeClient';
 import './WebFloatingMenu.css';
 
@@ -26,6 +26,10 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
   const [actionFailed, setActionFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [holdingDelayMs, setHoldingDelayMs] = useState<number | null>(null);
+  // Follow settings until this toolbar explicitly overrides its own drag mode.
+  const [directDragOverride, setDirectDragOverride] = useState<boolean | null>(null);
+  const directDrag = directDragOverride ?? (dragHoldDelayMs === 0);
+  const holdDelayMs = dragHoldDelayMs || DEFAULT_WEB_DRAG_HOLD_DELAY_MS;
   const triggerRef = useRef<HTMLButtonElement>(null);
   const ignoreClick = useRef(false);
   const dragRef = useRef<{
@@ -133,16 +137,16 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
       pointerId, x: event.screenX, y: event.screenY,
       originX: layoutRef.current.x, originY: layoutRef.current.y,
       moved: false, windowDragging: false, timer: null as ReturnType<typeof setTimeout> | null,
-      windowDragOnMove: canDragWindow && dragHoldDelayMs === 0,
+      windowDragOnMove: canDragWindow && directDrag,
     };
     dragRef.current = drag;
-    if (canDragWindow && dragHoldDelayMs > 0) {
-      setHoldingDelayMs(dragHoldDelayMs);
+    if (canDragWindow && !directDrag) {
+      setHoldingDelayMs(holdDelayMs);
       drag.timer = setTimeout(() => {
         if (dragRef.current !== drag || drag.moved) return;
         drag.timer = null;
         startWindowDrag(drag, target);
-      }, dragHoldDelayMs);
+      }, holdDelayMs);
     }
   };
   const pointerMove = (event: PointerEvent<HTMLButtonElement>) => {
@@ -207,9 +211,10 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
       {icon}<span>{label}</span>
     </button>
   );
-  const openLabel = dragHoldDelayMs === 0 ? t('settings.web.menu.openImmediate')
-    : t('settings.web.menu.open', { delay: dragHoldDelayMs });
+  const openLabel = directDrag ? t('settings.web.menu.openImmediate')
+    : t('settings.web.menu.open', { delay: holdDelayMs });
   const triggerLabel = layout.expanded ? t('settings.web.menu.collapse') : openLabel;
+  const TriggerIcon = directDrag ? Move : Menu;
 
   return (
     <div className="web-floating-menu" data-expanded={layout.expanded}
@@ -220,15 +225,22 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
             <GripVertical size={15} />
           </button>
           <span className="web-menu-title" title={activeTitle}>{activeTitle}</span>
+          <button type="button" className="web-menu-drag-toggle" aria-pressed={directDrag}
+            aria-label={t('settings.web.menu.directDrag')}
+            title={directDrag ? t('settings.web.menu.disableDirectDrag', { delay: holdDelayMs }) : t('settings.web.menu.enableDirectDrag')}
+            onClick={() => { cancelPress(); setDirectDragOverride(!directDrag); }}>
+            <Move size={15} />
+          </button>
         </>}
         <button type="button" ref={triggerRef} className="web-menu-trigger" aria-expanded={layout.expanded} data-holding={holdingDelayMs !== null}
+          data-window-drag={directDrag}
           style={{ '--web-hold-delay': `${holdingDelayMs ?? dragHoldDelayMs}ms` } as CSSProperties}
           aria-controls="web-floating-menu-actions" aria-label={triggerLabel} title={triggerLabel}
           {...dragHandlers} onClick={() => {
             if (ignoreClick.current) { ignoreClick.current = false; return; }
             void update({ expanded: !layoutRef.current.expanded });
           }}>
-          {layout.expanded ? <X size={16} /> : <Menu size={18} />}
+          {layout.expanded ? <X size={16} /> : <TriggerIcon size={18} />}
         </button>
       </header>
       {layout.expanded && <div id="web-floating-menu-actions" className="web-menu-body">
