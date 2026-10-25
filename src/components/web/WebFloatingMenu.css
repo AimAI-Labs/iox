@@ -1,14 +1,14 @@
 .web-floating-menu {
   --web-menu-item-radius: min(6px, var(--ui-popover-radius));
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100vh;
   overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: var(--bg-overlay-card);
+  border: none;
+  background: transparent;
   color: var(--ink);
   user-select: none;
   font-size: 12px;
@@ -19,8 +19,8 @@
 .web-menu-pin[aria-pressed="true"] { color: #438ff3; opacity: 1; background: rgb(82 156 255 / 10%); }
 .web-menu-action-row:hover .web-menu-pin { opacity: 1; }
 .web-menu-pin-hint { margin: 2px 9px 7px; color: var(--ink-2); font-size: 10px; line-height: 1.5; }
-.web-floating-menu[data-wheel="true"] { position: relative; display: block; background: transparent; border: none; border-radius: 0; }
-.web-floating-menu[data-wheel="true"] .web-menu-header { position: absolute; z-index: 3; width: 44px; min-height: 44px; overflow: hidden; box-sizing: border-box; background: var(--bg-overlay-card); border: 1px solid var(--line); border-radius: 50%; }
+.web-floating-menu[data-expanded="false"] { display: block; }
+.web-floating-menu[data-expanded="false"] .web-menu-header { position: absolute; z-index: 3; }
 .web-quick-wheel { position: absolute; inset: 0; animation: web-wheel-in 120ms ease-out; }
 .web-wheel-slot { position: absolute; width: var(--web-wheel-action-size); height: var(--web-wheel-action-size); transform: translate(-50%, -50%); }
 .web-wheel-action { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 50%; color: var(--ink); background: var(--bg-overlay-card); box-shadow: 0 2px 8px rgb(0 0 0 / 10%); cursor: pointer; }
@@ -29,9 +29,10 @@
 .dark .web-wheel-action[data-danger="true"] { color: #f08080; }
 @keyframes web-wheel-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .web-quick-wheel { animation: none; } }
-.web-floating-menu[data-expanded="true"] { border-radius: var(--ui-popover-radius); }
-.web-menu-header { display: flex; align-items: center; min-height: 42px; flex-shrink: 0; }
-.web-floating-menu[data-expanded="true"] .web-menu-header { border-bottom: 1px solid var(--line); }
+.web-floating-menu[data-expanded="true"] { border: 1px solid var(--line); border-radius: var(--ui-popover-radius); background: var(--bg-overlay-card); }
+/* The button shares one fixed canvas and offset with the hover actions. */
+.web-menu-header { display: flex; align-items: center; width: 44px; height: 44px; flex-shrink: 0; overflow: hidden; box-sizing: border-box; border: 1px solid var(--line); border-radius: 50%; background: var(--bg-overlay-card); }
+.web-floating-menu[data-expanded="true"] .web-menu-header { width: auto; height: 42px; border: none; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
 .web-menu-trigger, .web-menu-grip { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; height: 42px; color: var(--ink-2); touch-action: none; }
 .web-menu-trigger { position: relative; width: 42px; cursor: grab; }
 .web-menu-trigger[data-holding="true"]::after {

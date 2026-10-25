@@ -49,35 +49,54 @@ fn calculate_menu_layout(
     let wheel =
         wheel.unwrap_or_else(|| expanded.is_none() && previous.is_some_and(|layout| layout.wheel));
     let expanded = !wheel && expanded.unwrap_or(previous.is_some_and(|layout| layout.expanded));
-    let width = if expanded || wheel {
-        280.0
-    } else {
-        MENU_BUTTON_SIZE
-    };
-    let height = if wheel {
-        280.0
-    } else if expanded {
+    // Button and hover modes share the same native canvas. Only its hit region changes.
+    let width = 280.0;
+    let height = if expanded {
         if hub {
             560.0
         } else {
             360.0
         }
     } else {
-        MENU_BUTTON_SIZE
+        280.0
     };
     let width = f64::min(width, (viewport.0 - MENU_MARGIN * 2.0).max(1.0));
     let height = f64::min(height, (viewport.1 - MENU_MARGIN * 2.0).max(1.0));
     let max_button_x = (width - MENU_BUTTON_SIZE).max(0.0);
     let max_button_y = (height - MENU_BUTTON_SIZE).max(0.0);
-    let anchor = previous.map_or(
+    if !expanded && position.is_none() {
+        if let Some(old) = previous.filter(|old| {
+            !old.expanded
+                && old.width == width
+                && old.height == height
+                && old.x >= 0.0
+                && old.y >= 0.0
+                && old.x + width <= viewport.0.max(1.0)
+                && old.y + height <= viewport.1.max(1.0)
+        }) {
+            return Ok(MenuLayout {
+                expanded,
+                wheel,
+                ..old
+            });
+        }
+    }
+    let mut anchor = previous.map_or(
         (viewport.0 - MENU_BUTTON_SIZE - MENU_MARGIN, MENU_MARGIN),
         |old| (old.x + old.button_x, old.y + old.button_y),
     );
-    let (x, y) = position.unwrap_or_else(|| {
-        if wheel {
+    if !expanded && !wheel {
+        if let Some(button_position) = position {
+            // Collapsed dragging still receives the button's coordinates, not canvas bounds.
+            anchor = button_position;
+        }
+    }
+    let panel_position = position.filter(|_| expanded || wheel);
+    let (x, y) = panel_position.unwrap_or_else(|| {
+        if !expanded {
             (anchor.0 - max_button_x / 2.0, anchor.1 - max_button_y / 2.0)
         } else {
-            // Full menus keep their trigger at the top right; button mode has zero offsets.
+            // Full menus keep their trigger at the top right.
             (anchor.0 - max_button_x, anchor.1)
         }
     });
@@ -85,10 +104,10 @@ fn calculate_menu_layout(
     let min_y = MENU_MARGIN.min((viewport.1 - height).max(0.0));
     let x = x.clamp(min_x, (viewport.0 - width - MENU_MARGIN).max(min_x));
     let y = y.clamp(min_y, (viewport.1 - height - MENU_MARGIN).max(min_y));
-    let (button_x, button_y) = if wheel {
-        if position.is_some() {
+    let (button_x, button_y) = if !expanded {
+        if panel_position.is_some() {
             // Drag positions describe the panel bounds, so its button moves with the panel.
-            previous.filter(|old| old.wheel).map_or(
+            previous.filter(|old| !old.expanded).map_or(
                 (max_button_x / 2.0, max_button_y / 2.0),
                 |old| {
                     (
@@ -188,7 +207,7 @@ fn apply_layout(
     let size = window.inner_size().map_err(|e| e.to_string())?;
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let hub = window.label() == "web_hub";
-    let (layout, relayout_content) = {
+    let (layout, relayout_content, toolbar_geometry_changed, toolbar_region_changed) = {
         let mut windows = state.web_chrome.windows.lock().map_err(|e| e.to_string())?;
         let previous = windows.get(window.label()).copied();
         let menu = calculate_menu_layout(
@@ -208,6 +227,14 @@ fn apply_layout(
         (
             layout,
             relayout_content || previous.is_none_or(|old| old.headless != headless),
+            relayout_content
+                || previous.is_none_or(|old| {
+                    old.headless != headless
+                        || (old.menu.x, old.menu.y, old.menu.width, old.menu.height)
+                            != (menu.x, menu.y, menu.width, menu.height)
+                }),
+            relayout_content
+                || previous.is_none_or(|old| old.headless != headless || old.menu != menu),
         )
     };
     let active_label = if hub {
@@ -276,8 +303,22 @@ fn apply_layout(
                 size: tauri::PhysicalSize::new(size.width, top).into(),
             }
         };
-        bar.set_bounds(bounds).map_err(|e| e.to_string())?;
-        crate::window_manager::raise_web_toolbar(&bar);
+        if toolbar_geometry_changed {
+            bar.set_bounds(bounds).map_err(|e| e.to_string())?;
+            crate::window_manager::raise_web_toolbar(&bar);
+        }
+        if toolbar_region_changed {
+            let clip = (headless && !layout.menu.expanded && !layout.menu.wheel).then(|| {
+                let menu = layout.menu;
+                (
+                    (menu.button_x * scale).round() as i32,
+                    (menu.button_y * scale).round() as i32,
+                    (MENU_BUTTON_SIZE.min(menu.width) * scale).round() as i32,
+                    (MENU_BUTTON_SIZE.min(menu.height) * scale).round() as i32,
+                )
+            });
+            crate::window_manager::set_web_menu_region(&bar, clip);
+        }
         let _ = app.emit_to(
             tauri::EventTarget::webview(&bar_label),
             "web_chrome_layout_changed",
@@ -415,7 +456,7 @@ mod tests {
     fn menu_starts_in_top_right_and_expands_without_leaving_window() {
         let collapsed =
             calculate_menu_layout((860.0, 640.0), None, None, None, None, false).unwrap();
-        assert_eq!((collapsed.x, collapsed.y), (804.0, 12.0));
+        assert_eq!(trigger(collapsed), (804.0, 12.0));
         let open = calculate_menu_layout(
             (860.0, 640.0),
             Some(collapsed),
@@ -440,7 +481,7 @@ mod tests {
             calculate_menu_layout((860.0, 640.0), None, None, None, None, false).unwrap();
         let value = serde_json::to_value(collapsed).unwrap();
         assert_eq!(value["wheel"], false);
-        assert_eq!(value["buttonX"], 0.0);
+        assert_eq!(value["buttonX"], 236.0);
         assert_eq!(value["buttonY"], 0.0);
     }
 
@@ -479,6 +520,25 @@ mod tests {
                 assert!(wheel.wheel && !wheel.expanded);
                 assert_eq!((wheel.width, wheel.height), (280.0, 280.0));
                 assert_eq!(trigger(wheel), trigger(button));
+                assert_eq!(
+                    (
+                        wheel.x,
+                        wheel.y,
+                        wheel.width,
+                        wheel.height,
+                        wheel.button_x,
+                        wheel.button_y
+                    ),
+                    (
+                        button.x,
+                        button.y,
+                        button.width,
+                        button.height,
+                        button.button_x,
+                        button.button_y
+                    ),
+                    "Hover must never move or resize the WebView carrying the button"
+                );
                 assert!(wheel.x >= 12.0 && wheel.y >= 12.0);
                 assert!(wheel.x + wheel.width <= 848.0 && wheel.y + wheel.height <= 628.0);
                 assert_button_inside(wheel);
@@ -574,7 +634,8 @@ mod tests {
         let closed =
             calculate_menu_layout((860.0, 640.0), Some(moved), Some(false), None, None, false)
                 .unwrap();
-        assert_eq!((closed.x, closed.y), trigger(moved));
+        assert_eq!(trigger(closed), trigger(moved));
+        assert_eq!((closed.x, closed.y), (moved.x, moved.y));
         for viewport in [(640.0, 480.0), (240.0, 220.0), (40.0, 30.0), (0.0, 0.0)] {
             let resized =
                 calculate_menu_layout(viewport, Some(wheel), None, None, None, false).unwrap();

@@ -134,7 +134,7 @@ with sync_playwright() as p:
         page.mouse.move(after['x'] + 20 + dx, after['y'] + 20 + dy, steps=3)
         page.mouse.up()
         page.evaluate('chromeFixture.releaseLayout()')
-        page.wait_for_function('([x,y]) => !chromeFixture.layout.menu.wheel && Math.abs(chromeFixture.layout.menu.x-x)<1 && Math.abs(chromeFixture.layout.menu.y-y)<1', arg=[position[0] + dx, position[1] + dy])
+        page.wait_for_function('([x,y]) => { const m=chromeFixture.layout.menu; return !m.wheel && Math.abs(m.x+m.buttonX-x)<1 && Math.abs(m.y+m.buttonY-y)<1; }', arg=[position[0] + dx, position[1] + dy])
         page.wait_for_timeout(350)
         assert not page.evaluate('chromeFixture.layout.menu.wheel'), 'A completed drag must not reopen the hover wheel'
 

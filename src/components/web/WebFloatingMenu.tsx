@@ -250,7 +250,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
       onPointerEnter={wheel.enter} onPointerLeave={wheel.leave}
       onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) wheel.leave(); }}
       role={layout.expanded ? 'dialog' : undefined} aria-label={t('settings.web.menu.title')}>
-      <header className="web-menu-header" style={layout.wheel ? { left: layout.buttonX, top: layout.buttonY } : undefined}>
+      <header className="web-menu-header" style={!layout.expanded ? { left: layout.buttonX, top: layout.buttonY } : undefined}>
         {layout.expanded && <>
           <button type="button" className="web-menu-grip" aria-label={t('settings.web.menu.drag')} title={t('settings.web.menu.drag')} {...dragHandlers}>
             <GripVertical size={15} />

@@ -55,6 +55,9 @@ if (params.has('settings')) {
     heldLayout: null as Promise<void> | null,
     releaseLayout: () => {},
     holdLayouts() { fixture.heldLayout = new Promise<void>((resolve) => { fixture.releaseLayout = () => { fixture.heldLayout = null; resolve(); }; }); },
+    heldPresentation: null as Promise<void> | null,
+    releasePresentation: () => {},
+    holdPresentation() { fixture.heldPresentation = new Promise<void>((resolve) => { fixture.releasePresentation = () => { fixture.heldPresentation = null; resolve(); }; }); },
     heldPin: null as Promise<void> | null,
     rejectPin: () => {},
     holdPin() { fixture.heldPin = new Promise<void>((_, reject) => { fixture.rejectPin = () => { fixture.heldPin = null; reject(new Error('Controlled pin failure')); }; }); },
@@ -72,32 +75,46 @@ if (params.has('settings')) {
       const old = fixture.layout.menu;
       const wheel = fixture.layout.headless && (changes.wheel ?? (changes.expanded === undefined && old.wheel));
       const expanded = fixture.layout.headless && !wheel && (changes.expanded ?? old.expanded);
-      const width = Math.max(1, Math.min(expanded || wheel ? 280 : 44, innerWidth - 24));
-      const height = Math.max(1, Math.min(expanded ? (hub ? 560 : 360) : wheel ? 280 : 44, innerHeight - 24));
-      const anchorX = old.x + old.buttonX;
-      const anchorY = old.y + old.buttonY;
-      const [x, y] = changes.position ?? [anchorX + 44 - (wheel ? width / 2 + 22 : width), anchorY - (wheel ? height / 2 - 22 : 0)];
+      const width = Math.max(1, Math.min(280, innerWidth - 24));
+      const height = Math.max(1, Math.min(expanded ? (hub ? 560 : 360) : 280, innerHeight - 24));
+      const buttonPosition = !expanded && !wheel ? changes.position : undefined;
+      const anchorX = buttonPosition?.[0] ?? old.x + old.buttonX;
+      const anchorY = buttonPosition?.[1] ?? old.y + old.buttonY;
+      const retained = !expanded && !old.expanded && !changes.position && width === old.width && height === old.height
+        && old.x + width <= innerWidth && old.y + height <= innerHeight;
+      const panelPosition = expanded || wheel ? changes.position : undefined;
+      const [x, y] = retained ? [old.x, old.y] : panelPosition
+        ?? [anchorX - (expanded ? width - 44 : (width - 44) / 2), anchorY - (expanded ? 0 : (height - 44) / 2)];
       const left = Math.max(12, Math.min(x, innerWidth - width - 12));
       const top = Math.max(12, Math.min(y, innerHeight - height - 12));
       const menu = {
         x: left, y: top, width, height, expanded, wheel,
-        buttonX: wheel ? Math.max(0, Math.min(width - 44, anchorX - left)) : expanded ? width - 44 : 0,
-        buttonY: wheel ? Math.max(0, Math.min(height - 44, anchorY - top)) : 0,
+        buttonX: !expanded ? Math.max(0, Math.min(width - 44, anchorX - left)) : width - 44,
+        buttonY: !expanded ? Math.max(0, Math.min(height - 44, anchorY - top)) : 0,
       };
       fixture.layout = { revision: fixture.layout.revision + 1, headless: fixture.layout.headless, menu };
       Object.assign(bar.style, fixture.layout.headless ? {
         left: `${menu.x}px`, top: `${menu.y}px`, width: `${width}px`, height: `${height}px`,
       } : { left: '0px', top: '0px', width: `${innerWidth}px`, height: '38px' });
+      bar.style.clipPath = fixture.layout.headless && !expanded && !wheel
+        ? `inset(${menu.buttonY}px ${width - menu.buttonX - 44}px ${height - menu.buttonY - 44}px ${menu.buttonX}px)` : 'none';
       page.style.top = fixture.layout.headless ? '0px' : '38px';
       page.style.height = fixture.layout.headless ? '100%' : 'calc(100% - 38px)';
-      fixture.onChrome(structuredClone(fixture.layout));
+      const committed = structuredClone(fixture.layout);
+      if (fixture.heldPresentation) void fixture.heldPresentation.then(() => fixture.onChrome(committed));
+      else fixture.onChrome(committed);
       return structuredClone(fixture.layout);
     },
     setHeadless(enabled: boolean) { fixture.layout.headless = enabled; fixture.place(); },
     async invoke(command: string, args: Record<string, unknown> = {}) {
       fixture.calls.push({ command, args });
       if (command === 'get_web_chrome') return structuredClone(fixture.layout);
-      if (command === 'layout_web_menu') { if (fixture.heldLayout) await fixture.heldLayout; return fixture.place(args as WebMenuChange); }
+      if (command === 'layout_web_menu') {
+        if (fixture.heldLayout) await fixture.heldLayout;
+        const committed = fixture.place(args as WebMenuChange);
+        if (fixture.heldPresentation) await fixture.heldPresentation;
+        return committed;
+      }
       if (command === 'get_web_hub_state') return structuredClone(fixture.hubState);
       if (fixture.failNext) { fixture.failNext = false; throw new Error('Controlled operation failure'); }
       if (command === 'set_web_menu_action_pinned') {

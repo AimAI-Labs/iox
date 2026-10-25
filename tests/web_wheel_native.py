@@ -31,7 +31,9 @@ from playwright.sync_api import expect, sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PINS = ["reload", "openExternal", "history", "minimize"]
 FINAL_PINS = ["openExternal", "history", "minimize", "settings"]
+HOVER_PAINT_SAMPLES = []
 USER32 = ctypes.WinDLL("user32", use_last_error=True)
+GDI32 = ctypes.WinDLL("gdi32", use_last_error=True)
 CALLBACK = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 USER32.SetProcessDPIAware()
 USER32.EnumWindows.argtypes = [CALLBACK, wintypes.LPARAM]
@@ -48,6 +50,11 @@ USER32.GetDpiForWindow.argtypes = [wintypes.HWND]
 USER32.GetDpiForWindow.restype = wintypes.UINT
 USER32.IsWindowVisible.argtypes = [wintypes.HWND]
 USER32.IsWindowVisible.restype = wintypes.BOOL
+USER32.GetWindowRgn.argtypes = [wintypes.HWND, wintypes.HANDLE]
+GDI32.CreateRectRgn.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+GDI32.CreateRectRgn.restype = wintypes.HANDLE
+GDI32.GetRgnBox.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.RECT)]
+GDI32.DeleteObject.argtypes = [wintypes.HANDLE]
 
 
 class Site(BaseHTTPRequestHandler):
@@ -159,6 +166,21 @@ def native_layout(pid, title, page):
     content_rect = rectangle(contents[0])
     assert close_rect(content_rect, [origin.x, origin.y, client[2], client[3]])
     toolbar_rect = rectangle(bars[0])
+    region = GDI32.CreateRectRgn(0, 0, 0, 0)
+    assert region
+    try:
+        clipped = USER32.GetWindowRgn(bars[0], region) != 0
+        clip = wintypes.RECT()
+        if clipped:
+            assert GDI32.GetRgnBox(region, ctypes.byref(clip)) != 0
+        expected_clip = [round(menu['buttonX'] * scale), round(menu['buttonY'] * scale),
+                         round(min(44, menu['width']) * scale), round(min(44, menu['height']) * scale)]
+        if not menu['expanded'] and not menu['wheel']:
+            assert clipped and close_rect([clip.left, clip.top, clip.right-clip.left, clip.bottom-clip.top], expected_clip), 'Collapsed canvas must clip drawing and hit testing to the button'
+        else:
+            assert not clipped, 'Open menu must clear the collapsed button region'
+    finally:
+        GDI32.DeleteObject(region)
     trigger = page.locator(".web-menu-trigger").bounding_box()
     assert trigger is not None
     button_screen = [toolbar_rect[0] + trigger["x"] * scale, toolbar_rect[1] + trigger["y"] * scale]
@@ -294,6 +316,23 @@ def hover_wheel(bar, count):
     bar.reload(wait_until="networkidle")
     bar.locator(".web-menu-trigger").wait_for()
     bar.bring_to_front()
+    bar.evaluate("""() => {
+      window.nativeHoverPaint = [];
+      const sample = () => {
+        const root = document.querySelector('.web-floating-menu');
+        const header = root?.querySelector('.web-menu-header');
+        if (root && header) window.nativeHoverPaint.push({
+          width:innerWidth, expanded:root.dataset.expanded, wheel:root.dataset.wheel,
+          background:getComputedStyle(root).backgroundColor,
+          headerVisibility:getComputedStyle(header).visibility,
+          headerX:header.getBoundingClientRect().x,headerY:header.getBoundingClientRect().y,
+          headerWidth:header.getBoundingClientRect().width,
+          headerHeight:header.getBoundingClientRect().height
+        });
+        if (window.nativeHoverPaint.length < 90) requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    }""")
     bar.mouse.move(-10, -10)
     bar.locator(".web-menu-trigger").hover()
     wheel = bar.get_by_role("menu", name="Quick actions", exact=True)
@@ -307,6 +346,15 @@ def hover_wheel(bar, count):
         print("Native hover layout: " + json.dumps(invoke(bar, "get_web_chrome")))
         raise
     expect(wheel.get_by_role("menuitem")).to_have_count(count)
+    bar.wait_for_timeout(160)
+    samples = bar.evaluate("window.nativeHoverPaint")
+    expanded_view = [frame for frame in samples if frame["width"] > 44 and frame["expanded"] == "false"]
+    assert expanded_view, "No native hover paint frames captured"
+    assert all(frame["background"] == "rgba(0, 0, 0, 0)" for frame in expanded_view), ("Hover paints an opaque enlarged surface", expanded_view)
+    assert all(frame["headerWidth"] == 44 and frame["headerHeight"] == 44 for frame in expanded_view), ("Hover stretches button background", expanded_view)
+    assert all(frame["headerVisibility"] == "visible" for frame in expanded_view), ("The stationary hover button must remain visible", expanded_view)
+    assert len({(frame['headerX'], frame['headerY']) for frame in expanded_view}) == 1, ("Hover changed the button offset", expanded_view)
+    HOVER_PAINT_SAMPLES.append(samples)
     return wheel
 
 
@@ -347,11 +395,13 @@ def first_run(playwright, binary, profile, output, site_base):
             assert close_rect(before["buttonScreen"], opened["buttonScreen"])
             assert before["contentHwnd"] == opened["contentHwnd"]
             assert before["toolbarHwnd"] == opened["toolbarHwnd"]
+            assert before["toolbar"] == opened["toolbar"], 'Hover must not move or resize the native HWND'
             assert before["window"] == opened["window"] and before["content"] == opened["content"]
             alpha.screenshot(path=str(output / f"wheel-corner-{index}.png"))
             collapse(alpha)
             after = native_layout(app.process.pid, "IOX Wheel Native Alpha", alpha)
             assert close_rect(before["buttonScreen"], after["buttonScreen"])
+            assert before["toolbar"] == after["toolbar"], 'Hover collapse must not move or resize the native HWND'
             results.append(dict(corner=position, collapsed=before, wheel=opened, restored=after))
             for source, expected in sources:
                 assert source_state(source) == expected, "Wheel hover reloaded or changed source input"
@@ -459,6 +509,7 @@ def main():
             (output / "first-run.json").write_text(json.dumps(first, indent=2), encoding="utf-8")
             restarted = restart_run(playwright, binary, profile, output, site_base)
         result = dict(firstRun=first, restarted=restarted, physicalInputInjected=False,
+                      hoverPaintSamples=HOVER_PAINT_SAMPLES,
                       hoverCaseReset="local toolbar reload; source WebView retained",
                       binary=str(binary), output=str(output))
         (output / "result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")

@@ -158,6 +158,24 @@ pub fn raise_web_toolbar(view: &tauri::Webview) {
     });
 }
 
+/// Keep the toolbar canvas stationary; clipped areas must pass input to the page below.
+pub fn set_web_menu_region(view: &tauri::Webview, clip: Option<(i32, i32, i32, i32)>) {
+    with_web_child(view, move |child| {
+        // The validated child HWND is borrowed on the UI thread. Windows owns a region
+        // after successful SetWindowRgn; on failure we retain ownership and release it.
+        unsafe {
+            let Some((x, y, width, height)) = clip else {
+                SetWindowRgn(child, std::ptr::null_mut(), 1);
+                return;
+            };
+            let region = CreateRectRgn(x, y, x + width, y + height);
+            if !region.is_null() && SetWindowRgn(child, region, 1) == 0 {
+                DeleteObject(region as _);
+            }
+        }
+    });
+}
+
 pub fn set_web_content_round(view: &tauri::Webview, radius: Option<i32>, all_corners: bool) {
     with_web_child(view, move |child| {
         // This exact content container clips all its descendants. On success Windows takes

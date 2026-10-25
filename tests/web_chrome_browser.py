@@ -166,7 +166,7 @@ with sync_playwright() as p:
     gesture_bar = gesture_page.frame_locator('#bar')
     gesture_trigger = gesture_bar.locator('.web-menu-trigger')
     expect(gesture_trigger).to_have_attribute('aria-expanded', 'false')
-    box = gesture_page.locator('#bar').bounding_box()
+    box = gesture_trigger.bounding_box()
     gesture_page.mouse.move(box['x'] + 22, box['y'] + 22)
     gesture_page.mouse.down()
     gesture_page.clock.fast_forward(999)
@@ -190,7 +190,7 @@ with sync_playwright() as p:
     gesture_trigger.press('Escape')
 
     # Starting to move before the threshold commits to menu dragging for this gesture.
-    box = gesture_page.locator('#bar').bounding_box()
+    box = gesture_trigger.bounding_box()
     gesture_page.mouse.move(box['x'] + 22, box['y'] + 22)
     gesture_page.mouse.down()
     gesture_page.mouse.move(500, 150, steps=4)
