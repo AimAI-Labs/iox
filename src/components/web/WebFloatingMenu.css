@@ -1,6 +1,10 @@
 .web-floating-menu {
   --web-menu-item-radius: min(8px, var(--ui-popover-radius));
   --web-control-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  /* Shared by the unfold and the fold so both directions read as one motion. */
+  --web-panel-motion: 160ms;
+  /* Scrollbar width; the reserved gutter subtracts from the menu body's right padding. */
+  --web-scrollbar: 6px;
   --web-control-highlight: rgb(255 255 255 / 85%);
   --web-control-shadow: 0 1px 3px rgb(0 0 0 / 12%);
   position: relative;
@@ -44,7 +48,41 @@
   to { opacity: 1; transform: translate(0, 0) scale(1); }
 }
 .dark .web-floating-menu { --web-control-highlight: rgb(255 255 255 / 9%); --web-control-shadow: 0 1px 3px rgb(0 0 0 / 32%); }
-.web-floating-menu[data-expanded="true"] { border: 1px solid var(--line); border-radius: var(--ui-popover-radius); background: var(--bg-overlay-card); box-shadow: inset 0 1px 0 var(--web-control-highlight); }
+.web-floating-menu[data-expanded="true"] {
+  border: 1px solid var(--line);
+  border-radius: var(--ui-popover-radius);
+  background: var(--bg-overlay-card);
+  box-shadow: inset 0 1px 0 var(--web-control-highlight);
+  /* The card grows out of the collapsed button, which stays put for the whole transition. */
+  clip-path: inset(0 round var(--ui-popover-radius));
+  animation: web-menu-unfold var(--web-panel-motion) var(--web-control-ease) backwards;
+}
+.web-floating-menu[data-expanded="true"] .web-menu-body { animation: web-menu-body-in var(--web-panel-motion) var(--web-control-ease) backwards; }
+.web-floating-menu[data-expanded="true"][data-upward="true"] .web-menu-body { animation-name: web-menu-body-in-up; }
+@keyframes web-menu-unfold {
+  from { clip-path: inset(var(--web-fold-top) var(--web-fold-right) var(--web-fold-bottom) var(--web-fold-left) round 22px); }
+}
+@keyframes web-menu-body-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@keyframes web-menu-body-in-up {
+  from { opacity: 0; transform: translateY(-6px); }
+}
+/* The exit mirrors the entrance: same duration, same curve, and the body retracts first.
+   Native collapses the toolbar in one frame, so the fold runs before the layout commits. */
+.web-floating-menu[data-closing="true"] { animation: web-menu-fold var(--web-panel-motion) var(--web-control-ease) forwards; }
+.web-floating-menu[data-closing="true"] .web-menu-body { animation: web-menu-body-out var(--web-panel-motion) var(--web-control-ease) forwards; }
+.web-floating-menu[data-closing="true"][data-upward="true"] .web-menu-body { animation-name: web-menu-body-out-up; }
+@keyframes web-menu-fold {
+  from { clip-path: inset(0 round var(--ui-popover-radius)); }
+  to { clip-path: inset(var(--web-fold-top) var(--web-fold-right) var(--web-fold-bottom) var(--web-fold-left) round 22px); }
+}
+@keyframes web-menu-body-out {
+  to { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes web-menu-body-out-up {
+  to { opacity: 0; transform: translateY(4px); }
+}
 .web-floating-menu[data-expanded="true"]:has(.web-menu-grip:active) { border-color: hsl(var(--primary) / 40%); }
 /* The button shares one fixed canvas and offset with the hover actions. */
 .web-menu-header { display: flex; align-items: center; width: 44px; height: 44px; flex-shrink: 0; box-sizing: border-box; background: transparent; }
@@ -102,7 +140,20 @@
 .web-menu-trigger[data-window-drag="true"][aria-expanded="false"] { color: var(--primary-color); }
 .web-menu-trigger:active, .web-menu-grip:active { cursor: grabbing; }
 .web-menu-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; color: var(--ink); font-weight: 600; font-size: 11px; }
-.web-menu-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 8px; }
+.web-menu-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* The stable scrollbar gutter sits inside the right edge, so the right padding shrinks by the
+     same amount and both sides keep one visual inset. */
+  padding: 8px calc(8px - var(--web-scrollbar)) 8px 8px;
+}
+/* Leftover panel height is shared by the rows, so the last row keeps the same inset as the sides. */
+.web-menu-body > * { flex: 0 0 auto; }
+.web-menu-body > .web-menu-action-row { flex: 1 0 auto; }
 .web-menu-action { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 34px; padding: 7px 9px; text-align: left; line-height: 18px; border-radius: var(--web-menu-item-radius); cursor: pointer; }
 .web-menu-action > svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--ink-2); }
 .web-menu-action > span { min-width: 0; overflow-wrap: anywhere; }
@@ -132,7 +183,7 @@
 .web-menu-batch { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px; }
 .web-menu-batch > button { flex: 1 1 auto; padding: 5px 4px; font-size: 10px; color: var(--ink-2); border-radius: var(--web-menu-item-radius); cursor: pointer; }
 .web-floating-menu :is(.web-menu-body, .web-menu-tab-list) { overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: auto; scrollbar-color: auto; }
-.web-floating-menu :is(.web-menu-body, .web-menu-tab-list)::-webkit-scrollbar { width: 6px; height: 6px; }
+.web-floating-menu :is(.web-menu-body, .web-menu-tab-list)::-webkit-scrollbar { width: var(--web-scrollbar); height: var(--web-scrollbar); }
 .web-floating-menu :is(.web-menu-body, .web-menu-tab-list)::-webkit-scrollbar-track { background: transparent; }
 .web-floating-menu :is(.web-menu-body, .web-menu-tab-list)::-webkit-scrollbar-thumb { border: 1px solid transparent; border-radius: 999px; background: transparent; background-clip: padding-box; }
 .web-floating-menu :is(.web-menu-body, .web-menu-tab-list):is(:hover, :focus-within)::-webkit-scrollbar-thumb { background-color: var(--line-strong); }
@@ -141,7 +192,7 @@
 .web-floating-menu :is(.web-menu-body, .web-menu-tab-list)::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
 .web-floating-menu :is(.web-menu-body, .web-menu-tab-list)::-webkit-scrollbar-corner { background: transparent; }
 @media (prefers-reduced-motion: reduce) {
-  .web-floating-menu *, .web-floating-menu *::before, .web-floating-menu *::after { animation: none !important; transition: none !important; }
+  .web-floating-menu, .web-floating-menu *, .web-floating-menu *::before, .web-floating-menu *::after { animation: none !important; transition: none !important; }
   .web-menu-trigger:active .web-menu-trigger-surface,
   .web-menu-trigger:hover .web-menu-trigger-glyph,
   .web-wheel-action:hover .web-wheel-action-surface,

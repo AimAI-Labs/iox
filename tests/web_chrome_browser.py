@@ -116,6 +116,9 @@ with sync_playwright() as p:
     delay_trigger.click()
     expect(delay_trigger).to_have_attribute('aria-expanded', 'true')
     delay_trigger.press('Escape')
+    # The panel folds first and commits the collapse afterwards, so the mocked clock must pass it.
+    delay_page.clock.fast_forward(200)
+    expect(delay_trigger).to_have_attribute('aria-expanded', 'false')
     delay_trigger.hover()
     delay_page.mouse.down()
     delay_page.clock.fast_forward(100)
@@ -263,6 +266,15 @@ with sync_playwright() as p:
             expect(trigger).to_have_attribute('aria-expanded', 'false')
             trigger.click()
             expect(bar.get_by_role('dialog')).to_be_visible()
+            # Rows share the leftover height, so the last row keeps the same inset as the sides.
+            body_box = bar.locator('.web-menu-body').bounding_box()
+            last_row = bar.locator('[data-action-id="closeWindow"]').bounding_box()
+            bottom_gap = body_box['y'] + body_box['height'] - (last_row['y'] + last_row['height'])
+            assert 7 <= bottom_gap <= 10, f'Bottom inset drifted to {bottom_gap}'
+            panel_box = bar.locator('.web-floating-menu').bounding_box()
+            left_gap = last_row['x'] - panel_box['x']
+            right_gap = panel_box['x'] + panel_box['width'] - (last_row['x'] + last_row['width'])
+            assert abs(left_gap - right_gap) <= 1, f'Side insets drifted: {left_gap} / {right_gap}'
             mode_toggle = bar.locator('.web-menu-drag-toggle')
             expect(mode_toggle).to_have_attribute('aria-label', '直接拖动整个卡片' if lang == 'zh-CN' else 'Drag whole card')
             mode_toggle.click()

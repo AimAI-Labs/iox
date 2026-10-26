@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -23,6 +23,13 @@ interface WebFloatingMenuProps {
   pinnedActions: WebMenuActionId[];
 }
 
+/** Slightly longer than the 160ms fold animation so the commit never cuts the exit short. */
+const MENU_FOLD_MS = 180;
+const MENU_BUTTON_SIZE = 44;
+
+const prefersReducedMotion = () =>
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
 export function WebFloatingMenu({ windowLabel, title, actions, layout, update, failed, dragHoldDelayMs, pinnedActions }: WebFloatingMenuProps) {
   const { t } = useTranslation();
   const hub = windowLabel === 'web_hub';
@@ -31,7 +38,11 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
   const [refreshing, setRefreshing] = useState(false);
   const [pinning, setPinning] = useState<WebMenuActionId | null>(null);
   const pinBusy = useRef(false);
-  const wheel = useWebWheel(layout, update, pinnedActions.length > 0);
+  // Native collapses the toolbar in one frame, so the panel plays its own exit first and commits
+  // the layout afterwards. A pending close is reversible while native is still expanded.
+  const [closing, setClosing] = useState(false);
+  const closeRef = useRef<{ timer: ReturnType<typeof setTimeout>; waiters: ((accepted: boolean) => void)[] } | null>(null);
+  const wheel = useWebWheel(layout, update, pinnedActions.length > 0, closing);
   const [holdingDelayMs, setHoldingDelayMs] = useState<number | null>(null);
   // Follow settings until this toolbar explicitly overrides its own drag mode.
   const [directDragOverride, setDirectDragOverride] = useState<boolean | null>(null);
@@ -54,6 +65,33 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
 
+  const settleClose = useCallback(() => {
+    const pending = closeRef.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    closeRef.current = null;
+    setClosing(false);
+    pending.waiters.forEach((resolve) => resolve(true));
+  }, []);
+
+  const collapseMenu = useCallback((): Promise<boolean> => {
+    const pending = closeRef.current;
+    if (pending) return new Promise((resolve) => pending.waiters.push(resolve));
+    if (!layoutRef.current.expanded) return Promise.resolve(true);
+    if (prefersReducedMotion()) return update({ expanded: false });
+    return new Promise((resolve) => {
+      setClosing(true);
+      closeRef.current = {
+        timer: setTimeout(() => {
+          closeRef.current = null;
+          setClosing(false);
+          void update({ expanded: false }).then(resolve);
+        }, MENU_FOLD_MS),
+        waiters: [resolve],
+      };
+    });
+  }, [update]);
+
   const cancelPress = () => {
     const drag = dragRef.current;
     if (!drag) return;
@@ -74,8 +112,16 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
       window.removeEventListener('keydown', onKeyDown);
       if (dragRef.current?.timer != null) clearTimeout(dragRef.current.timer);
       dragRef.current = null;
+      if (closeRef.current) clearTimeout(closeRef.current.timer);
+      closeRef.current = null;
     };
   }, []);
+
+  // An external collapse (native layout or config) already ended the exit phase.
+  useEffect(() => {
+    if (layout.expanded) return;
+    settleClose();
+  }, [layout.expanded, settleClose]);
 
   useEffect(() => {
     if (!hub) return;
@@ -97,7 +143,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
 
   useEffect(() => {
     if (!layout.expanded && !layout.wheel) return;
-    const collapse = () => { void update({ expanded: false }); };
+    const collapse = () => { void collapseMenu(); };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -111,7 +157,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('blur', collapse);
     };
-  }, [layout.expanded, layout.wheel, update]);
+  }, [layout.expanded, layout.wheel, collapseMenu]);
 
   const startWindowDrag = (drag: NonNullable<typeof dragRef.current>, target: HTMLButtonElement) => {
     if (drag.timer !== null) {
@@ -203,7 +249,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
   const perform = async (operation: () => Promise<unknown>, collapse = true) => {
     setActionFailed(false);
     try {
-      if (collapse) await update({ expanded: false });
+      if (collapse) await collapseMenu();
       await operation();
     } catch {
       setActionFailed(true);
@@ -253,10 +299,18 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     : t('settings.web.menu.open', { delay: holdDelayMs });
   const triggerLabel = layout.expanded ? t('settings.web.menu.collapse') : openLabel;
   const TriggerIcon = directDrag ? Move : Menu;
+  // The panel unfolds from, and folds back into, the collapsed button rectangle.
+  const foldStyle = {
+    '--web-fold-top': `${layout.buttonY}px`,
+    '--web-fold-right': `${Math.max(0, layout.width - layout.buttonX - MENU_BUTTON_SIZE)}px`,
+    '--web-fold-bottom': `${Math.max(0, layout.height - layout.buttonY - MENU_BUTTON_SIZE)}px`,
+    '--web-fold-left': `${layout.buttonX}px`,
+  } as CSSProperties;
 
   return (
-    <div className="web-floating-menu" data-expanded={layout.expanded} data-wheel={layout.wheel} data-wheel-closing={wheel.closing}
-      data-upward={layout.expanded && layout.buttonY > 0}
+    <div className="web-floating-menu" data-expanded={layout.expanded} data-closing={closing}
+      data-wheel={layout.wheel} data-wheel-closing={wheel.closing}
+      data-upward={layout.expanded && layout.buttonY > 0} style={foldStyle}
       onPointerEnter={wheel.enter} onPointerLeave={wheel.leave}
       onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) wheel.leave(); }}
       role={layout.expanded ? 'dialog' : undefined} aria-label={t('settings.web.menu.title')}>
@@ -279,7 +333,10 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
           {...dragHandlers} onClick={() => {
             if (ignoreClick.current) { ignoreClick.current = false; return; }
             wheel.suspend();
-            void update({ expanded: !layoutRef.current.expanded });
+            // A press during the exit reverses it instead of queueing another collapse.
+            if (closeRef.current) { settleClose(); return; }
+            if (layoutRef.current.expanded) { void collapseMenu(); return; }
+            void update({ expanded: true });
           }}>
           <span className="web-menu-trigger-surface" aria-hidden="true">
             <span className="web-menu-trigger-glyph">{layout.expanded ? <X size={16} /> : <TriggerIcon size={18} />}</span>

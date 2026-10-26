@@ -91,8 +91,39 @@ with sync_playwright() as p:
         trigger.click()
         expect(bar.get_by_role('dialog')).to_be_visible()
         page.screenshot(path=str(output / f'{theme}-menu.png'))
+        # Expansion and collapse clip the panel; the native canvas and trigger never move.
+        root = bar.locator('.web-floating-menu')
+
+        def clip_left(animation_ms):
+            """Seek the running clip animation and read the left inset at that time."""
+            value = root.evaluate('''(el, time) => {
+                const animation = el.getAnimations()[0];
+                animation.pause();
+                animation.currentTime = time;
+                const current = getComputedStyle(el).clipPath;
+                animation.play();
+                return current;
+            }''', animation_ms)
+            return float(value.split('(')[1].split()[3].removesuffix('px'))
+
+        assert root.evaluate("el => getComputedStyle(el).animationName") == 'web-menu-unfold'
+        assert root.evaluate("el => getComputedStyle(el).clipPath").startswith('inset(')
+        opening_left = clip_left(80)
+        assert 0 < opening_left < 236, opening_left
+        canvas_open = page.locator('#bar').bounding_box()
         trigger.click()
+        expect(root).to_have_attribute('data-closing', 'true')
+        assert root.evaluate("el => getComputedStyle(el).animationName") == 'web-menu-fold'
+        closing_left = clip_left(80)
+        # Both directions share duration and curve, so the insets mirror around the button edge.
+        assert abs(opening_left + closing_left - 236) <= 2, (opening_left, closing_left)
+        expect(root).to_have_attribute('data-expanded', 'false')
+        assert page.locator('#bar').bounding_box() != canvas_open
+        assert trigger.bounding_box() == button_before
         page.mouse.move(200, 600)
+        # Start from a fresh document so no script-seeked animation outlives its rules.
+        page.reload()
+        page.wait_for_load_state('networkidle')
         page.emulate_media(reduced_motion='reduce')
         trigger.hover()
         expect(bar.get_by_role('menuitem')).to_have_count(4)

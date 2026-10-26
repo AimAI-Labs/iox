@@ -295,6 +295,8 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             expect(direct_toggle).to_have_attribute('aria-pressed', 'true')
             bar.screenshot(path=str(output / 'direct-drag-toggle.png'))
             bar.locator('.web-menu-trigger').click()
+            # The panel folds before the native layout collapses, so wait for the committed state.
+            expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-expanded', 'false')
             menu_before_drag = invoke(bar, 'get_web_chrome')['menu']
             results.append(hold_and_drag_window(process.pid, 'IOX Native Alpha', 0, direct=True))
             expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-expanded', 'false')

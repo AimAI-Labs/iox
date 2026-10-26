@@ -3,12 +3,13 @@ import type { WebMenuChange, WebMenuLayout } from '@/lib/webChromeClient';
 
 type Update = (change: WebMenuChange) => Promise<boolean>;
 
-export function useWebWheel(layout: WebMenuLayout, update: Update, enabled: boolean) {
+/** `collapsing` reports a panel that is animating out but still committed as expanded. */
+export function useWebWheel(layout: WebMenuLayout, update: Update, enabled: boolean, collapsing = false) {
   const [closing, setClosing] = useState(false);
-  const state = useRef({ layout, update, enabled, inside: false, suspended: false, requested: false,
+  const state = useRef({ layout, update, enabled, collapsing, inside: false, suspended: false, requested: false,
     openTimer: null as ReturnType<typeof setTimeout> | null,
     closeTimer: null as ReturnType<typeof setTimeout> | null });
-  Object.assign(state.current, { layout, update, enabled });
+  Object.assign(state.current, { layout, update, enabled, collapsing });
 
   const clearTimers = useCallback(() => {
     const current = state.current;
@@ -42,7 +43,9 @@ export function useWebWheel(layout: WebMenuLayout, update: Update, enabled: bool
         void current.update({ wheel: true }).then((accepted) => { if (!accepted) current.requested = false; });
       }
     }
-    if (!current.enabled || current.suspended || current.layout.expanded || current.layout.wheel || current.requested || current.openTimer !== null) return;
+    // A panel that is only animating out must not swallow the hover that follows its collapse.
+    if (!current.enabled || current.suspended || (current.layout.expanded && !current.collapsing)
+      || current.layout.wheel || current.requested || current.openTimer !== null) return;
     current.openTimer = setTimeout(() => {
       current.openTimer = null;
       if (!current.inside || current.suspended || !current.enabled || current.layout.expanded) return;
