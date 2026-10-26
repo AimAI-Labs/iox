@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   MessageSquare,
@@ -9,16 +9,18 @@ import {
   Check,
   Clock,
   Layers,
-  FileText,
   Sparkles,
+  Maximize2,
 } from 'lucide-react';
 import { ChatSessionData } from '@/types/session';
-import { MarkdownContent } from '@/components/overlay/MarkdownContent';
+import { SessionTurnList } from '@/components/settings/SessionTurnList';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
 import { SessionStorageAlert } from '@/components/SessionStorageAlert';
+import { exportSessionMarkdown, sessionExportLabels, viewSession } from '@/lib/session-view';
 import type { SessionStorageError } from '@/types/session';
+import type { ActionConfig } from '@/types/config';
 
 function formatFullTime(timestamp: number): string {
   if (!timestamp) return '';
@@ -30,7 +32,14 @@ function formatFullTime(timestamp: number): string {
   ).padStart(2, '0')}`;
 }
 
-export const SessionsTab: React.FC = () => {
+export interface SessionsTabProps {
+  actions: ActionConfig[];
+  onOpenViewer: (sessionId?: string) => void;
+  /** 查看面板删除或清空会话后递增，用于刷新这里的列表。 */
+  refreshToken?: number;
+}
+
+export const SessionsTab: React.FC<SessionsTabProps> = ({ actions, onOpenViewer, refreshToken = 0 }) => {
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
 
@@ -49,20 +58,21 @@ export const SessionsTab: React.FC = () => {
       setSessions(data || []);
       setHistoryLoaded(true);
       setStorageError((previous) => previous === 'load' ? null : previous);
-      if (data && data.length > 0 && !selectedSessionId) {
-        setSelectedSessionId(data[0].id);
-      }
+      // 只在还没有选中项时定位到最新会话，切换选择不应触发重新读取
+      setSelectedSessionId((current) =>
+        current === null && data && data.length > 0 ? data[0].id : current
+      );
     } catch (err) {
       setStorageError('load');
       console.warn('Failed to load full sessions:', err);
     } finally {
       setLoading(false);
     }
-  }, [selectedSessionId]);
+  }, []);
 
   useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions]);
+    void fetchSessions();
+  }, [fetchSessions, refreshToken]);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -115,6 +125,15 @@ export const SessionsTab: React.FC = () => {
   });
 
   const currentSession = sessions.find((s) => s.id === selectedSessionId);
+  const currentView = useMemo(
+    () => (currentSession ? viewSession(currentSession, actions) : null),
+    [currentSession, actions]
+  );
+
+  const handleCopyConversation = async () => {
+    if (!currentSession || !currentView) return;
+    await copy(exportSessionMarkdown(currentSession, currentView, sessionExportLabels(t)));
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden space-y-4">
@@ -136,6 +155,16 @@ export const SessionsTab: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenViewer(selectedSessionId ?? undefined)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 transition-colors cursor-pointer"
+            title={t('sessionViewer.openViewerHint')}
+          >
+            <Maximize2 size={13} />
+            <span>{t('sessionViewer.openViewer')}</span>
+          </button>
+
           <button
             type="button"
             onClick={handleOpenFolder}
@@ -221,7 +250,7 @@ export const SessionsTab: React.FC = () => {
               <div className="flex shrink-0 items-center justify-between px-4 py-3 border-b border-black/5 dark:border-white/5">
                 <div className="flex flex-col min-w-0 pr-4">
                   <h3 className="text-sm font-semibold text-foreground truncate">
-                    {currentSession.title}
+                    {currentSession.title || t('sessionViewer.untitled')}
                   </h3>
                   <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5 font-mono">
                     <span className="flex items-center gap-1">
@@ -230,13 +259,27 @@ export const SessionsTab: React.FC = () => {
                     <span className="flex items-center gap-1">
                       <Clock size={11} /> {formatFullTime(currentSession.updatedAt)}
                     </span>
+                    {currentView && (
+                      <span className="shrink-0">
+                        {t('sessionViewer.turns', { count: currentView.turns.length })}
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    onClick={() => copy(currentSession.streamText)}
+                    onClick={() => onOpenViewer(currentSession.id)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 transition-colors cursor-pointer"
+                    title={t('sessionViewer.openViewerHint')}
+                  >
+                    <Maximize2 size={13} />
+                    <span>{t('sessionViewer.viewerDetail')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyConversation()}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white/80 dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200/80 dark:border-zinc-700/80 transition-colors cursor-pointer text-foreground"
                     title={t('card.copyFullResponse')}
                   >
@@ -250,28 +293,13 @@ export const SessionsTab: React.FC = () => {
                 </div>
               </div>
 
-              {/* 详情内容滚动区 */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar select-text">
-                {/* 原始选中文本 (如有) */}
-                {currentSession.selectedText && (
-                  <div className="rounded-lg bg-zinc-100/80 dark:bg-zinc-800/60 p-3 border border-zinc-200/60 dark:border-zinc-700/60">
-                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-500 mb-1.5">
-                      <FileText size={12} />
-                      <span>{isZh ? "原始选中文本" : "Original Selected Text"}</span>
-                    </div>
-                    <p className="text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
-                      {currentSession.selectedText}
-                    </p>
-                  </div>
+              {/* 详情内容滚动区：结构化轮次，多轮追问不再被压成单段文本 */}
+              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar select-text">
+                {currentView ? (
+                  <SessionTurnList view={currentView} dense />
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t('sessionViewer.emptyTurns')}</p>
                 )}
-
-                {/* AI 回答渲染 */}
-                <MarkdownContent
-                  content={currentSession.streamText}
-                  codeBlockWrap
-                  codeBlockLineNumbers
-                  className="text-xs leading-relaxed text-foreground"
-                />
               </div>
             </div>
           ) : (

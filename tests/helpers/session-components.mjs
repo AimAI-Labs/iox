@@ -36,6 +36,11 @@ export function mountSessionView(view = 'hook', invoke = async () => [], overrid
       if (changed(slots[index]?.deps, deps)) slots[index] = { value: callback, deps };
       return slots[index].value;
     },
+    useMemo(factory, deps) {
+      const index = cursor++;
+      if (changed(slots[index]?.deps, deps)) slots[index] = { value: factory(), deps };
+      return slots[index].value;
+    },
     useEffect(callback, deps) {
       const index = cursor++;
       if (changed(slots[index]?.deps, deps)) effects.push(() => {
@@ -52,6 +57,13 @@ export function mountSessionView(view = 'hook', invoke = async () => [], overrid
     '@/lib/utils': { cn: (...items) => items.filter(Boolean).join(' ') },
     'lucide-react': new Proxy({}, { get: (_, name) => name }),
     '@/components/overlay/MarkdownContent': { MarkdownContent: 'MarkdownContent' },
+    // 轮次渲染与视图模型由 tests/session-view.test.mjs 单独覆盖，这里只隔离设置页状态
+    '@/components/settings/SessionTurnList': { SessionTurnList: 'SessionTurnList' },
+    '@/lib/session-view': {
+      viewSession: () => ({ turns: [], selectedText: '', legacy: false }),
+      exportSessionMarkdown: () => '',
+      sessionExportLabels: () => ({}),
+    },
   };
   const load = (path) => {
     const source = readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');

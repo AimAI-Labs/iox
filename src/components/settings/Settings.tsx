@@ -11,6 +11,7 @@ import { ProvidersTab } from "@/components/settings/ProvidersTab";
 import { ActionsTab } from "@/components/settings/actions";
 import { ApiCardTab } from "@/components/settings/ApiCardTab";
 import { SessionsTab } from "@/components/settings/SessionsTab";
+import { SessionViewerPanel } from "@/components/settings/SessionViewerPanel";
 import { WebSessionsTab } from "@/components/settings/WebSessionsTab";
 import { WebviewTab } from "@/components/settings/WebviewTab";
 import { GeneralTab } from "@/components/settings/GeneralTab";
@@ -29,6 +30,12 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>("providers");
   const [formData, setFormData] = useState<AppConfig>(config);
   const [saving, setSaving] = useState(false);
+  // 历史会话查看面板独立于设置表单状态，避免阅读历史时触发保存草稿
+  const [historyViewer, setHistoryViewer] = useState<{ open: boolean; sessionId: string | null }>({
+    open: false,
+    sessionId: null,
+  });
+  const [sessionsRevision, setSessionsRevision] = useState(0);
   const formDataRef = useRef<AppConfig>(formData);
 
   useEffect(() => {
@@ -251,7 +258,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
 
         {/* 设置主体区 */}
         <div
-          className="flex flex-1 overflow-hidden"
+          className="relative flex flex-1 overflow-hidden"
           style={{ height: 'calc(100% - var(--ui-titlebar-height))' }}
         >
           {/* 左侧侧边栏 */}
@@ -304,7 +311,13 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
 
             {activeTab === "sessions" && (
               <div className="flex-1 h-full overflow-hidden p-5 flex flex-col">
-                <SessionsTab />
+                <SessionsTab
+                  actions={config.actions}
+                  refreshToken={sessionsRevision}
+                  onOpenViewer={(sessionId) =>
+                    setHistoryViewer({ open: true, sessionId: sessionId ?? null })
+                  }
+                />
               </div>
             )}
 
@@ -345,6 +358,14 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
               </div>
             )}
           </main>
+
+          <SessionViewerPanel
+            isOpen={historyViewer.open}
+            actions={config.actions}
+            initialSessionId={historyViewer.sessionId}
+            onClose={() => setHistoryViewer((previous) => ({ ...previous, open: false }))}
+            onDataChanged={() => setSessionsRevision((previous) => previous + 1)}
+          />
         </div>
       </div>
     </div>
