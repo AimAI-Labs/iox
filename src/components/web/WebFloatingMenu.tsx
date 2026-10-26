@@ -48,6 +48,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     moved: boolean;
     windowDragging: boolean;
     windowDragOnMove: boolean;
+    heldForMenu: boolean;
     timer: ReturnType<typeof setTimeout> | null;
   } | null>(null);
   const layoutRef = useRef(layout);
@@ -113,6 +114,10 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
   }, [layout.expanded, layout.wheel, update]);
 
   const startWindowDrag = (drag: NonNullable<typeof dragRef.current>, target: HTMLButtonElement) => {
+    if (drag.timer !== null) {
+      clearTimeout(drag.timer);
+      drag.timer = null;
+    }
     drag.windowDragging = true;
     ignoreClick.current = true;
     setHoldingDelayMs(null);
@@ -140,23 +145,27 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     target.focus();
     target.setPointerCapture(pointerId);
     ignoreClick.current = false;
-    const canDragWindow = target === triggerRef.current && !layoutRef.current.expanded;
+    const canDrag = target === triggerRef.current && !layoutRef.current.expanded;
+    // A plain drag and a completed hold target opposite surfaces: by default the drag moves the menu
+    // and the hold moves the window; direct drag swaps them, so the drag moves the window and the
+    // hold moves the menu. The mode is fixed for the whole press.
     const drag = {
       pointerId, x: event.screenX, y: event.screenY,
-      originX: layoutRef.current.x + (canDragWindow ? layoutRef.current.buttonX ?? 0 : 0),
-      originY: layoutRef.current.y + (canDragWindow ? layoutRef.current.buttonY ?? 0 : 0),
-      moved: false, windowDragging: false, timer: null as ReturnType<typeof setTimeout> | null,
-      windowDragOnMove: canDragWindow && directDrag,
+      originX: layoutRef.current.x + (canDrag ? layoutRef.current.buttonX ?? 0 : 0),
+      originY: layoutRef.current.y + (canDrag ? layoutRef.current.buttonY ?? 0 : 0),
+      moved: false, windowDragging: false, heldForMenu: false,
+      timer: null as ReturnType<typeof setTimeout> | null,
+      windowDragOnMove: canDrag && directDrag,
     };
     dragRef.current = drag;
-    if (canDragWindow && !directDrag) {
-      setHoldingDelayMs(holdDelayMs);
-      drag.timer = setTimeout(() => {
-        if (dragRef.current !== drag || drag.moved) return;
-        drag.timer = null;
-        startWindowDrag(drag, target);
-      }, holdDelayMs);
-    }
+    if (!canDrag) return;
+    setHoldingDelayMs(holdDelayMs);
+    drag.timer = setTimeout(() => {
+      if (dragRef.current !== drag || drag.moved) return;
+      drag.timer = null;
+      if (directDrag) drag.heldForMenu = true;
+      else startWindowDrag(drag, target);
+    }, holdDelayMs);
   };
   const pointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
@@ -166,7 +175,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     const dy = event.screenY - drag.y;
     if (!drag.moved && Math.hypot(dx, dy) < 4) return;
     drag.moved = true;
-    if (drag.windowDragOnMove) {
+    if (drag.windowDragOnMove && !drag.heldForMenu) {
       startWindowDrag(drag, event.currentTarget);
       return;
     }
@@ -179,7 +188,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     if (dragRef.current?.pointerId !== event.pointerId) return;
     const drag = dragRef.current;
     if (drag.timer !== null) clearTimeout(drag.timer);
-    ignoreClick.current = drag.moved || drag.windowDragging || event.type === 'pointercancel';
+    ignoreClick.current = drag.moved || drag.windowDragging || drag.heldForMenu || event.type === 'pointercancel';
     dragRef.current = null;
     setHoldingDelayMs(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -240,7 +249,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     { id: 'maximize', label: t('settings.web.menu.maximize'), icon: <Maximize2 size={14} />, run: () => { void perform(() => invoke('toggle_maximize_web_window', { label: windowLabel })); } },
     { id: 'closeWindow', label: t('settings.web.menu.closeWindow'), icon: <X size={14} />, run: () => { void perform(() => invoke('close_web_window', { label: windowLabel })); }, danger: true },
   ];
-  const openLabel = directDrag ? t('settings.web.menu.openImmediate')
+  const openLabel = directDrag ? t('settings.web.menu.openImmediate', { delay: holdDelayMs })
     : t('settings.web.menu.open', { delay: holdDelayMs });
   const triggerLabel = layout.expanded ? t('settings.web.menu.collapse') : openLabel;
   const TriggerIcon = directDrag ? Move : Menu;

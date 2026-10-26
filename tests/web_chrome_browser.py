@@ -36,8 +36,9 @@ with sync_playwright() as p:
     toggle_trigger.click()
     expect(toggle_trigger).to_have_attribute('aria-expanded', 'false')
     expect(toggle_trigger).not_to_have_attribute('title')
-    expect(toggle_trigger).to_have_attribute('aria-label', 'Click for menu, drag to move window')
+    expect(toggle_trigger).to_have_attribute('aria-label', 'Click for menu, drag to move window, hold 1000 ms to move menu')
     expect(toggle_trigger.locator('.lucide-move')).to_have_count(1)
+    # Direct drag swaps the gestures: a completed hold moves the menu, a plain drag moves the window.
     original_menu = toggle_page.evaluate('structuredClone(chromeFixture.layout.menu)')
     toggle_trigger.hover()
     toggle_page.mouse.down()
@@ -47,8 +48,20 @@ with sync_playwright() as p:
     toggle_page.mouse.move(box['x'] - 60, box['y'] + 60, steps=4)
     toggle_page.mouse.up()
     toggle_page.clock.fast_forward(1500)
-    assert toggle_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 1
-    assert toggle_page.evaluate('chromeFixture.layout.menu') == original_menu, 'Direct dragging must not move just the menu'
+    assert toggle_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 0, \
+        'A completed hold must drag the menu instead of the window'
+    assert toggle_page.evaluate('chromeFixture.layout.menu') != original_menu, 'A completed hold must move the menu'
+    expect(toggle_trigger).to_have_attribute('aria-expanded', 'false')
+    held_menu = toggle_page.evaluate('structuredClone(chromeFixture.layout.menu)')
+    trigger_box = toggle_trigger.bounding_box()
+    toggle_page.mouse.move(trigger_box['x'] + 22, trigger_box['y'] + 22)
+    toggle_page.mouse.down()
+    toggle_page.mouse.move(trigger_box['x'] + 82, trigger_box['y'] + 112, steps=4)
+    toggle_page.mouse.up()
+    toggle_page.clock.fast_forward(1500)
+    assert toggle_page.evaluate("chromeFixture.calls.filter(c => c.command === 'plugin:window|start_dragging').length") == 1, \
+        'A plain drag must move the whole window'
+    assert toggle_page.evaluate('chromeFixture.layout.menu') == held_menu, 'A plain direct drag must not move the menu'
     expect(toggle_trigger).to_have_attribute('aria-expanded', 'false')
     toggle_trigger.click()
     expect(drag_toggle).to_have_attribute('aria-pressed', 'true')
@@ -99,7 +112,7 @@ with sync_playwright() as p:
         delay_page.mouse.up()
         expect(delay_trigger).to_have_attribute('aria-expanded', 'false')
     delay_page.evaluate('chromeFixture.setDelay(0)')
-    expect(delay_trigger).to_have_attribute('aria-label', 'Click for menu, drag to move window')
+    expect(delay_trigger).to_have_attribute('aria-label', 'Click for menu, drag to move window, hold 300 ms to move menu')
     delay_trigger.click()
     expect(delay_trigger).to_have_attribute('aria-expanded', 'true')
     delay_trigger.press('Escape')
