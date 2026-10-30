@@ -12,14 +12,16 @@ import {
   MessageSquare,
   RefreshCw,
   Search,
+  X,
+  ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ActionConfig } from '@/types/config';
 import { PlatformSync, WebHistory, WebSession } from '@/types/web-session';
-import { filterHistory, groupHistory, localDayKey, TimeFilter } from '@/lib/web-history';
+import { filterHistory, groupHistory, localDayKey, TimeFilter, timeWindow } from '@/lib/web-history';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
-import { Select, SelectOption } from '@/components/ui';
+import { DatePicker, Select, SelectOption, TimePicker } from '@/components/ui';
 import { DynamicIcon } from '@/components/Icons';
 
 const fieldClass = 'rounded-lg border border-border/60 bg-background/70 px-3 py-1.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-primary/30';
@@ -152,6 +154,8 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
   const [time, setTime] = useState<TimeFilter>('all');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [fromTime, setFromTime] = useState('');
+  const [toTime, setToTime] = useState('');
   const [opening, setOpening] = useState('');
   const generation = useRef(0);
 
@@ -192,9 +196,10 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
   const syncing = platforms.some(p => activeStatuses.has(p.status));
   const lastChecked = Math.max(0, ...platforms.map(p => p.syncedAt ?? 0));
   const sessions = useMemo(() => history.sessions.filter(s => enabledIds.has(s.actionId)), [history.sessions, enabledIds]);
-  const filtered = useMemo(() => filterHistory(sessions, { query, platform, time, from, to }), [sessions, query, platform, time, from, to]);
+  const filtered = useMemo(() => filterHistory(sessions, { query, platform, time, from, to, fromTime, toTime }), [sessions, query, platform, time, from, to, fromTime, toTime]);
   const groups = useMemo(() => groupHistory(filtered), [filtered]);
-  const invalidRange = time === 'custom' && from && to && from > to;
+  const invalidRange = time === 'custom' && !timeWindow({ time, from, to, fromTime, toTime }).valid;
+  const hasCustomRange = Boolean(from || to || fromTime || toTime);
   const today = localDayKey(Date.now() / 1000);
   const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
   const yesterday = localDayKey(yesterdayDate.getTime() / 1000);
@@ -221,7 +226,7 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
     { value: 'today', label: text('今天', 'Today'), icon: Calendar },
     { value: '7d', label: text('最近 7 天', 'Last 7 days'), icon: CalendarRange },
     { value: '30d', label: text('最近 30 天', 'Last 30 days'), icon: CalendarDays },
-    { value: 'custom', label: text('自定义日期', 'Custom dates'), icon: CalendarDays },
+    { value: 'custom', label: text('自定义时间段', 'Custom range'), icon: CalendarDays },
   ], [text]);
 
   const statusLabel = (status: PlatformSync['status']) => ({
@@ -296,13 +301,71 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
           aria-label={text('筛选时间', 'Filter time')}
         />
       </div>
-      {time === 'custom' && <div className="flex flex-wrap items-center gap-2 text-xs">
-        <CalendarDays size={13} className="text-muted-foreground" />
-        <input type="date" className={cn(fieldClass, 'h-8 py-0')} aria-label={text('开始日期', 'Start date')} value={from} onChange={e => setFrom(e.target.value)} />
-        <span>—</span>
-        <input type="date" className={cn(fieldClass, 'h-8 py-0')} aria-label={text('结束日期', 'End date')} value={to} onChange={e => setTo(e.target.value)} />
-        {invalidRange && <span role="alert" className="text-red-500 text-xs">{text('开始日期不能晚于结束日期', 'Start date must precede end date')}</span>}
-      </div>}
+      {time === 'custom' && (
+        <div
+          role="group"
+          aria-label={text('自定义时间段', 'Custom time range')}
+          className={cn(
+            'flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-xl border bg-background/30 px-3 py-2 text-xs transition-colors',
+            invalidRange ? 'border-red-500/45' : 'border-border/40'
+          )}
+        >
+          <div className="flex min-w-0 items-center gap-1.5">
+            <CalendarDays size={13} className="shrink-0 text-muted-foreground" />
+            <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{text('开始', 'From')}</span>
+            <DatePicker
+              className="w-[8.5rem]"
+              locale={resolvedLanguage}
+              value={from}
+              onChange={value => { setFrom(value); if (!value) setFromTime(''); }}
+              aria-label={text('开始日期', 'Start date')}
+            />
+            <TimePicker
+              className="w-[6rem]"
+              locale={resolvedLanguage}
+              disabled={!from}
+              value={fromTime}
+              onChange={setFromTime}
+              aria-label={text('开始时间', 'Start time')}
+              title={text('先选择开始日期；留空表示 00:00', 'Pick a start date first; empty means 00:00')}
+            />
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <ArrowRight size={13} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{text('结束', 'To')}</span>
+            <DatePicker
+              className="w-[8.5rem]"
+              locale={resolvedLanguage}
+              value={to}
+              onChange={value => { setTo(value); if (!value) setToTime(''); }}
+              aria-label={text('结束日期', 'End date')}
+            />
+            <TimePicker
+              className="w-[6rem]"
+              locale={resolvedLanguage}
+              disabled={!to}
+              value={toTime}
+              onChange={setToTime}
+              aria-label={text('结束时间', 'End time')}
+              title={text('先选择结束日期；留空表示 23:59', 'Pick an end date first; empty means 23:59')}
+            />
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            {hasCustomRange && (
+              <button
+                type="button"
+                className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                onClick={() => { setFrom(''); setTo(''); setFromTime(''); setToTime(''); }}
+              >
+                <X size={11} />{text('清除', 'Clear')}
+              </button>
+            )}
+            {invalidRange
+              ? <span role="alert" className="whitespace-nowrap text-[11px] text-red-500">{text('开始时间不能晚于结束时间', 'Start time must precede end time')}</span>
+              : <span className="whitespace-nowrap text-[11px] text-muted-foreground/80">{text('时间留空表示全天', 'Leave time empty for the whole day')}</span>}
+          </div>
+        </div>
+      )}
 
       {error && <div role="alert" className="rounded-lg bg-red-500/10 p-3 text-xs text-red-500">{error}<button type="button" className="ml-2 underline" onClick={() => void sync()}>{text('重试', 'Retry')}</button></div>}
       {/* Horizontal Circular Platform Sync Status Bar */}
@@ -409,7 +472,7 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
       </div>
       <footer className="flex flex-wrap justify-between gap-1 text-[10px] leading-relaxed text-muted-foreground">
         <span>{text(`显示 ${filtered.length} / ${sessions.length} 条缓存`, `${filtered.length} / ${sessions.length} cached conversations`)}{lastChecked > 0 && ` · ${text('最近检查 ', 'Last checked ')}${new Date(lastChecked * 1000).toLocaleTimeString(resolvedLanguage, {hour: '2-digit', minute: '2-digit'})}`}</span>
-        <span>{text('日期范围按重叠筛选；未提供日期的会话仅在“全部时间”显示。', 'Date ranges match by overlap; undated chats appear under All time only.')}</span>
+        <span>{text('时间段按重叠筛选，自定义结束时间包含整分钟；未提供日期的会话仅在“全部时间”显示。', 'Time ranges match by overlap and a custom end time covers its whole minute; undated chats appear under All time only.')}</span>
       </footer>
     </section>
   );
