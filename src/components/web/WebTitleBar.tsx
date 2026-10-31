@@ -5,6 +5,8 @@ import { MacTitleBar } from '@/components/MacTitleBar';
 import { RotateCw, ExternalLink, Settings, MessagesSquare } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { HubTabBar } from './HubTabBar';
+import { getIconThemeColor } from '@/components/Icons';
+import { actionForWebWindow } from './WebFrame';
 import { WebFloatingMenu } from './WebFloatingMenu';
 import { useWebChrome } from '@/hooks/useWebChrome';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -41,11 +43,14 @@ const SingleWebTitleBar: React.FC<WebTitleBarProps> = ({
   label: propLabel,
   title: propTitle,
   url: propUrl,
+  actions = [],
 }) => {
   const urlParams = new URLSearchParams(window.location.search);
   const windowLabel = propLabel || urlParams.get('label') || 'web_win';
   const displayTitle = propTitle || urlParams.get('title') || 'Web 官网浮窗';
   const targetUrl = propUrl || urlParams.get('url') || '';
+  const action = actionForWebWindow(actions, windowLabel);
+  const borderColor = getIconThemeColor(action?.icon);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -178,7 +183,8 @@ const SingleWebTitleBar: React.FC<WebTitleBarProps> = ({
           }
         />
       </div>
-      <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[var(--ui-web-card-radius)] ring-1 ring-inset ring-black/10 dark:ring-white/10" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[var(--ui-web-card-radius)] ring-2 ring-inset ring-black/10 dark:ring-white/10"
+        style={borderColor ? { boxShadow: `inset 0 0 0 2px ${borderColor}` } : undefined} />
     </div>
   );
 };

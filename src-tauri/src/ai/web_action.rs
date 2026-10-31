@@ -21,6 +21,24 @@ fn cancel_injection(app: &AppHandle, label: &str) {
     }
 }
 
+fn add_web_frame(
+    window: &tauri::Window,
+    label: &str,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    let path = format!("index.html?view=web_frame&label={label}");
+    let frame = window
+        .add_child(
+            WebviewBuilder::new(format!("{label}_frame"), WebviewUrl::App(path.into()))
+                .transparent(true),
+            tauri::LogicalPosition::new(0.0, 0.0),
+            tauri::LogicalSize::new(width, height),
+        )
+        .map_err(|e| format!("Failed to create web frame: {e}"))?;
+    frame.hide().map_err(|e| e.to_string())
+}
+
 fn schedule_injection(webview: &tauri::Webview, script: &str, delays: &[u64]) {
     let app = webview.app_handle().clone();
     let label = webview.label().to_string();
@@ -567,6 +585,8 @@ fn execute_multi_window_action(
         )
         .map_err(|e| format!("Failed to create titlebar webview: {}", e))?;
 
+    add_web_frame(&window, &label, initial_width, initial_height)?;
+
     let init_script = build_initialization_script(&config.general.theme, None);
     let initial_origin = target_url.origin().ascii_serialization();
     let content_builder = WebviewBuilder::new(&content_label, WebviewUrl::External(target_url))
@@ -792,6 +812,8 @@ fn execute_tabbed_hub_action(
             tauri::LogicalSize::new(initial_width, titlebar_height.max(1.0)),
         )
         .map_err(|e| format!("Failed to create hub titlebar webview: {}", e))?;
+
+    add_web_frame(&window, window_label, initial_width, initial_height)?;
 
     // 构建首个 AI Tab Webview
     let initial_origin = target_url.origin().ascii_serialization();

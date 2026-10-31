@@ -109,10 +109,10 @@ if (params.has('settings')) {
       };
       fixture.layout = { revision: fixture.layout.revision + 1, headless: fixture.layout.headless, menu };
       // Native keeps the toolbar canvas over the whole card and clips it to the frame that
-      // hosts the titlebar and the 1px border, leaving the page area to the site webview.
+      // hosts the titlebar and the 2px border, leaving the page area to the site webview.
       const cardFrame = `polygon(0px 0px, ${innerWidth}px 0px, ${innerWidth}px ${innerHeight}px, `
-        + `${innerWidth - 1}px ${innerHeight}px, ${innerWidth - 1}px 38px, 1px 38px, `
-        + `1px ${innerHeight}px, 0px ${innerHeight}px)`;
+        + `${innerWidth - 2}px ${innerHeight}px, ${innerWidth - 2}px 38px, 2px 38px, `
+        + `2px ${innerHeight}px, 0px ${innerHeight}px)`;
       Object.assign(bar.style, fixture.layout.headless ? {
         left: `${menu.x}px`, top: `${menu.y}px`, width: `${width}px`, height: `${height}px`,
       } : { left: '0px', top: '0px', width: `${innerWidth}px`, height: `${innerHeight}px` });

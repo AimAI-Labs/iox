@@ -4,7 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { MacTrafficLights } from '@/components/MacTrafficLights';
-import { DynamicIcon } from '@/components/Icons';
+import { DynamicIcon, getIconThemeColor } from '@/components/Icons';
 import { useUiTheme } from '@/themes/ThemeProvider';
 import { WebHubState, AppConfig, ActionConfig } from '@/types/config';
 import {
@@ -267,6 +267,8 @@ export const HubTabBar: React.FC = () => {
 
   // 6. 外部浏览器打开当前活跃 Tab
   const currentActiveTab = hubState.tabs.find((t) => t.actionId === hubState.activeTabId);
+  const activeIcon = actions.find((action) => action.id === currentActiveTab?.actionId)?.icon ?? currentActiveTab?.icon;
+  const borderColor = getIconThemeColor(activeIcon);
   const handleOpenExternal = async () => {
     if (!currentActiveTab?.url) return;
     try {
@@ -466,7 +468,8 @@ export const HubTabBar: React.FC = () => {
       </header>
 
       {/* 卡片描边：标题栏之外的部分由原生裁切让给官网页面 */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[var(--ui-web-card-radius)] ring-1 ring-inset ring-black/10 dark:ring-white/10" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[var(--ui-web-card-radius)] ring-2 ring-inset ring-black/10 dark:ring-white/10"
+        style={borderColor ? { boxShadow: `inset 0 0 0 2px ${borderColor}` } : undefined} />
 
       {/* 标签页右键上下文菜单 */}
       {contextMenu.visible && (

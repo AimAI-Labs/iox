@@ -159,7 +159,7 @@ pub fn raise_web_toolbar(view: &tauri::Webview) {
 }
 
 /// Card frame clipping in physical pixels: the rounded card outline minus the page area,
-/// keeping only the titlebar band and the 1px border that follows the card edges.
+/// keeping only the titlebar band and the border that follows the card edges.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WebCardFrame {
     pub width: i32,
@@ -184,6 +184,46 @@ pub enum WebToolbarRegion {
     },
     /// Card frame drawn on top of the page: titlebar plus the enclosing hairline border.
     CardFrame(WebCardFrame),
+}
+
+/// SAFETY: The caller owns the returned region and releases it with DeleteObject.
+unsafe fn card_outline_region(frame: WebCardFrame) -> HRGN {
+    let diameter = frame.radius.max(0) * 2;
+    let outline = if diameter > 0 {
+        CreateRoundRectRgn(0, 0, frame.width + 1, frame.height + 1, diameter, diameter)
+    } else {
+        CreateRectRgn(0, 0, frame.width + 1, frame.height + 1)
+    };
+    if outline.is_null() {
+        return outline;
+    }
+    let border = frame.border.max(1);
+    if frame.width <= border * 2 || frame.height <= border * 2 {
+        return outline;
+    }
+    let inner_diameter = (diameter - border * 2).max(0);
+    let inner = if inner_diameter > 0 {
+        // GDI's rounded region omits the final row/column; match the +1 used by
+        // the outer rounded region so right/bottom have the same inset as left/top.
+        CreateRoundRectRgn(
+            border, border, frame.width - border + 1, frame.height - border + 1,
+            inner_diameter, inner_diameter,
+        )
+    } else {
+        CreateRectRgn(border, border, frame.width - border, frame.height - border)
+    };
+    if inner.is_null() {
+        DeleteObject(outline as _);
+        return std::ptr::null_mut();
+    }
+    let cut = CombineRgn(outline, outline, inner, RGN_DIFF) != 0;
+    DeleteObject(inner as _);
+    if cut {
+        outline
+    } else {
+        DeleteObject(outline as _);
+        std::ptr::null_mut()
+    }
 }
 
 /// SAFETY: the returned region is owned by the caller and must be released with
@@ -246,6 +286,57 @@ pub fn set_web_toolbar_region(view: &tauri::Webview, region: WebToolbarRegion) {
                 if !region.is_null() {
                     DeleteObject(region as _);
                 }
+            }
+        }
+    });
+}
+
+/// SAFETY: child must be the live native container of the frame WebView on the UI thread.
+unsafe fn install_web_outline(child: HWND, frame: WebCardFrame, visible: bool) -> bool {
+    let region = card_outline_region(frame);
+    let installed = !region.is_null() && SetWindowRgn(child, region, 1) != 0;
+    if !installed && !region.is_null() {
+        DeleteObject(region as _);
+    }
+    // WRY's hide() hides both the child HWND and its WebView2 controller. Restore the
+    // native half here as well, without activating the page or re-entering Tauri.
+    ShowWindow(
+        child,
+        if installed && visible {
+            SW_SHOWNOACTIVATE
+        } else {
+            SW_HIDE
+        },
+    );
+    installed
+}
+
+/// Keep the frame hidden unless its exact child HWND has been clipped successfully.
+pub fn set_web_outline(view: &tauri::Webview, frame: WebCardFrame) {
+    let Ok(parent) = view.window().hwnd() else {
+        return;
+    };
+    let parent = parent.0 as isize;
+    let app = view.app_handle().clone();
+    let _ = view.with_webview(move |platform| {
+        // SAFETY: the controller and its parent HWND are borrowed on the UI thread.
+        // Windows owns a successfully installed region; failure leaves it with us.
+        unsafe {
+            let controller = platform.controller();
+            let mut child = Default::default();
+            if controller.ParentWindow(&mut child).is_err() {
+                return;
+            }
+            let child = child.0 as HWND;
+            if child.is_null() || GetParent(child) != parent as HWND {
+                return;
+            }
+            let visible = crate::web_chrome::headless(&app);
+            let installed = install_web_outline(child, frame, visible);
+            // Use the controller directly: calling Webview::show/hide here re-enters the
+            // dispatcher while with_webview still holds its window-id mutex.
+            if controller.SetIsVisible(installed && visible).is_err() {
+                ShowWindow(child, SW_HIDE);
             }
         }
     });
@@ -1236,6 +1327,89 @@ mod tests {
                 assert_eq!(PtInRegion(region, border, 38), 0, "page origin");
                 DeleteObject(region as _);
             }
+        }
+    }
+
+    #[test]
+    fn headless_outline_retains_all_edges_without_covering_the_page() {
+        for radius in [0, 12] {
+            let frame = WebCardFrame {
+                width: 860, height: 640, page_top: 1, border: 1, radius,
+            };
+            // SAFETY: the region is local to this test and is released here.
+            unsafe {
+                let region = card_outline_region(frame);
+                assert!(!region.is_null());
+                for (x, y) in [(430, 0), (0, 320), (859, 320), (430, 639)] {
+                    assert_ne!(PtInRegion(region, x, y), 0, "edge at ({x}, {y})");
+                }
+                assert_eq!(PtInRegion(region, 430, 320), 0);
+                if radius > 0 { assert_eq!(PtInRegion(region, 0, 0), 0); }
+                DeleteObject(region as _);
+            }
+        }
+    }
+
+    #[test]
+    fn headless_outline_has_equal_thickness_on_all_four_sides() {
+        for radius in [0, 12, 24] {
+            for border in [1, 2, 3] {
+                let frame = WebCardFrame {
+                    width: 860,
+                    height: 640,
+                    page_top: border,
+                    border,
+                    radius,
+                };
+                // SAFETY: the region is owned by this test and released below.
+                unsafe {
+                    let region = card_outline_region(frame);
+                    assert!(!region.is_null());
+                    let sides = [
+                        (0..10).filter(|&x| PtInRegion(region, x, 320) != 0).count(),
+                        (0..10).filter(|&y| PtInRegion(region, 430, y) != 0).count(),
+                        (0..10).filter(|&x| PtInRegion(region, 859 - x, 320) != 0).count(),
+                        (0..10).filter(|&y| PtInRegion(region, 430, 639 - y) != 0).count(),
+                    ];
+                    DeleteObject(region as _);
+                    assert_eq!(sides, [border as usize; 4],
+                        "left/top/right/bottom thickness for radius {radius}, border {border}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn installing_web_outline_restores_a_hidden_native_child() {
+        struct TestWindow(HWND);
+        impl Drop for TestWindow {
+            fn drop(&mut self) {
+                // SAFETY: this test owns the hidden parent and its children on this thread.
+                unsafe { DestroyWindow(self.0); }
+            }
+        }
+        // SAFETY: STATIC is a built-in class; the parent stays hidden throughout the test.
+        unsafe {
+            let class = [83u16, 84, 65, 84, 73, 67, 0];
+            let parent = CreateWindowExW(0, class.as_ptr(), std::ptr::null(), WS_POPUP,
+                0, 0, 100, 100, std::ptr::null_mut(), std::ptr::null_mut(),
+                std::ptr::null_mut(), std::ptr::null());
+            assert!(!parent.is_null());
+            let _parent = TestWindow(parent);
+            let child = CreateWindowExW(0, class.as_ptr(), std::ptr::null(), WS_CHILD,
+                0, 0, 100, 100, parent, std::ptr::null_mut(),
+                std::ptr::null_mut(), std::ptr::null());
+            assert!(!child.is_null());
+            assert_eq!(GetWindowLongPtrW(child, GWL_STYLE) as u32 & WS_VISIBLE, 0);
+            let frame = WebCardFrame { width: 100, height: 100, page_top: 1, border: 1, radius: 12 };
+            assert!(install_web_outline(child, frame, true));
+            assert_ne!(GetWindowLongPtrW(child, GWL_STYLE) as u32 & WS_VISIBLE, 0,
+                "controller visibility alone does not show the native container");
+            assert!(install_web_outline(child, frame, false));
+            assert_eq!(GetWindowLongPtrW(child, GWL_STYLE) as u32 & WS_VISIBLE, 0);
+            assert!(install_web_outline(child, frame, true));
+            assert_ne!(GetWindowLongPtrW(child, GWL_STYLE) as u32 & WS_VISIBLE, 0);
+            assert_eq!(IsWindowVisible(parent), 0);
         }
     }
 

@@ -375,6 +375,24 @@ const ALIAS_MAP: Record<string, string> = {
   Prompt: 'FileText',
 };
 
+/** The primary color used by the same brand icon rendered by DynamicIcon. */
+export function getIconThemeColor(name?: string): string | undefined {
+  if (!name) return undefined;
+  const resolvedName = ALIAS_MAP[name] || ALIAS_MAP[name.toLowerCase()] || name;
+  const customColors: Record<string, string> = {
+    Xiaomi: '#FF6900',
+    Kimi: '#1783FF',
+    Metaso: '#6366F1',
+    Felo: '#3B82F6',
+    Doubao: '#1E37FC',
+    Gemini: '#3186FF',
+  };
+  const color = customColors[resolvedName] || AI_ICON_MAP[resolvedName]?.colorPrimary;
+  // Monochrome logos follow the foreground so their frame remains visible in both themes.
+  if (typeof color === 'string' && /^#(?:000|000000|fff|ffffff)$/i.test(color)) return 'var(--ink-2)';
+  return color;
+}
+
 export interface IconItemMeta {
   name: string;
   label: string;

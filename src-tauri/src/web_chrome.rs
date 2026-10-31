@@ -8,8 +8,8 @@ use crate::window_manager::{WebCardFrame, WebToolbarRegion};
 use crate::AppState;
 
 pub const TITLEBAR_HEIGHT: f64 = 38.0;
-/// Hairline card border drawn by the local toolbar, in logical pixels.
-const CARD_BORDER: f64 = 1.0;
+/// Card border drawn by the local chrome, in logical pixels.
+const CARD_BORDER: f64 = 2.0;
 const MENU_BUTTON_SIZE: f64 = 44.0;
 const MENU_MARGIN: f64 = 12.0;
 const MENU_MIN_OPEN_HEIGHT: f64 = 160.0;
@@ -227,6 +227,21 @@ struct WindowLayout {
     toolbar: ToolbarShape,
 }
 
+fn headless_frame(
+    size: tauri::PhysicalSize<u32>,
+    scale: f64,
+    radius: Option<i32>,
+) -> WebCardFrame {
+    let border = (CARD_BORDER * scale).ceil() as i32;
+    WebCardFrame {
+        width: size.width as i32,
+        height: size.height as i32,
+        page_top: border,
+        border,
+        radius: radius.unwrap_or(0),
+    }
+}
+
 /// The card frame keeps the toolbar canvas transparent outside the titlebar band, so the
 /// native region is the only thing that decides where the border paints and receives input.
 fn toolbar_shape(
@@ -390,8 +405,9 @@ fn apply_layout(
         }
     }
     let bar_label = format!("{}_bar", window.label());
+    let frame_label = format!("{}_frame", window.label());
     for view in window.webviews().into_iter().filter(|_| relayout_content) {
-        if view.label() == bar_label {
+        if view.label() == bar_label || view.label() == frame_label {
             continue;
         }
         let visible = active_label.as_deref() == Some(view.label());
@@ -405,6 +421,22 @@ fn apply_layout(
         })
         .map_err(|e| e.to_string())?;
         crate::window_manager::set_web_content_round(&view, radius, headless);
+    }
+    if let Some(frame) = app.get_webview(&frame_label) {
+        if headless {
+            if relayout_content {
+                frame
+                    .set_bounds(tauri::Rect {
+                        position: tauri::PhysicalPosition::new(0, 0).into(),
+                        size: size.into(),
+                    })
+                    .map_err(|e| e.to_string())?;
+                crate::window_manager::set_web_outline(&frame, headless_frame(size, scale, radius));
+            }
+            crate::window_manager::raise_web_toolbar(&frame);
+        } else {
+            let _ = frame.hide();
+        }
     }
     if let Some(bar) = app.get_webview(&bar_label) {
         let reshaped = previous_toolbar != Some(toolbar);
@@ -537,6 +569,17 @@ pub async fn open_web_page_in_browser(webview: tauri::Webview) -> Result<(), Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn headless_frame_reserves_all_four_edges_at_each_dpi() {
+        for scale in [1.0, 1.25, 1.5, 2.0] {
+            let frame = headless_frame(tauri::PhysicalSize::new(860, 640), scale, Some(12));
+            let border = (CARD_BORDER * scale).ceil() as i32;
+            assert_eq!(frame.page_top, border);
+            assert_eq!(frame.border, border);
+            assert_eq!((frame.width, frame.height), (860, 640));
+        }
+    }
 
     #[test]
     fn headless_content_fills_client_area_at_every_dpi() {

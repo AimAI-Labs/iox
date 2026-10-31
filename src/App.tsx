@@ -13,6 +13,7 @@ import './App.css';
 const Settings = lazy(() => import('@/components/settings').then((m) => ({ default: m.Settings })));
 const HistoryWindow = lazy(() => import('@/components/history').then((m) => ({ default: m.HistoryWindow })));
 const WebTitleBar = lazy(() => import('@/components/web').then((m) => ({ default: m.WebTitleBar })));
+const WebFrame = lazy(() => import('@/components/web/WebFrame').then((m) => ({ default: m.WebFrame })));
 
 export function App() {
   const { config, loading, updateConfig } = useConfig();
@@ -54,6 +55,12 @@ export function App() {
   }
 
   // 0. Web 官网浮窗标题栏视图
+  if (urlParams.get('view') === 'web_frame') {
+    return withTheme(<Suspense fallback={null}>
+      <WebFrame label={urlParams.get('label') || ''} actions={config.actions} />
+    </Suspense>);
+  }
+
   if (isWebTitleBar) {
     return withTheme(
       <I18nProvider languageSetting={config.general.language}>

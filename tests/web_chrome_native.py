@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright, expect
 
 root = Path(__file__).resolve().parents[1]
-output = root / 'docs/verification/web-chrome/native'
+output = Path(os.environ.get('IOX_NATIVE_TEST_OUTPUT', str(root / 'docs/verification/web-chrome/native')))
 profile = output / 'profile'
 binary = Path(os.environ.get('IOX_NATIVE_TEST_BINARY', str(root / 'src-tauri/target/debug/iox.exe')))
 (profile / '.iox-dev').mkdir(parents=True, exist_ok=True)
@@ -33,6 +33,7 @@ user32.GetParent.restype = wintypes.HWND
 user32.GetWindow.argtypes = [wintypes.HWND, wintypes.UINT]
 user32.GetWindow.restype = wintypes.HWND
 user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+user32.IsWindowVisible.argtypes = [wintypes.HWND]
 user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
 user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
 user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
@@ -56,6 +57,14 @@ gdi32.CreateRectRgn.restype = wintypes.HRGN
 gdi32.PtInRegion.argtypes = [wintypes.HRGN, ctypes.c_int, ctypes.c_int]
 gdi32.DeleteObject.argtypes = [wintypes.HANDLE]
 user32.GetWindowRgn.argtypes = [wintypes.HWND, wintypes.HRGN]
+user32.GetDC.argtypes = [wintypes.HWND]
+user32.GetDC.restype = wintypes.HDC
+user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
+user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+user32.GetDpiForWindow.argtypes = [wintypes.HWND]
+user32.GetDpiForWindow.restype = wintypes.UINT
+gdi32.GetPixel.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
+gdi32.GetPixel.restype = wintypes.DWORD
 dwm = ctypes.WinDLL('dwmapi', use_last_error=True)
 dwm.DwmGetWindowAttribute.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
 dwm.DwmGetWindowAttribute.restype = wintypes.LONG
@@ -125,7 +134,18 @@ def inspect_window(pid, title, headless):
         toolbar = user32.GetWindow(toolbar, 2)  # GW_HWNDNEXT
     assert toolbar, 'Missing local toolbar child'
     toolbar_rect = rect(toolbar)
-    contents = [child for child in children if child != toolbar and rect(child)[0] > -10000]
+    def is_outline(child):
+        region = gdi32.CreateRectRgn(0, 0, 0, 0)
+        try:
+            return (user32.GetWindowRgn(child, region) > 0
+                and not gdi32.PtInRegion(region, width // 2, height // 2)
+                and gdi32.PtInRegion(region, width // 2, 0))
+        finally:
+            gdi32.DeleteObject(region)
+    outlines = [child for child in children if child != toolbar and user32.IsWindowVisible(child) and is_outline(child)]
+    assert len(outlines) == (1 if headless else 0), ('headless frame count', len(outlines))
+    contents = [child for child in children if child != toolbar and child not in outlines
+        and user32.IsWindowVisible(child) and rect(child)[0] > -10000]
     assert len(contents) == 1, [rect(child) for child in children]
     content_rect = rect(contents[0])
     if headless:
@@ -150,7 +170,7 @@ def inspect_window(pid, title, headless):
             assert preference.value == 2, 'Headless window must opt into DWM rounded corners'
     else:
         assert content_rect[2] == width and content_rect[3] < height
-        assert toolbar_rect[2] == width and toolbar_rect[3] == height - content_rect[3]
+        assert toolbar_rect[2:] == (width, height)
         assert frame_top > frame_left + 10, ('Windows titlebar was not restored', frame_left, frame_top)
     return {'title': title, 'client': [width, height], 'frame': [frame_left, frame_top], 'toolbar': toolbar_rect, 'content': content_rect}
 
@@ -195,6 +215,40 @@ def hold_and_drag_window(pid, title, delay_ms, direct=False):
         user32.SetCursorPos(original_cursor.x, original_cursor.y)
 
 
+def check_frame_pixels(pid, title, color, page):
+    """Sample the four visible edges of our isolated window, including native composition."""
+    hwnd = native_window(pid, title)
+    assert user32.SetWindowPos(hwnd, wintypes.HWND(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
+    origin = wintypes.POINT(0, 0)
+    assert user32.ClientToScreen(hwnd, ctypes.byref(origin))
+    _, _, width, height = rect(hwnd, True)
+    thickness = (2 * user32.GetDpiForWindow(hwnd) + 95) // 96
+    depth = max(8, thickness + 2)
+    edges = [
+        [(origin.x + d, origin.y + height // 2) for d in range(depth)],
+        [(origin.x + width // 2, origin.y + d) for d in range(depth)],
+        [(origin.x + width - 1 - d, origin.y + height // 2) for d in range(depth)],
+        [(origin.x + width // 2, origin.y + height - 1 - d) for d in range(depth)],
+    ]
+    expected = color[0] | (color[1] << 8) | (color[2] << 16)
+    samples = []
+    for _ in range(50):
+        dc = user32.GetDC(None)
+        assert dc
+        try:
+            pixels = [[gdi32.GetPixel(dc, x, y) for x, y in points] for points in edges]
+            samples = [side[0] for side in pixels]
+            measured = [next((index for index, pixel in enumerate(side) if pixel != expected), depth) for side in pixels]
+        finally:
+            user32.ReleaseDC(None, dc)
+        if samples == [expected] * 4 and measured == [thickness] * 4:
+            print(f'{title}: RGB {color}, native edge thickness left/top/right/bottom = {measured}', flush=True)
+            return {'title': title, 'edgePixels': samples, 'edgeThickness': measured}
+        page.wait_for_timeout(100)
+    raise AssertionError(('Visible frame pixels', samples, 'expected', expected,
+        'edge thickness', measured, 'expected', thickness))
+
+
 server = ThreadingHTTPServer(('127.0.0.1', 0), Site)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 with socket.socket() as sock:
@@ -203,8 +257,8 @@ with socket.socket() as sock:
 config = json.loads((root / 'tests/fixtures/config/default-config.zh.json').read_text(encoding='utf-8'))
 config['general'].update(autoPopupOnSelection=False, autoPopupOnFileSelection=False,
     enableFloatingBall=False, webHeadlessMode=True, uiStyle='windows', language='en', globalHotkey='Ctrl+Alt+Shift+F12')
-config['actions'] = [dict(id=name.lower(), name=f'IOX Native {name}', icon='Globe', actionType='web', enabled=True,
-    urlTemplate=f'http://127.0.0.1:{server.server_port}/{name}', useUrlTemplate=True) for name in ['Alpha', 'Beta']]
+config['actions'] = [dict(id=name.lower(), name=f'IOX Native {name}', icon=icon, actionType='web', enabled=True,
+    urlTemplate=f'http://127.0.0.1:{server.server_port}/{name}', useUrlTemplate=True) for name, icon in [('Alpha', 'DeepSeek'), ('Beta', 'Qwen')]]
 (profile / '.iox-dev/config.json').write_text(json.dumps(config), encoding='utf-8')
 environment = os.environ.copy()
 environment.update(USERPROFILE=str(profile), HOME=str(profile), IOX_ENV='dev',
@@ -228,6 +282,8 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
                 break
             except OSError:
                 time.sleep(0.1)
+        else:
+            raise RuntimeError('Isolated WebView debugging endpoint did not become ready')
         with sync_playwright() as p:
             browser = p.chromium.connect_over_cdp(endpoint)
             context = browser.contexts[0]
@@ -240,7 +296,11 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             assert local_pages, [page.url for page in context.pages]
             main = next((page for page in local_pages if page.evaluate('window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label') == 'main'), local_pages[0])
             assert main.evaluate('typeof window.__TAURI_INTERNALS__?.invoke === "function"')
-            invoke = lambda page, command, args={}: page.evaluate('([command,args]) => window.__TAURI_INTERNALS__.invoke(command,args)', [command, args])
+            def invoke(page, command, args=None):
+                return page.evaluate('''([command, args]) => Promise.race([
+                    window.__TAURI_INTERNALS__.invoke(command, args),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error(`IPC timed out: ${command}`)), 15000)),
+                ])''', [command, args or {}])
             invoke(main, 'trigger_web_action', {'actionId': 'alpha', 'text': '', 'copyToClipboard': False})
             for _ in range(100):
                 pages = context.pages
@@ -251,11 +311,22 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
                 main.wait_for_timeout(100)
             bar, site = bars[0], sites[0]
             bar.wait_for_selector('.web-menu-trigger')
+            assert invoke(bar, 'get_web_chrome')['headless'], 'Web toolbar stopped responding after opening the card'
+            assert invoke(main, 'get_config'), 'Main window stopped responding after opening the card'
+            for _ in range(100):
+                frames = [page for page in context.pages if 'view=web_frame' in page.url and 'web_win_alpha' in page.url]
+                if frames:
+                    break
+                main.wait_for_timeout(100)
+            frame = frames[0]
+            expect(frame.locator('#root > div')).to_have_css('background-color', 'rgb(77, 107, 254)')
             site.get_by_role('textbox').fill('Keep native conversation')
             bar.locator('.web-menu-trigger').click()
             expect(bar.get_by_role('dialog')).to_be_visible()
             main.wait_for_timeout(150)
             results.append(inspect_window(process.pid, 'IOX Native Alpha', True))
+            if os.environ.get('IOX_NATIVE_TEST_CHECK_PIXELS'):
+                results.append(check_frame_pixels(process.pid, 'IOX Native Alpha', (77, 107, 254), main))
             try:
                 invoke(main, 'layout_web_menu', {'expanded': True})
                 raise AssertionError('Settings view must not control a Web menu')
@@ -285,7 +356,8 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             config['general']['webDragHoldDelayMs'] = 175
             expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-label', 'Click for menu, drag to move menu, hold 175 ms to move window')
             menu_before_drag = invoke(bar, 'get_web_chrome')['menu']
-            results.append(hold_and_drag_window(process.pid, 'IOX Native Alpha', 175))
+            if not os.environ.get('IOX_NATIVE_TEST_NO_GESTURES'):
+                results.append(hold_and_drag_window(process.pid, 'IOX Native Alpha', 175))
             expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-expanded', 'false')
             assert invoke(bar, 'get_web_chrome')['menu'] == menu_before_drag, 'Window drag moved only the floating menu'
             bar.locator('.web-menu-trigger').click()
@@ -298,7 +370,8 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             # The panel folds before the native layout collapses, so wait for the committed state.
             expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-expanded', 'false')
             menu_before_drag = invoke(bar, 'get_web_chrome')['menu']
-            results.append(hold_and_drag_window(process.pid, 'IOX Native Alpha', 0, direct=True))
+            if not os.environ.get('IOX_NATIVE_TEST_NO_GESTURES'):
+                results.append(hold_and_drag_window(process.pid, 'IOX Native Alpha', 0, direct=True))
             expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-expanded', 'false')
             assert invoke(bar, 'get_web_chrome')['menu'] == menu_before_drag, 'Direct drag moved only the floating menu'
             bar.locator('.web-menu-trigger').click()
@@ -306,6 +379,11 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             direct_toggle.click()
             bar.locator('.web-menu-trigger').click()
             expect(bar.locator('.web-menu-trigger')).to_have_attribute('aria-label', 'Click for menu, drag to move menu, hold 175 ms to move window')
+            # Leave the trigger before testing minimize/restore; otherwise restoring a
+            # window under the pointer legitimately starts the hover wheel timer.
+            site.get_by_role('textbox').hover()
+            invoke(bar, 'layout_web_menu', {'expanded': False, 'wheel': False})
+            main.wait_for_timeout(300)
             before = invoke(bar, 'get_web_chrome')['menu']
             invoke(bar, 'minimize_web_window', {'label': 'web_win_alpha'})
             main.wait_for_timeout(100)
@@ -332,11 +410,21 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
                 main.wait_for_timeout(100)
             hub = bars[0]
             hub.wait_for_selector('.web-menu-trigger')
+            for _ in range(100):
+                frames = [page for page in context.pages if 'view=web_frame' in page.url and 'label=web_hub' in page.url]
+                if frames:
+                    break
+                main.wait_for_timeout(100)
+            hub_frame = frames[0]
+            expect(hub_frame.locator('#root > div')).to_have_css('background-color', 'rgb(97, 92, 237)')
             hub.locator('.web-menu-trigger').click()
             expect(hub.locator('.web-menu-tab')).to_have_count(2)
             main.wait_for_timeout(150)
             results.append(inspect_window(process.pid, 'IOX Web Hub', True))
             invoke(hub, 'switch_web_hub_tab', {'actionId': 'alpha'})
+            expect(hub_frame.locator('#root > div')).to_have_css('background-color', 'rgb(77, 107, 254)')
+            if os.environ.get('IOX_NATIVE_TEST_CHECK_PIXELS'):
+                results.append(check_frame_pixels(process.pid, 'IOX Web Hub', (77, 107, 254), main))
             invoke(hub, 'close_web_hub_tab', {'actionId': 'beta'})
             invoke(hub, 'close_web_hub_tab', {'actionId': 'alpha'})
             invoke(main, 'trigger_web_action', {'actionId': 'beta', 'text': '', 'copyToClipboard': False})
@@ -349,7 +437,7 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             results.append(inspect_window(process.pid, 'IOX Web Hub', True))
             (output / 'result.json').write_text(json.dumps(results, indent=2), encoding='utf-8')
             browser.close()
-        print('Native Windows checks passed: direct-drag toggle moving the real window, rounded corners, live-configured 175ms hold, full content, toolbar Z order, live mode, preserved input, maximize/restore, minimize anchor, caller validation, Hub reopen.')
+        print('Native Windows checks passed: frame colors and clipping, rounded corners, live configuration, full content, toolbar Z order, preserved input, maximize/restore, minimize anchor, caller validation, Hub reopen.')
     finally:
         process.terminate()
         try:
