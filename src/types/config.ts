@@ -135,12 +135,30 @@ export const apiCardConfigSchema = z.object({
 });
 export type ApiCardConfig = z.infer<typeof apiCardConfigSchema>;
 
+export const pgSslModeSchema = z.enum(['disable', 'prefer', 'require']);
+export type PgSslMode = z.infer<typeof pgSslModeSchema>;
+
+/** 远程 PostgreSQL 同步；本地 SQLite 仍是读写真源。 */
+export const syncConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  host: z.string().default('127.0.0.1'),
+  port: z.number().int().min(1).max(65535).default(5432),
+  database: z.string().default('iox'),
+  user: z.string().default('postgres'),
+  password: z.string().default(''),
+  sslMode: pgSslModeSchema.default('prefer'),
+  /** 共享同一份历史的设备必须填写相同的命名空间。 */
+  namespace: z.string().default('default'),
+});
+export type SyncConfig = z.infer<typeof syncConfigSchema>;
+
 export const appConfigSchema = z.object({
   general: generalConfigSchema,
   blacklist: z.array(z.string()),
   providers: z.array(providerConfigSchema),
   actions: z.array(actionConfigSchema),
   apiCard: apiCardConfigSchema.default(() => apiCardConfigSchema.parse({})),
+  sync: syncConfigSchema.default(() => syncConfigSchema.parse({})),
 });
 export type AppConfig = z.infer<typeof appConfigSchema>;
 
@@ -161,4 +179,4 @@ export interface PickedProcessInfo {
   windowTitle: string;
 }
 
-export type SettingsTab = 'providers' | 'actions' | 'api_card' | 'sessions' | 'web_sessions' | 'web' | 'general' | 'blacklist';
+export type SettingsTab = 'providers' | 'actions' | 'api_card' | 'sessions' | 'web_sessions' | 'web' | 'general' | 'blacklist' | 'sync';

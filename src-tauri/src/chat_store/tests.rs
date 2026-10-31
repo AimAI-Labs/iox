@@ -339,3 +339,146 @@ fn concurrent_saves_keep_every_session() {
         assert!(all.iter().any(|s| s.id == format!("s{index}")));
     }
 }
+
+fn change(session: ChatSessionData) -> SyncChange {
+    SyncChange {
+        id: session.id.clone(),
+        updated_at: session.updated_at,
+        deleted_at: 0,
+        session: Some(session),
+    }
+}
+
+fn remote_tombstone(id: &str, at: u64) -> SyncChange {
+    SyncChange {
+        id: id.to_string(),
+        updated_at: at,
+        deleted_at: at,
+        session: None,
+    }
+}
+
+#[test]
+fn delete_keeps_a_tombstone_for_remote_propagation() {
+    let f = Fixture::new();
+    let store = f.store();
+    store.save(sample("gone", "answer", 1, 1)).unwrap();
+    store.delete("gone").unwrap();
+
+    assert!(store.get("gone").is_err());
+    assert!(store.list().unwrap().is_empty());
+
+    let pending = store.pending(0).unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].id, "gone");
+    assert!(pending[0].deleted_at > 0);
+    assert!(pending[0].session.is_none());
+}
+
+#[test]
+fn remote_newer_version_wins_and_replays_are_skipped() {
+    let f = Fixture::new();
+    let store = f.store();
+    f.seed_rows(&[sample("a", "local", 1, 100)]);
+
+    let mut newer = sample("a", "remote", 1, 200);
+    newer.created_at = 5;
+    let stats = store.apply(&[change(newer.clone())]).unwrap();
+    assert_eq!(stats.applied, 1);
+    assert_eq!(store.get("a").unwrap().stream_text, "remote");
+    // 合并后保留本地更早的创建时间。
+    assert_eq!(store.get("a").unwrap().created_at, 1);
+
+    // 重复应用同一版本是幂等的。
+    let stats = store.apply(&[change(newer)]).unwrap();
+    assert_eq!((stats.applied, stats.skipped), (0, 1));
+
+    // 更旧的远程版本不能覆盖本地。
+    let stats = store
+        .apply(&[change(sample("a", "stale", 1, 150))])
+        .unwrap();
+    assert_eq!((stats.applied, stats.skipped), (0, 1));
+    assert_eq!(store.get("a").unwrap().stream_text, "remote");
+}
+
+#[test]
+fn remote_tombstone_removes_local_row_and_newer_payload_resurrects_it() {
+    let f = Fixture::new();
+    let store = f.store();
+    f.seed_rows(&[sample("a", "local", 1, 100)]);
+
+    let stats = store.apply(&[remote_tombstone("a", 200)]).unwrap();
+    assert_eq!(stats.applied, 1);
+    assert!(store.get("a").is_err());
+
+    // 已删除的行可以再次被更新的远程版本恢复。
+    let mut revived = sample("a", "revived", 1, 300);
+    revived.created_at = 1;
+    let stats = store.apply(&[change(revived)]).unwrap();
+    assert_eq!(stats.applied, 1);
+    assert_eq!(store.get("a").unwrap().stream_text, "revived");
+    assert_eq!(store.all().unwrap().len(), 1);
+}
+
+#[test]
+fn local_delete_propagates_through_pending_changes() {
+    let f = Fixture::new();
+    let store = f.store();
+    store.save(sample("a", "answer", 1, 1)).unwrap();
+    store.save(sample("b", "other", 1, 1)).unwrap();
+    store.delete("a").unwrap();
+
+    let pending = store.pending(0).unwrap();
+    let deleted: Vec<_> = pending
+        .iter()
+        .filter(|change| change.deleted_at > 0)
+        .collect();
+    assert_eq!(deleted.len(), 1);
+    assert_eq!(deleted[0].id, "a");
+    assert_eq!(deleted[0].deleted_at, deleted[0].updated_at);
+    assert!(deleted[0].session.is_none());
+    assert!(pending
+        .iter()
+        .any(|change| change.id == "b" && change.session.is_some()));
+}
+
+#[test]
+fn retention_trim_turns_evicted_rows_into_tombstones() {
+    let f = Fixture::new();
+    let seeded: Vec<_> = (0..201)
+        .map(|i| sample(&i.to_string(), &format!("content{i}"), 1, 1))
+        .collect();
+    f.seed_rows(&seeded);
+
+    f.store().save(sample("new", "new", 1, 1)).unwrap();
+
+    let pending = f.store().pending(0).unwrap();
+    let tombstones: Vec<_> = pending
+        .iter()
+        .filter(|change| change.deleted_at > 0)
+        .collect();
+    // 201 条种子 + 1 条新会话 = 202 条，裁剪后应淘汰 2 条并留下墓碑。
+    assert_eq!(tombstones.len(), 2, "超限淘汰必须留下墓碑供推送");
+    assert!(tombstones.iter().all(|change| change.session.is_none()));
+    assert!(tombstones.iter().any(|change| change.id == "0"));
+    assert_eq!(
+        pending
+            .iter()
+            .filter(|change| change.session.is_some())
+            .count(),
+        200
+    );
+}
+
+#[test]
+fn sync_cursors_persist_per_key() {
+    let f = Fixture::new();
+    let store = f.store();
+    assert_eq!(store.cursor("pull::a").unwrap(), 0);
+    store.set_cursor("pull::a", 42).unwrap();
+    store.set_cursor("push::a", 7).unwrap();
+    assert_eq!(store.cursor("pull::a").unwrap(), 42);
+    assert_eq!(store.cursor("push::a").unwrap(), 7);
+    // 新的连接读取同一个数据库。
+    assert_eq!(f.store().cursor("pull::a").unwrap(), 42);
+}

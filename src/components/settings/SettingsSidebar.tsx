@@ -1,5 +1,5 @@
 import React from "react";
-import { Cpu, Zap, Layers, MessageSquare, MessagesSquare, Globe, Sliders, Shield, Save, Code } from "lucide-react";
+import { Cpu, Zap, Layers, MessageSquare, MessagesSquare, Globe, Sliders, Shield, Save, Code, Database } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { Button } from "@/components/ui";
@@ -30,6 +30,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
     { id: "actions", label: t('settings.sidebar.actions'), icon: Zap },
     { id: "api_card", label: t('settings.sidebar.apiCard'), icon: Layers },
     { id: "sessions", label: t('settings.sidebar.sessions'), icon: MessageSquare },
+    { id: "sync", label: t('settings.sidebar.sync'), icon: Database },
     { id: "web_sessions", label: t('settings.sidebar.webSessions'), icon: MessagesSquare },
     { id: "web", label: t('settings.sidebar.web'), icon: Globe },
     { id: "general", label: t('settings.sidebar.general'), icon: Sliders },

@@ -236,5 +236,15 @@
     "codeBlockLineNumbers": false,
     "contextTurns": 5,
     "sendKeyShortcut": "Enter"
+  },
+  "sync": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 5432,
+    "database": "iox",
+    "user": "postgres",
+    "password": "",
+    "sslMode": "prefer",
+    "namespace": "default"
   }
 }

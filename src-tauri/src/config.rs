@@ -67,6 +67,39 @@ pub fn normalize_ui_style(style: &str) -> String {
     }
 }
 
+pub fn default_pg_host() -> String {
+    "127.0.0.1".to_string()
+}
+
+pub fn default_pg_port() -> u16 {
+    5432
+}
+
+pub fn default_pg_database() -> String {
+    "iox".to_string()
+}
+
+pub fn default_pg_user() -> String {
+    "postgres".to_string()
+}
+
+pub fn default_pg_ssl_mode() -> String {
+    "prefer".to_string()
+}
+
+pub fn default_pg_namespace() -> String {
+    "default".to_string()
+}
+
+/// 未知的 SSL 模式回退到 `prefer`，避免静默降级为明文连接。
+pub fn normalize_pg_ssl_mode(mode: &str) -> String {
+    match mode.trim().to_ascii_lowercase().as_str() {
+        "disable" => "disable".to_string(),
+        "require" => "require".to_string(),
+        _ => default_pg_ssl_mode(),
+    }
+}
+
 /// 获取系统当前 UI 语言代码，若是中文（包含繁体、简体）返回 "zh"，其余一切语言一律返回 "en"
 pub fn get_system_language() -> &'static str {
     #[cfg(windows)]
@@ -308,6 +341,45 @@ impl Default for ApiCardConfig {
     }
 }
 
+/// 远程 PostgreSQL 同步设置；本地 SQLite 仍是唯一的读写真源。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_pg_host")]
+    pub host: String,
+    #[serde(default = "default_pg_port")]
+    pub port: u16,
+    #[serde(default = "default_pg_database")]
+    pub database: String,
+    #[serde(default = "default_pg_user")]
+    pub user: String,
+    #[serde(default)]
+    pub password: String,
+    /// `disable` | `prefer` | `require`
+    #[serde(default = "default_pg_ssl_mode")]
+    pub ssl_mode: String,
+    /// 共享同一份历史的设备必须使用相同命名空间；不同用户之间必须隔离。
+    #[serde(default = "default_pg_namespace")]
+    pub namespace: String,
+}
+
+impl Default for SyncConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: default_pg_host(),
+            port: default_pg_port(),
+            database: default_pg_database(),
+            user: default_pg_user(),
+            password: String::new(),
+            ssl_mode: default_pg_ssl_mode(),
+            namespace: default_pg_namespace(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
@@ -317,6 +389,8 @@ pub struct AppConfig {
     pub actions: Vec<ActionConfig>,
     #[serde(default)]
     pub api_card: ApiCardConfig,
+    #[serde(default)]
+    pub sync: SyncConfig,
 }
 
 impl AppConfig {
@@ -696,6 +770,7 @@ impl AppConfig {
             providers,
             actions,
             api_card: ApiCardConfig::default(),
+            sync: SyncConfig::default(),
         }
     }
 }
@@ -857,6 +932,33 @@ fn migrate(config: &mut AppConfig) -> bool {
 
     modified |= normalize_web_drag_hold_delay(config);
     modified |= normalize_web_menu_pinned_actions(config);
+    modified |= normalize_sync(config);
+    modified
+}
+
+fn normalize_sync(config: &mut AppConfig) -> bool {
+    let mut modified = false;
+
+    let ssl_mode = normalize_pg_ssl_mode(&config.sync.ssl_mode);
+    if config.sync.ssl_mode != ssl_mode {
+        config.sync.ssl_mode = ssl_mode;
+        modified = true;
+    }
+    if config.sync.port == 0 {
+        config.sync.port = default_pg_port();
+        modified = true;
+    }
+    let namespace = config.sync.namespace.trim();
+    let namespace = if namespace.is_empty() {
+        default_pg_namespace()
+    } else {
+        namespace.to_string()
+    };
+    if config.sync.namespace != namespace {
+        config.sync.namespace = namespace;
+        modified = true;
+    }
+
     modified
 }
 
@@ -881,7 +983,8 @@ fn normalize_for_commit(config: &mut AppConfig) -> bool {
     config.general.api_card_size = default_api_card_size();
     let delay_changed = normalize_web_drag_hold_delay(config);
     let pins_changed = normalize_web_menu_pinned_actions(config);
-    previous != config.general.api_card_size || delay_changed || pins_changed
+    let sync_changed = normalize_sync(config);
+    previous != config.general.api_card_size || delay_changed || pins_changed || sync_changed
 }
 
 /// 配置文件的完整读写规则：原子替换、迁移写回与损坏文件保全。
@@ -1990,6 +2093,29 @@ mod file_selection_config_tests {
         assert_eq!(legacy.general.ui_style, "classic");
         assert_eq!(super::normalize_ui_style("windows"), "windows");
         assert_eq!(super::normalize_ui_style("unknown-style"), "classic");
+    }
+
+    #[test]
+    fn sync_defaults_and_normalization_keep_remote_opt_in() {
+        let mut json = serde_json::to_value(super::AppConfig::default()).unwrap();
+        assert_eq!(json["sync"]["enabled"], false);
+        assert_eq!(json["sync"]["sslMode"], "prefer");
+
+        // 旧配置缺少 sync 段时整体回退默认值。
+        json.as_object_mut().unwrap().remove("sync");
+        let legacy: super::AppConfig = serde_json::from_value(json.clone()).unwrap();
+        assert!(!legacy.sync.enabled);
+        assert_eq!(legacy.sync.port, 5432);
+        assert_eq!(legacy.sync.namespace, "default");
+
+        // 未知 SSL 模式、0 端口与空白命名空间在加载与提交时都被归一化。
+        json["sync"] = serde_json::json!({"sslMode": "ssl", "port": 0, "namespace": "   "});
+        let mut loaded: super::AppConfig = serde_json::from_value(json).unwrap();
+        assert!(super::normalize_sync(&mut loaded));
+        assert_eq!(loaded.sync.ssl_mode, "prefer");
+        assert_eq!(loaded.sync.port, 5432);
+        assert_eq!(loaded.sync.namespace, "default");
+        assert_eq!(super::normalize_pg_ssl_mode("REQUIRE"), "require");
     }
 
     #[test]

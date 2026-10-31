@@ -57,6 +57,8 @@ iox/
 │       ├── chat_store/sqlite.rs    # 连接、schema 迁移、事务、去重合并与裁剪
 │       ├── chat_store/jsonl.rs     # 旧版 sessions.jsonl 的严格读取（一次性导入）
 │       ├── chat_store/tests.rs     # 事务、去重、上限、并发与导入测试
+│       ├── sync/mod.rs             # 远程同步调度、状态、后台循环与 IPC
+│       ├── sync/pg.rs              # PostgreSQL 连接/建表/拉取/推送
 │       ├── web_sessions.rs         # 官网会话缓存、校验与打开
 │       ├── web_history_sync.rs     # 官网历史同步协调
 │       ├── web_history_collector.js # 官网历史 DOM 采集脚本
@@ -103,7 +105,8 @@ iox/
 | 前端展示、文件菜单与气泡输入 | `overlayReducer`；`useOverlayState` 组合各适配器 |
 | 对话标签、结构化轮次、generation、保存修订 | `conversation/workspace.ts` |
 | 请求身份与 IPC/事件生命周期 | Rust `ai/requests.rs` 与前端 `lib/actionStreamClient.ts` |
-| 历史查询与保存传输 | `useChatSessions`；文件事务由 Rust `chat_store` 负责 |
+| 历史查询与保存传输 | `useChatSessions`；数据库事务由 Rust `chat_store` 负责 |
+| 远程同步游标与冲突合并 | Rust `sync/`；墓碑与后写胜出判定由 `chat_store` 提供 |
 
 `App.tsx` 只做视图分发。只有 `OverlaySurface` 挂载 `useOverlayState` 等悬浮生命周期，避免设置页、官网标题栏或悬浮球重复订阅划词与流事件。
 
@@ -173,6 +176,16 @@ iox/
 - `chat_store` 命令使用 `spawn_blocking`，不要在同步命令里直接做数据库或导入 IO。新增字段时同步 `migrate` 的 schema 版本与 `payload` 往返测试。
 - 旧版导入失败时保留 `sessions.jsonl` 原文件并报错，重复尝试必须幂等；导入标记写入 `meta` 表，清空历史不会删除该标记。
 - 不在测试或调试时重置真实用户目录，不在日志、夹具或提交中泄露 API key、选中文本和会话正文。
+
+### 5.4 远程同步（可选，默认关闭）
+
+- PostgreSQL 是可选的双向镜像：本地 SQLite 始终是唯一读写真源，保存、列表、恢复都不得依赖远程可达性。远程失败只更新同步状态与错误。
+- 合并规则：`updated_at` 更旧的一方被跳过；删除先写本地墓碑（`deleted_at > 0`）再同步，墓碑与正文走同一套时间比较。推送在 PG 侧追加 `WHERE excluded.updated_at > iox_sessions.updated_at` 作为后写胜出兜底。
+- 游标保存在 SQLite `meta` 表（`sync_pull_cursor::<namespace>` / `sync_push_cursor::<namespace>`），查询带 300 秒回退窗口；所有推拉必须幂等，重复应用同一版本只应计入 `skipped`。
+- 本地墓碑保留 30 天后清理；离线超过该窗口的设备可能复活已删除会话。200 条上限的淘汰会转成墓碑并同步，因此远程历史同样受该上限约束；PG 侧不自动裁剪。
+- `namespace` 是多租户边界：不同用户必须使用不同值，填充相同的设备共享同一份历史。测试或文档中不要使用真实用户命名空间。
+- PG 密码按现有 API Key 惯例明文保存在 `config.json`；不得写入日志、错误消息、夹具或提交。错误回传只允许 SQLSTATE 或连接层信息，不转发语句与参数。
+- 同步相关命令使用 `spawn_blocking` 访问 SQLite；异步任务不得在持有配置或存储锁时 await 远程请求。
 
 ## 6. 开发与验证命令
 

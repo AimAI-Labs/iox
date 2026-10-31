@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
-import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig, ApiCardConfig, UiStyle } from "@/types/config";
+import { AppConfig, ProviderConfig, ActionConfig, GeneralConfig, ApiCardConfig, SyncConfig, UiStyle } from "@/types/config";
 import { broadcastThemeChange } from "@/hooks/useTheme";
 import { useUiTheme } from "@/themes/ThemeProvider";
 import { MacTitleBar } from "@/components/MacTitleBar";
@@ -11,6 +11,7 @@ import { ProvidersTab } from "@/components/settings/ProvidersTab";
 import { ActionsTab } from "@/components/settings/actions";
 import { ApiCardTab } from "@/components/settings/ApiCardTab";
 import { SessionsTab } from "@/components/settings/SessionsTab";
+import { SyncTab } from "@/components/settings/SyncTab";
 import { SessionViewerPanel } from "@/components/settings/SessionViewerPanel";
 import { WebSessionsTab } from "@/components/settings/WebSessionsTab";
 import { WebviewTab } from "@/components/settings/WebviewTab";
@@ -54,7 +55,7 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     listen<string>("open_settings_tab", (event) => {
       if (
         event.payload &&
-        ["providers", "actions", "api_card", "sessions", "web_sessions", "web", "general", "blacklist"].includes(event.payload)
+        ["providers", "actions", "api_card", "sessions", "web_sessions", "web", "general", "blacklist", "sync"].includes(event.payload)
       ) {
         setActiveTab(event.payload as SettingsTab);
       }
@@ -218,6 +219,17 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     }
   };
 
+  // 更新远程同步配置
+  const updateSync = (updated: Partial<SyncConfig>) => {
+    setFormData((prev) => ({
+      ...prev,
+      sync: {
+        ...prev.sync,
+        ...updated,
+      },
+    }));
+  };
+
   // 更新 ApiCard 配置
   const updateApiCard = (updated: Partial<ApiCardConfig>) => {
     setFormData((prev) => ({
@@ -318,6 +330,12 @@ export const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
                     setHistoryViewer({ open: true, sessionId: sessionId ?? null })
                   }
                 />
+              </div>
+            )}
+
+            {activeTab === "sync" && (
+              <div className="flex-1 overflow-y-auto p-5">
+                <SyncTab sync={formData.sync} onUpdateSync={updateSync} />
               </div>
             )}
 

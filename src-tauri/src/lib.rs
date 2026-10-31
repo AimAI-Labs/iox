@@ -10,6 +10,7 @@ pub mod overlay;
 pub mod picker;
 pub mod selection;
 pub mod site_presets;
+pub mod sync;
 pub mod trigger;
 pub mod tray;
 pub mod window_manager;
@@ -694,9 +695,11 @@ pub fn run() {
             }
 
             // 启动全局鼠标划词钩子
-            selection::start_mouse_hook(handle);
+            selection::start_mouse_hook(handle.clone());
             // 初始化常驻系统托盘
             tray::setup_tray(app)?;
+            // 远程同步默认关闭；循环在每次唤醒时重新读取已提交配置
+            sync::spawn_background(handle);
             Ok(())
         })
         // With `unstable`, the overlay is a child webview: native drops are
@@ -770,7 +773,10 @@ pub fn run() {
             chat_store::save_chat_session,
             chat_store::delete_chat_session,
             chat_store::clear_all_chat_sessions,
-            chat_store::open_sessions_directory
+            chat_store::open_sessions_directory,
+            sync::get_sync_status,
+            sync::sync_now,
+            sync::test_pg_connection
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

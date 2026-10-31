@@ -8,6 +8,8 @@ mod sqlite;
 #[cfg(test)]
 mod tests;
 
+pub use sqlite::{ApplyStats, SyncChange};
+
 /// 历史保留上限；放宽它需要前端分页，因此暂与旧实现保持一致。
 const MAX_SESSIONS: usize = 200;
 
@@ -191,7 +193,7 @@ impl<'a> SessionStore<'a> {
         for session in &mut sessions {
             repair_legacy_title(session);
         }
-        sqlite::import(conn, &mut sessions, MAX_SESSIONS)?;
+        sqlite::import(conn, &mut sessions, MAX_SESSIONS, current_timestamp())?;
 
         // 导入标记已提交；备份失败只影响用户找回原文件，不回滚数据。
         let backup = self.legacy_path.with_extension("jsonl.migrated");
@@ -229,13 +231,19 @@ impl<'a> SessionStore<'a> {
         let mut conn = self.open_connection()?;
         prepare_session(&mut session);
         let hash = content_hash(&session);
-        sqlite::save(&mut conn, &mut session, hash.as_deref(), MAX_SESSIONS)
+        sqlite::save(
+            &mut conn,
+            &mut session,
+            hash.as_deref(),
+            MAX_SESSIONS,
+            current_timestamp(),
+        )
     }
 
     fn delete(&self, id: &str) -> Result<(), String> {
         let _guard = self.guard()?;
         match self.read_connection()? {
-            Some(conn) => sqlite::delete(&conn, id),
+            Some(conn) => sqlite::delete(&conn, id, current_timestamp()),
             None => Ok(()),
         }
     }
@@ -243,9 +251,54 @@ impl<'a> SessionStore<'a> {
     fn clear(&self) -> Result<(), String> {
         let _guard = self.guard()?;
         // 先完成导入，避免清空后旧文件在下一次读取时又被导回来。
-        let conn = self.open_connection()?;
-        sqlite::clear(&conn)
+        let mut conn = self.open_connection()?;
+        sqlite::clear(&mut conn, current_timestamp())
     }
+
+    fn pending(&self, since: u64) -> Result<Vec<SyncChange>, String> {
+        let _guard = self.guard()?;
+        match self.read_connection()? {
+            Some(conn) => sqlite::pending(&conn, since),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    fn apply(&self, changes: &[SyncChange]) -> Result<ApplyStats, String> {
+        let _guard = self.guard()?;
+        let mut conn = self.open_connection()?;
+        sqlite::apply_remote(&mut conn, changes)
+    }
+
+    fn cursor(&self, key: &str) -> Result<u64, String> {
+        let _guard = self.guard()?;
+        match self.read_connection()? {
+            Some(conn) => sqlite::cursor(&conn, key),
+            None => Ok(0),
+        }
+    }
+
+    fn set_cursor(&self, key: &str, value: u64) -> Result<(), String> {
+        let _guard = self.guard()?;
+        let conn = self.open_connection()?;
+        sqlite::set_cursor(&conn, key, value)
+    }
+}
+
+/// 远程同步读取本地增量；`SyncChange` 是存储层与同步层之间的唯一契约。
+pub fn sync_pending(since: u64) -> Result<Vec<SyncChange>, String> {
+    production_store().pending(since)
+}
+
+pub fn sync_apply(changes: &[SyncChange]) -> Result<ApplyStats, String> {
+    production_store().apply(changes)
+}
+
+pub fn sync_cursor(key: &str) -> Result<u64, String> {
+    production_store().cursor(key)
+}
+
+pub fn sync_set_cursor(key: &str, value: u64) -> Result<(), String> {
+    production_store().set_cursor(key, value)
 }
 
 fn production_store() -> SessionStore<'static> {
@@ -283,7 +336,12 @@ pub async fn get_chat_session(id: String) -> Result<ChatSessionData, String> {
 
 #[tauri::command]
 pub async fn save_chat_session(session: ChatSessionData) -> Result<String, String> {
-    run_blocking(move || production_store().save(session)).await
+    let result = run_blocking(move || production_store().save(session)).await;
+    if result.is_ok() {
+        // 只唤醒后台任务；远程不可达时保存仍然成功。
+        crate::sync::request_sync();
+    }
+    result
 }
 
 #[tauri::command]
