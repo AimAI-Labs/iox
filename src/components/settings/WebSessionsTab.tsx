@@ -21,7 +21,7 @@ import { PlatformSync, WebHistory, WebSession } from '@/types/web-session';
 import { filterHistory, groupHistory, localDayKey, TimeFilter, timeWindow } from '@/lib/web-history';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
-import { DatePicker, Select, SelectOption, TimePicker } from '@/components/ui';
+import { DateTimePicker, Select, SelectOption } from '@/components/ui';
 import { DynamicIcon } from '@/components/Icons';
 
 const fieldClass = 'rounded-lg border border-border/60 bg-background/70 px-3 py-1.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-primary/30';
@@ -313,41 +313,25 @@ export function WebSessionsTab({ actions }: { actions: ActionConfig[] }) {
           <div className="flex min-w-0 items-center gap-1.5">
             <CalendarDays size={13} className="shrink-0 text-muted-foreground" />
             <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{text('开始', 'From')}</span>
-            <DatePicker
-              className="w-[8.5rem]"
+            <DateTimePicker
+              className="w-[10.75rem]"
               locale={resolvedLanguage}
-              value={from}
-              onChange={value => { setFrom(value); if (!value) setFromTime(''); }}
-              aria-label={text('开始日期', 'Start date')}
-            />
-            <TimePicker
-              className="w-[6rem]"
-              locale={resolvedLanguage}
-              disabled={!from}
-              value={fromTime}
-              onChange={setFromTime}
-              aria-label={text('开始时间', 'Start time')}
-              title={text('先选择开始日期；留空表示 00:00', 'Pick a start date first; empty means 00:00')}
+              date={from}
+              time={fromTime}
+              onChange={(date, value) => { setFrom(date); setFromTime(value); }}
+              aria-label={text('开始日期与时间', 'Start date and time')}
             />
           </div>
           <div className="flex min-w-0 items-center gap-1.5">
             <ArrowRight size={13} className="shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{text('结束', 'To')}</span>
-            <DatePicker
-              className="w-[8.5rem]"
+            <DateTimePicker
+              className="w-[10.75rem]"
               locale={resolvedLanguage}
-              value={to}
-              onChange={value => { setTo(value); if (!value) setToTime(''); }}
-              aria-label={text('结束日期', 'End date')}
-            />
-            <TimePicker
-              className="w-[6rem]"
-              locale={resolvedLanguage}
-              disabled={!to}
-              value={toTime}
-              onChange={setToTime}
-              aria-label={text('结束时间', 'End time')}
-              title={text('先选择结束日期；留空表示 23:59', 'Pick an end date first; empty means 23:59')}
+              date={to}
+              time={toTime}
+              onChange={(date, value) => { setTo(date); setToTime(value); }}
+              aria-label={text('结束日期与时间', 'End date and time')}
             />
           </div>
           <div className="ml-auto flex items-center gap-2">
