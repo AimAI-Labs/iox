@@ -7,6 +7,7 @@ pub mod deepseek;
 pub mod doubao;
 pub mod generic;
 pub mod kimi;
+pub mod new_chat;
 pub mod qwen;
 
 use std::sync::OnceLock;

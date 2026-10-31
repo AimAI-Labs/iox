@@ -32,3 +32,5 @@ Requirements.md
 # AI agent local state (do not commit)
 .agents/
 .claude/
+
+target*

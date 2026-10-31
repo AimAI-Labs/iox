@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { MacTitleBar } from '@/components/MacTitleBar';
@@ -25,6 +26,24 @@ interface WebTitleBarProps {
 export const WebTitleBar: React.FC<WebTitleBarProps> = (props) => {
   const { layout, update, failed } = useWebChrome();
   const { t } = useTranslation();
+  const [newChatFailed, setNewChatFailed] = useState(false);
+  useEffect(() => {
+    let disposed = false;
+    const unlisten = listen('web-new-chat-failed', () => {
+      if (disposed) return;
+      setNewChatFailed(true);
+      if (layout?.headless) void update({ expanded: true, wheel: false });
+    });
+    return () => {
+      disposed = true;
+      void unlisten.then((cleanup) => cleanup()).catch(() => {});
+    };
+  }, [layout?.headless, update]);
+  useEffect(() => {
+    if (!newChatFailed) return;
+    const timer = setTimeout(() => setNewChatFailed(false), 3500);
+    return () => clearTimeout(timer);
+  }, [newChatFailed]);
   const params = new URLSearchParams(window.location.search);
   const label = props.label || params.get('label') || 'web_win';
   if (!layout) {
@@ -33,11 +52,16 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = (props) => {
   }
   if (layout.headless) {
     return <WebFloatingMenu windowLabel={label} title={props.title || params.get('title') || 'IOX Web Hub'}
-      actions={props.actions ?? []} layout={layout.menu} update={update} failed={failed}
+      actions={props.actions ?? []} layout={layout.menu} update={update} failed={failed || newChatFailed}
       dragHoldDelayMs={props.dragHoldDelayMs ?? DEFAULT_WEB_DRAG_HOLD_DELAY_MS}
       pinnedActions={props.pinnedActions ?? DEFAULT_WEB_MENU_PINNED_ACTIONS} />;
   }
-  return label === 'web_hub' || label === 'web_hub_bar' ? <HubTabBar /> : <SingleWebTitleBar {...props} />;
+  return <>
+    {label === 'web_hub' || label === 'web_hub_bar' ? <HubTabBar /> : <SingleWebTitleBar {...props} />}
+    {newChatFailed && <div role="alert" className="pointer-events-none fixed inset-x-0 top-0 z-50 flex h-[38px] items-center justify-center bg-background px-3 text-xs text-destructive">
+      {t('settings.web.newChatFailed')}
+    </div>}
+  </>;
 };
 
 const SingleWebTitleBar: React.FC<WebTitleBarProps> = ({

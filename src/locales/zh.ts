@@ -390,6 +390,18 @@ export const zh = {
     web: {
       title: '网页动作聚合设置',
       windowMode: '网页打开模式',
+      newChatKey: '双击按键新建对话',
+      newChatFailed: '无法点击新建对话按钮，请确认网页已加载且已登录',
+      newChatKeyDesc: 'Web 卡片在前台且鼠标位于卡片内时，400 毫秒内双击按键，点击网页的新建对话按钮；保存后生效',
+      newChatKeys: {
+        Disabled: '关闭',
+        ControlLeft: '左 Ctrl（默认）',
+        ControlRight: '右 Ctrl',
+        ShiftLeft: '左 Shift',
+        ShiftRight: '右 Shift',
+        AltLeft: '左 Alt',
+        AltRight: '右 Alt',
+      },
       headlessMode: 'Web 卡片无头模式',
       headlessModeDesc: '隐藏导航栏和窗口标题栏，以可拖动的悬浮菜单操作网页；保存后立即生效',
       dragHoldDelay: '整窗拖动长按时长',
