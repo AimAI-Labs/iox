@@ -736,7 +736,12 @@ impl AppConfig {
         Self::config_dir().join("config.json")
     }
 
-    /// 获取 sessions.jsonl 完整路径，与 config.json 位于同一目录下
+    /// 获取会话数据库完整路径，与 config.json 位于同一目录下
+    pub fn sessions_db_path() -> PathBuf {
+        Self::config_dir().join("sessions.db")
+    }
+
+    /// 旧版 JSONL 会话历史路径；仅用于一次性迁移导入
     pub fn sessions_path() -> PathBuf {
         Self::config_dir().join("sessions.jsonl")
     }
@@ -1813,6 +1818,7 @@ mod tests {
     fn test_sessions_path_matches_config_dir() {
         let config_path = AppConfig::config_path();
         let sessions_path = AppConfig::sessions_path();
+        let sessions_db_path = AppConfig::sessions_db_path();
 
         assert_eq!(
             config_path.parent(),
@@ -1822,7 +1828,17 @@ mod tests {
         assert_eq!(
             sessions_path.file_name().and_then(|n| n.to_str()),
             Some("sessions.jsonl"),
-            "文件名必须为 sessions.jsonl"
+            "迁移源文件名必须为 sessions.jsonl"
+        );
+        assert_eq!(
+            config_path.parent(),
+            sessions_db_path.parent(),
+            "sessions.db 必须与 config.json 处于同一目录下"
+        );
+        assert_eq!(
+            sessions_db_path.file_name().and_then(|n| n.to_str()),
+            Some("sessions.db"),
+            "会话数据库文件名必须为 sessions.db"
         );
     }
 

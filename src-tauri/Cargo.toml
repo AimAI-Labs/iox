@@ -48,6 +48,7 @@ windows-sys = { version = "0.59", features = [
 windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_Accessibility"] }
 base64 = "0.22"
 rusqlite = { version = "0.41.0", features = ["bundled"] }
+blake3 = "1.8.7"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }

@@ -53,9 +53,10 @@ iox/
 │       │   ├── vendors/            # 各官网 DOM 注入适配器
 │       │   ├── file_upload.rs      # 官网附件准备与上传脚本
 │       │   └── scripts.rs / template.rs # 注入脚本、提示词与 URL 模板
-│       ├── chat_store.rs           # API 会话查询、去重、保存与删除
-│       ├── chat_store/jsonl.rs     # 严格读取、临时文件与替换提交
-│       ├── chat_store/tests.rs     # 文件事务、故障注入与并发测试
+│       ├── chat_store.rs           # API 会话查询、去重身份、保存与删除
+│       ├── chat_store/sqlite.rs    # 连接、schema 迁移、事务、去重合并与裁剪
+│       ├── chat_store/jsonl.rs     # 旧版 sessions.jsonl 的严格读取（一次性导入）
+│       ├── chat_store/tests.rs     # 事务、去重、上限、并发与导入测试
 │       ├── web_sessions.rs         # 官网会话缓存、校验与打开
 │       ├── web_history_sync.rs     # 官网历史同步协调
 │       ├── web_history_collector.js # 官网历史 DOM 采集脚本
@@ -153,7 +154,7 @@ iox/
 | Debug 构建，或显式 `IOX_ENV=dev` | `%USERPROFILE%/.iox-dev/` |
 | 其他 Release 构建 | `%USERPROFILE%/.iox/` |
 
-根目录内保存 `config.json`、API 历史 `sessions.jsonl`，以及官网历史缓存。缓存文件名按构建类型区分为 Debug 的 `web-history-dev.json` 与 Release 的 `web-history.json`。`%APPDATA%/iox` 已不符合当前实现。
+根目录内保存 `config.json`、API 历史数据库 `sessions.db`（WAL 模式下附带 `-wal`/`-shm`），以及官网历史缓存。旧版 `sessions.jsonl` 在首次读取时一次性导入数据库，成功后重命名为 `sessions.jsonl.migrated` 保留为备份。缓存文件名按构建类型区分为 Debug 的 `web-history-dev.json` 与 Release 的 `web-history.json`。`%APPDATA%/iox` 已不符合当前实现。
 
 ### 5.2 配置提交与契约
 
@@ -163,11 +164,14 @@ iox/
 - `ConfigStore` 串行提交不代表前端旧读取、广播与设置草稿自动解决冲突。修改相关流程时验证迟到读取和整份旧草稿覆盖即时更新的情况。
 - 保留配置迁移、缺省回退和损坏文件隔离流程。默认值夹具为 `tests/fixtures/config/default-config.zh.json`；有意改变默认值时可运行 `cargo test --manifest-path src-tauri/Cargo.toml regenerate_config_contract_fixture -- --ignored`，检查差异后重新运行契约测试。
 
-### 5.3 会话文件
+### 5.3 会话数据库
 
-- `chat_store` 查询缺失文件可返回空历史，查询本身不创建目录。其他读取/解析错误应报告，不能跳过坏行后写回而丢失旧数据。
-- 保存与删除使用进程内事务锁；在同目录创建临时文件，完整写入、flush/sync、关闭句柄后替换。失败保留旧文件并清理临时文件；不先删旧文件再写入。
-- 当前最多保留 200 条 API 会话。去重返回 canonical ID；修改去重、排序或裁剪规则时，确保成功返回的会话确实保留在文件中。
+- 存储为 SQLite（`rusqlite`，`bundled`）：元数据建列、`conversation` 等完整负载按 JSON 存 `payload`，避免把前端版本化的结构化负载搬进 SQL schema。
+- 查询在库与旧版文件都不存在时返回空历史且不创建目录；其他打开或解析错误必须报告，不能跳过坏行后继续写入。
+- 保存、删除、清空与一次性导入都在单个事务内完成，失败整体回滚；`content_hash`（blake3）是去重身份，空回答不入索引，合并重复内容时保留最早创建时间。
+- 当前最多保留 200 条 API 会话，裁剪按 `updated_at DESC, id DESC`；若 canonical 会被裁剪则保存失败并回滚。放宽上限前必须先做前端分页。
+- `chat_store` 命令使用 `spawn_blocking`，不要在同步命令里直接做数据库或导入 IO。新增字段时同步 `migrate` 的 schema 版本与 `payload` 往返测试。
+- 旧版导入失败时保留 `sessions.jsonl` 原文件并报错，重复尝试必须幂等；导入标记写入 `meta` 表，清空历史不会删除该标记。
 - 不在测试或调试时重置真实用户目录，不在日志、夹具或提交中泄露 API key、选中文本和会话正文。
 
 ## 6. 开发与验证命令

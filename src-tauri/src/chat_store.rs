@@ -4,10 +4,14 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod jsonl;
+mod sqlite;
 #[cfg(test)]
 mod tests;
 
-// Every production command uses this same process-local lock.
+/// 历史保留上限；放宽它需要前端分页，因此暂与旧实现保持一致。
+const MAX_SESSIONS: usize = 200;
+
+// 所有生产命令共用这个进程内锁，保证读改写与一次性导入不会交错。
 static SESSION_STORE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,7 +34,7 @@ pub struct ChatSessionData {
     pub stream_text: String,
     #[serde(default)]
     pub messages: Vec<ChatMessageItem>,
-    // The conversation module owns this versioned payload; preserve unknown fields.
+    // 该负载由 conversation 模块按版本管理；保留未知字段。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation: Option<serde_json::Value>,
     pub created_at: u64,
@@ -90,83 +94,27 @@ fn repair_legacy_title(session: &mut ChatSessionData) -> bool {
     true
 }
 
-fn same_content(a: &ChatSessionData, b: &ChatSessionData) -> bool {
-    a.action_id == b.action_id
-        && a.selected_text == b.selected_text
-        && a.stream_text == b.stream_text
-        && a.conversation == b.conversation
+/// 去重身份：与历史 `same_content` 判定一致，空回答不参与去重。
+#[derive(Serialize)]
+struct SessionContent<'a> {
+    action_id: &'a str,
+    selected_text: &'a str,
+    stream_text: &'a str,
+    conversation: &'a Option<serde_json::Value>,
 }
 
-/// 合并内容完全相同的重复会话：
-/// - 会话已按 updated_at 倒序，保留最新一条
-/// - 合并时保留最早的创建时间
-fn dedupe_sessions_by_content(sessions: &mut Vec<ChatSessionData>) {
-    let mut index = 0;
-
-    while index < sessions.len() {
-        if sessions[index].stream_text.trim().is_empty() {
-            index += 1;
-            continue;
-        }
-
-        let mut next = index + 1;
-        while next < sessions.len() {
-            if same_content(&sessions[next], &sessions[index]) {
-                let removed = sessions.remove(next);
-                if removed.created_at > 0
-                    && (sessions[index].created_at == 0
-                        || removed.created_at < sessions[index].created_at)
-                {
-                    sessions[index].created_at = removed.created_at;
-                }
-            } else {
-                next += 1;
-            }
-        }
-
-        index += 1;
+fn content_hash(session: &ChatSessionData) -> Option<String> {
+    if session.stream_text.trim().is_empty() {
+        return None;
     }
-}
-
-/// 写入或更新到内存列表，返回最终使用的会话 ID。
-/// 若找不到传入 ID，但存在内容完全一致的会话，则复用已有 ID，避免重复存储。
-fn upsert_session(sessions: &mut Vec<ChatSessionData>, mut session: ChatSessionData) -> String {
-    if let Some(pos) = sessions.iter().position(|item| item.id == session.id) {
-        let existing_created_at = sessions[pos].created_at;
-        if existing_created_at > 0
-            && (session.created_at == 0 || existing_created_at < session.created_at)
-        {
-            session.created_at = existing_created_at;
-        }
-
-        let id = session.id.clone();
-        sessions[pos] = session;
-        return id;
-    }
-
-    if !session.stream_text.trim().is_empty() {
-        if let Some(pos) = sessions
-            .iter()
-            .position(|item| same_content(item, &session))
-        {
-            let existing_id = sessions[pos].id.clone();
-            let existing_created_at = sessions[pos].created_at;
-
-            session.id = existing_id.clone();
-            if existing_created_at > 0
-                && (session.created_at == 0 || existing_created_at < session.created_at)
-            {
-                session.created_at = existing_created_at;
-            }
-
-            sessions[pos] = session;
-            return existing_id;
-        }
-    }
-
-    let id = session.id.clone();
-    sessions.insert(0, session);
-    id
+    let bytes = serde_json::to_vec(&SessionContent {
+        action_id: &session.action_id,
+        selected_text: &session.selected_text,
+        stream_text: &session.stream_text,
+        conversation: &session.conversation,
+    })
+    .ok()?;
+    Some(blake3::hash(&bytes).to_hex().to_string())
 }
 
 fn prepare_session(session: &mut ChatSessionData) {
@@ -199,130 +147,158 @@ fn prepare_session(session: &mut ChatSessionData) {
     repair_legacy_title(session);
 }
 
-/// Owns the complete read/normalize/change/commit transaction.
+/// 拥有 SQLite 读写事务与旧版 JSONL 的一次性导入。
 struct SessionStore<'a> {
-    path: PathBuf,
+    db_path: PathBuf,
+    legacy_path: PathBuf,
     lock: &'a Mutex<()>,
-    io: &'a dyn jsonl::Io,
 }
 
 impl<'a> SessionStore<'a> {
-    fn new(path: PathBuf, lock: &'a Mutex<()>) -> Self {
+    fn new(db_path: PathBuf, legacy_path: PathBuf, lock: &'a Mutex<()>) -> Self {
         Self {
-            path,
+            db_path,
+            legacy_path,
             lock,
-            io: &jsonl::FileIo,
         }
     }
 
-    fn snapshot(&self) -> Result<Vec<ChatSessionData>, String> {
-        let mut sessions = jsonl::read(&self.path, self.io)?;
+    fn guard(&self) -> Result<std::sync::MutexGuard<'_, ()>, String> {
+        self.lock.lock().map_err(|_| "会话存储锁异常".to_string())
+    }
+
+    /// 只读入口：历史完全不存在时不创建目录或文件。
+    fn read_connection(&self) -> Result<Option<rusqlite::Connection>, String> {
+        if !self.db_path.exists() && !self.legacy_path.exists() {
+            return Ok(None);
+        }
+        Ok(Some(self.open_connection()?))
+    }
+
+    fn open_connection(&self) -> Result<rusqlite::Connection, String> {
+        let mut conn = sqlite::open(&self.db_path)?;
+        self.import_legacy(&mut conn)?;
+        Ok(conn)
+    }
+
+    fn import_legacy(&self, conn: &mut rusqlite::Connection) -> Result<(), String> {
+        if sqlite::legacy_imported(conn)? || !self.legacy_path.exists() {
+            return Ok(());
+        }
+
+        let mut sessions = jsonl::read(&self.legacy_path)?;
         sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-        dedupe_sessions_by_content(&mut sessions);
         for session in &mut sessions {
             repair_legacy_title(session);
         }
-        Ok(sessions)
+        sqlite::import(conn, &mut sessions, MAX_SESSIONS)?;
+
+        // 导入标记已提交；备份失败只影响用户找回原文件，不回滚数据。
+        let backup = self.legacy_path.with_extension("jsonl.migrated");
+        let _ = std::fs::rename(&self.legacy_path, backup);
+        Ok(())
     }
 
     fn all(&self) -> Result<Vec<ChatSessionData>, String> {
-        let _guard = self.lock.lock().map_err(|_| "会话存储锁异常".to_string())?;
-        self.snapshot()
+        let _guard = self.guard()?;
+        match self.read_connection()? {
+            Some(conn) => sqlite::all(&conn),
+            None => Ok(Vec::new()),
+        }
     }
 
     fn list(&self) -> Result<Vec<SessionMeta>, String> {
-        Ok(self
-            .all()?
-            .into_iter()
-            .map(|s| SessionMeta {
-                id: s.id,
-                title: s.title,
-                action_id: s.action_id,
-                model: s.model,
-                updated_at: s.updated_at,
-            })
-            .collect())
+        let _guard = self.guard()?;
+        match self.read_connection()? {
+            Some(conn) => sqlite::list(&conn),
+            None => Ok(Vec::new()),
+        }
     }
 
     fn get(&self, id: &str) -> Result<ChatSessionData, String> {
-        self.all()?
-            .into_iter()
-            .find(|s| s.id == id)
-            .ok_or_else(|| format!("Session '{}' not found", id))
+        let _guard = self.guard()?;
+        let session = match self.read_connection()? {
+            Some(conn) => sqlite::get(&conn, id)?,
+            None => None,
+        };
+        session.ok_or_else(|| format!("Session '{}' not found", id))
     }
 
     fn save(&self, mut session: ChatSessionData) -> Result<String, String> {
-        let _guard = self.lock.lock().map_err(|_| "会话存储锁异常".to_string())?;
-        let mut sessions = self.snapshot()?;
+        let _guard = self.guard()?;
+        let mut conn = self.open_connection()?;
         prepare_session(&mut session);
-        let canonical = upsert_session(&mut sessions, session);
-        self.commit(sessions, Some(&canonical))?;
-        Ok(canonical)
+        let hash = content_hash(&session);
+        sqlite::save(&mut conn, &mut session, hash.as_deref(), MAX_SESSIONS)
     }
 
     fn delete(&self, id: &str) -> Result<(), String> {
-        let _guard = self.lock.lock().map_err(|_| "会话存储锁异常".to_string())?;
-        let mut sessions = self.snapshot()?;
-        sessions.retain(|s| s.id != id);
-        self.commit(sessions, None)
+        let _guard = self.guard()?;
+        match self.read_connection()? {
+            Some(conn) => sqlite::delete(&conn, id),
+            None => Ok(()),
+        }
     }
 
     fn clear(&self) -> Result<(), String> {
-        let _guard = self.lock.lock().map_err(|_| "会话存储锁异常".to_string())?;
-        self.snapshot()?;
-        self.commit(Vec::new(), None)
-    }
-
-    // Called only while the transaction lock is held; stable sorting preserves ties.
-    fn commit(
-        &self,
-        mut sessions: Vec<ChatSessionData>,
-        canonical: Option<&str>,
-    ) -> Result<(), String> {
-        sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-        sessions.truncate(200);
-        if canonical.is_some_and(|id| !sessions.iter().any(|s| s.id == id)) {
-            return Err("会话未能保留在历史上限内，保存已取消".to_string());
-        }
-        jsonl::commit(&self.path, &sessions, self.io)
+        let _guard = self.guard()?;
+        // 先完成导入，避免清空后旧文件在下一次读取时又被导回来。
+        let conn = self.open_connection()?;
+        sqlite::clear(&conn)
     }
 }
 
 fn production_store() -> SessionStore<'static> {
     SessionStore::new(
+        crate::config::AppConfig::sessions_db_path(),
         crate::config::AppConfig::sessions_path(),
         &SESSION_STORE_LOCK,
     )
 }
 
-#[tauri::command]
-pub fn list_chat_sessions() -> Result<Vec<SessionMeta>, String> {
-    production_store().list()
+/// 同步命令在主线程执行；数据库与导入都是阻塞 IO，统一切到阻塞线程池。
+async fn run_blocking<T: Send + 'static>(
+    task: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    match tauri::async_runtime::spawn_blocking(task).await {
+        Ok(result) => result,
+        Err(_) => Err("会话存储任务执行失败".to_string()),
+    }
 }
+
 #[tauri::command]
-pub fn get_all_full_chat_sessions() -> Result<Vec<ChatSessionData>, String> {
-    production_store().all()
+pub async fn list_chat_sessions() -> Result<Vec<SessionMeta>, String> {
+    run_blocking(|| production_store().list()).await
 }
+
 #[tauri::command]
-pub fn get_chat_session(id: String) -> Result<ChatSessionData, String> {
-    production_store().get(&id)
+pub async fn get_all_full_chat_sessions() -> Result<Vec<ChatSessionData>, String> {
+    run_blocking(|| production_store().all()).await
 }
+
 #[tauri::command]
-pub fn save_chat_session(session: ChatSessionData) -> Result<String, String> {
-    production_store().save(session)
+pub async fn get_chat_session(id: String) -> Result<ChatSessionData, String> {
+    run_blocking(move || production_store().get(&id)).await
 }
+
 #[tauri::command]
-pub fn delete_chat_session(id: String) -> Result<(), String> {
-    production_store().delete(&id)
+pub async fn save_chat_session(session: ChatSessionData) -> Result<String, String> {
+    run_blocking(move || production_store().save(session)).await
 }
+
 #[tauri::command]
-pub fn clear_all_chat_sessions() -> Result<(), String> {
-    production_store().clear()
+pub async fn delete_chat_session(id: String) -> Result<(), String> {
+    run_blocking(move || production_store().delete(&id)).await
+}
+
+#[tauri::command]
+pub async fn clear_all_chat_sessions() -> Result<(), String> {
+    run_blocking(|| production_store().clear()).await
 }
 
 #[tauri::command]
 pub fn open_sessions_directory() -> Result<String, String> {
-    let path = crate::config::AppConfig::sessions_path();
+    let path = crate::config::AppConfig::sessions_db_path();
     let dir = path.parent().unwrap_or(&path);
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let dir_str = dir.to_string_lossy().to_string();
