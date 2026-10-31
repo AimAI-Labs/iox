@@ -155,7 +155,11 @@ export const en: TranslationTree = {
     allActions: 'All actions',
     openDirectory: 'Open storage directory',
     clearAll: 'Clear all sessions',
-    confirmClear: 'Click again to confirm',
+    clearDialog: {
+      title: 'Clear all sessions?',
+      description: 'All {count} sessions will be permanently deleted.',
+      confirm: 'Clear all',
+    },
     loading: 'Loading sessions...',
     empty: 'No sessions yet',
     emptyHint: 'AI conversations are saved here automatically',

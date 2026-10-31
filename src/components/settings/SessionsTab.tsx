@@ -14,6 +14,7 @@ import {
   Maximize2,
 } from 'lucide-react';
 import { ChatSessionData } from '@/types/session';
+import { ConfirmDialog } from '@/components/ui';
 import { SessionTurnList } from '@/components/settings/SessionTurnList';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -48,6 +49,9 @@ export const SessionsTab: React.FC<SessionsTabProps> = ({ actions, onOpenViewer 
   const [loading, setLoading] = useState(true);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [storageError, setStorageError] = useState<SessionStorageError>(null);
+  // 清空全部会话是破坏性操作，用弹窗二次确认
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const { copied, copy } = useCopyFeedback(2000);
 
   const fetchSessions = useCallback(async () => {
@@ -109,15 +113,21 @@ export const SessionsTab: React.FC<SessionsTabProps> = ({ actions, onOpenViewer 
   };
 
   const handleClearAll = async () => {
-    if (!window.confirm(isZh ? '确定要清空所有历史对话记录吗？此操作不可恢复。' : 'Are you sure you want to clear all history records? This cannot be undone.')) return;
+    if (clearing) return;
+    setClearing(true);
     try {
       await invoke('clear_all_chat_sessions');
       setStorageError((previous) => previous === 'clear' ? null : previous);
       setSessions([]);
       setSelectedSessionId(null);
+      setConfirmClearOpen(false);
     } catch (err) {
+      // 关闭弹窗，让列表上方的错误提示可见
       setStorageError('clear');
+      setConfirmClearOpen(false);
       console.error('Failed to clear sessions:', err);
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -194,7 +204,7 @@ export const SessionsTab: React.FC<SessionsTabProps> = ({ actions, onOpenViewer 
           {sessions.length > 0 && (
             <button
               type="button"
-              onClick={handleClearAll}
+              onClick={() => setConfirmClearOpen(true)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-colors cursor-pointer"
             >
               <Trash2 size={13} />
@@ -326,6 +336,18 @@ export const SessionsTab: React.FC<SessionsTabProps> = ({ actions, onOpenViewer 
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmClearOpen}
+        destructive
+        busy={clearing}
+        title={t('sessions.clearAllSessions')}
+        description={t('sessions.clearAllConfirm')}
+        confirmLabel={t('sessions.clearAll')}
+        cancelLabel={t('common.cancel')}
+        onConfirm={() => void handleClearAll()}
+        onCancel={() => setConfirmClearOpen(false)}
+      />
     </div>
   );
 };

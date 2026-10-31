@@ -10,7 +10,8 @@ html[data-ui-style="classic"] {
   --ui-card-radius: 20px;
   --ui-bubble-radius: 8px;
   --ui-popover-radius: 12px;
-  --ui-web-titlebar-radius: 12px;
+  /* Web 卡片外框圆角：与原生裁切区域保持一致 */
+  --ui-web-card-radius: 12px;
 }
 
 html[data-ui-style="windows"] {
@@ -19,7 +20,7 @@ html[data-ui-style="windows"] {
   --ui-card-radius: 0px;
   --ui-bubble-radius: 0px;
   --ui-popover-radius: 0px;
-  --ui-web-titlebar-radius: 0px;
+  --ui-web-card-radius: 0px;
 }
 
 /* Windows 样式使用系统标题栏，自绘交通灯与标题让位给系统导航栏 */
@@ -39,8 +40,8 @@ html[data-ui-style="windows"] .app-window-frame {
   -webkit-backdrop-filter: none;
 }
 
-html[data-ui-style="windows"] .web-titlebar-root > div,
-html[data-ui-style="windows"] .web-titlebar-root > header {
+/* 整张 Web 卡片由本地工具栏画布绘制，只有标题栏需要不透明底色 */
+html[data-ui-style="windows"] .web-card-titlebar {
   background: var(--bg-card);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;

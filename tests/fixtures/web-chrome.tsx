@@ -108,11 +108,18 @@ if (params.has('settings')) {
         buttonY: !expanded ? Math.max(0, Math.min(height - 44, anchorY - top)) : (upward ? Math.max(0, height - 44) : 0),
       };
       fixture.layout = { revision: fixture.layout.revision + 1, headless: fixture.layout.headless, menu };
+      // Native keeps the toolbar canvas over the whole card and clips it to the frame that
+      // hosts the titlebar and the 1px border, leaving the page area to the site webview.
+      const cardFrame = `polygon(0px 0px, ${innerWidth}px 0px, ${innerWidth}px ${innerHeight}px, `
+        + `${innerWidth - 1}px ${innerHeight}px, ${innerWidth - 1}px 38px, 1px 38px, `
+        + `1px ${innerHeight}px, 0px ${innerHeight}px)`;
       Object.assign(bar.style, fixture.layout.headless ? {
         left: `${menu.x}px`, top: `${menu.y}px`, width: `${width}px`, height: `${height}px`,
-      } : { left: '0px', top: '0px', width: `${innerWidth}px`, height: '38px' });
-      bar.style.clipPath = fixture.layout.headless && !expanded && !wheel
-        ? `inset(${menu.buttonY}px ${width - menu.buttonX - 44}px ${height - menu.buttonY - 44}px ${menu.buttonX}px)` : 'none';
+      } : { left: '0px', top: '0px', width: `${innerWidth}px`, height: `${innerHeight}px` });
+      bar.style.clipPath = fixture.layout.headless
+        ? (!expanded && !wheel
+          ? `inset(${menu.buttonY}px ${width - menu.buttonX - 44}px ${height - menu.buttonY - 44}px ${menu.buttonX}px)` : 'none')
+        : cardFrame;
       page.style.top = fixture.layout.headless ? '0px' : '38px';
       page.style.height = fixture.layout.headless ? '100%' : 'calc(100% - 38px)';
       const committed = structuredClone(fixture.layout);

@@ -127,8 +127,9 @@ const SingleWebTitleBar: React.FC<WebTitleBarProps> = ({
   };
 
   return (
-    <div className="web-titlebar-root w-full h-[38px] max-h-[38px] bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
-      <div className="w-full h-[38px] max-h-[38px] flex flex-col bg-[var(--bg-overlay-card)] text-foreground rounded-t-[var(--ui-web-titlebar-radius)] border-t border-l border-r border-b border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl box-border">
+    <div className="web-titlebar-root fixed inset-0 select-none overflow-hidden rounded-[var(--ui-web-card-radius)] bg-transparent">
+      {/* 原生画布覆盖整张卡片，但只保留标题栏与描边区域可见，其余部分交给官网页面 */}
+      <div className="web-card-titlebar flex h-[38px] max-h-[38px] flex-col overflow-hidden border-b border-black/10 bg-[var(--bg-overlay-card)] text-foreground backdrop-blur-2xl dark:border-white/10">
         <MacTitleBar
           title={displayTitle}
           onClose={handleClose}
@@ -177,6 +178,7 @@ const SingleWebTitleBar: React.FC<WebTitleBarProps> = ({
           }
         />
       </div>
+      <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[var(--ui-web-card-radius)] ring-1 ring-inset ring-black/10 dark:ring-white/10" />
     </div>
   );
 };

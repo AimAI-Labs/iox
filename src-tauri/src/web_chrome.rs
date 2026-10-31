@@ -4,9 +4,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
+use crate::window_manager::{WebCardFrame, WebToolbarRegion};
 use crate::AppState;
 
 pub const TITLEBAR_HEIGHT: f64 = 38.0;
+/// Hairline card border drawn by the local toolbar, in logical pixels.
+const CARD_BORDER: f64 = 1.0;
 const MENU_BUTTON_SIZE: f64 = 44.0;
 const MENU_MARGIN: f64 = 12.0;
 const MENU_MIN_OPEN_HEIGHT: f64 = 160.0;
@@ -180,11 +183,93 @@ pub struct WebChromeLayout {
     pub menu: MenuLayout,
 }
 
+/// Native toolbar geometry applied to one window. It stays beside the serialized layout so
+/// resizes re-clip the card frame without touching the menu contract or the menu anchor.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ToolbarShape {
+    /// Headless menu canvas, positioned in logical client coordinates.
+    Menu {
+        menu: MenuLayout,
+        region: WebToolbarRegion,
+    },
+    /// Non-headless card: the toolbar canvas covers the whole client area.
+    Card {
+        width: u32,
+        height: u32,
+        region: WebToolbarRegion,
+    },
+}
+
+impl ToolbarShape {
+    fn bounds(self) -> tauri::Rect {
+        match self {
+            ToolbarShape::Menu { menu, .. } => tauri::Rect {
+                position: tauri::LogicalPosition::new(menu.x, menu.y).into(),
+                size: tauri::LogicalSize::new(menu.width, menu.height).into(),
+            },
+            ToolbarShape::Card { width, height, .. } => tauri::Rect {
+                position: tauri::PhysicalPosition::new(0, 0).into(),
+                size: tauri::PhysicalSize::new(width, height).into(),
+            },
+        }
+    }
+
+    fn region(self) -> WebToolbarRegion {
+        match self {
+            ToolbarShape::Menu { region, .. } | ToolbarShape::Card { region, .. } => region,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct WindowLayout {
+    layout: WebChromeLayout,
+    toolbar: ToolbarShape,
+}
+
+/// The card frame keeps the toolbar canvas transparent outside the titlebar band, so the
+/// native region is the only thing that decides where the border paints and receives input.
+fn toolbar_shape(
+    size: tauri::PhysicalSize<u32>,
+    scale: f64,
+    menu: MenuLayout,
+    headless: bool,
+    page_top: u32,
+    radius: Option<i32>,
+) -> ToolbarShape {
+    if headless {
+        // Button and hover modes share one canvas; only the visible region changes.
+        let region = if menu.expanded || menu.wheel {
+            WebToolbarRegion::Full
+        } else {
+            WebToolbarRegion::Button {
+                x: (menu.button_x * scale).round() as i32,
+                y: (menu.button_y * scale).round() as i32,
+                width: (MENU_BUTTON_SIZE.min(menu.width) * scale).round() as i32,
+                height: (MENU_BUTTON_SIZE.min(menu.height) * scale).round() as i32,
+            }
+        };
+        ToolbarShape::Menu { menu, region }
+    } else {
+        ToolbarShape::Card {
+            width: size.width,
+            height: size.height,
+            region: WebToolbarRegion::CardFrame(WebCardFrame {
+                width: size.width as i32,
+                height: size.height as i32,
+                page_top: page_top as i32,
+                border: (CARD_BORDER * scale).ceil() as i32,
+                radius: radius.unwrap_or(0),
+            }),
+        }
+    }
+}
+
 pub struct WebChromeState {
     // Native projection of committed config. Resize callbacks must never reenter ConfigStore:
     // publishing config effects can synchronously trigger window events while its lock is held.
     headless: AtomicBool,
-    windows: Mutex<HashMap<String, WebChromeLayout>>,
+    windows: Mutex<HashMap<String, WindowLayout>>,
 }
 
 impl WebChromeState {
@@ -241,12 +326,20 @@ fn apply_layout(
     let size = window.inner_size().map_err(|e| e.to_string())?;
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let hub = window.label() == "web_hub";
-    let (layout, relayout_content, toolbar_geometry_changed, toolbar_region_changed) = {
+    let (top, height) = content_layout(size.height, scale, headless);
+    let radius = if window.is_maximized().unwrap_or(false)
+        || (!headless && crate::window_manager::is_native_chrome())
+    {
+        None
+    } else {
+        Some((12.0 * scale).round() as i32)
+    };
+    let (layout, toolbar, previous_toolbar, relayout_content) = {
         let mut windows = state.web_chrome.windows.lock().map_err(|e| e.to_string())?;
         let previous = windows.get(window.label()).copied();
         let menu = calculate_menu_layout(
             (size.width as f64 / scale, size.height as f64 / scale),
-            previous.map(|old| old.menu),
+            previous.map(|old| old.layout.menu),
             if headless { expanded } else { Some(false) },
             if headless { wheel } else { Some(false) },
             position,
@@ -254,22 +347,17 @@ fn apply_layout(
             relayout_content,
         )?;
         let layout = WebChromeLayout {
-            revision: previous.map_or(1, |old| old.revision + 1),
+            revision: previous.map_or(1, |old| old.layout.revision + 1),
             headless,
             menu,
         };
-        windows.insert(window.label().to_string(), layout);
+        let toolbar = toolbar_shape(size, scale, menu, headless, top, radius);
+        windows.insert(window.label().to_string(), WindowLayout { layout, toolbar });
         (
             layout,
-            relayout_content || previous.is_none_or(|old| old.headless != headless),
-            relayout_content
-                || previous.is_none_or(|old| {
-                    old.headless != headless
-                        || (old.menu.x, old.menu.y, old.menu.width, old.menu.height)
-                            != (menu.x, menu.y, menu.width, menu.height)
-                }),
-            relayout_content
-                || previous.is_none_or(|old| old.headless != headless || old.menu != menu),
+            toolbar,
+            previous.map(|old| old.toolbar),
+            relayout_content || previous.is_none_or(|old| old.layout.headless != headless),
         )
     };
     let active_label = if hub {
@@ -295,14 +383,6 @@ fn apply_layout(
     } else {
         Some(format!("{}_web", window.label()))
     };
-    let (top, height) = content_layout(size.height, scale, headless);
-    let radius = if window.is_maximized().unwrap_or(false)
-        || (!headless && crate::window_manager::is_native_chrome())
-    {
-        None
-    } else {
-        Some((12.0 * scale).round() as i32)
-    };
     // No config, menu or Hub lock is held while touching native views.
     if relayout_content {
         if let Ok(hwnd) = window.hwnd() {
@@ -327,33 +407,15 @@ fn apply_layout(
         crate::window_manager::set_web_content_round(&view, radius, headless);
     }
     if let Some(bar) = app.get_webview(&bar_label) {
-        let bounds = if headless {
-            tauri::Rect {
-                position: tauri::LogicalPosition::new(layout.menu.x, layout.menu.y).into(),
-                size: tauri::LogicalSize::new(layout.menu.width, layout.menu.height).into(),
-            }
-        } else {
-            tauri::Rect {
-                position: tauri::PhysicalPosition::new(0, 0).into(),
-                size: tauri::PhysicalSize::new(size.width, top).into(),
-            }
-        };
-        if toolbar_geometry_changed {
-            bar.set_bounds(bounds).map_err(|e| e.to_string())?;
-            crate::window_manager::raise_web_toolbar(&bar);
+        let reshaped = previous_toolbar != Some(toolbar);
+        if reshaped {
+            bar.set_bounds(toolbar.bounds())
+                .map_err(|e| e.to_string())?;
+            crate::window_manager::set_web_toolbar_region(&bar, toolbar.region());
         }
-        if toolbar_region_changed {
-            let clip = (headless && !layout.menu.expanded && !layout.menu.wheel).then(|| {
-                let menu = layout.menu;
-                (
-                    (menu.button_x * scale).round() as i32,
-                    (menu.button_y * scale).round() as i32,
-                    (MENU_BUTTON_SIZE.min(menu.width) * scale).round() as i32,
-                    (MENU_BUTTON_SIZE.min(menu.height) * scale).round() as i32,
-                )
-            });
-            crate::window_manager::set_web_menu_region(&bar, clip);
-        }
+        // Content webviews are added after the toolbar, so a newly created Hub tab would
+        // otherwise cover the frame. Raising only reorders siblings of this window.
+        crate::window_manager::raise_web_toolbar(&bar);
         let _ = app.emit_to(
             tauri::EventTarget::webview(&bar_label),
             "web_chrome_layout_changed",

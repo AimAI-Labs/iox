@@ -158,19 +158,94 @@ pub fn raise_web_toolbar(view: &tauri::Webview) {
     });
 }
 
-/// Keep the toolbar canvas stationary; clipped areas must pass input to the page below.
-pub fn set_web_menu_region(view: &tauri::Webview, clip: Option<(i32, i32, i32, i32)>) {
+/// Card frame clipping in physical pixels: the rounded card outline minus the page area,
+/// keeping only the titlebar band and the 1px border that follows the card edges.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WebCardFrame {
+    pub width: i32,
+    pub height: i32,
+    pub page_top: i32,
+    pub border: i32,
+    pub radius: i32,
+}
+
+/// Visible part of the local toolbar canvas. The region governs painting and hit testing
+/// alike, so everything outside it still reaches the page rendered underneath.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WebToolbarRegion {
+    /// Whole local canvas, e.g. an expanded headless menu.
+    Full,
+    /// Headless menu at rest: only the floating button stays visible and interactive.
+    Button {
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    },
+    /// Card frame drawn on top of the page: titlebar plus the enclosing hairline border.
+    CardFrame(WebCardFrame),
+}
+
+/// SAFETY: the returned region is owned by the caller and must be released with
+/// `DeleteObject`; null means GDI could not build it.
+unsafe fn card_frame_region(frame: WebCardFrame) -> HRGN {
+    let diameter = frame.radius.max(0) * 2;
+    let outline = if diameter > 0 {
+        CreateRoundRectRgn(0, 0, frame.width + 1, frame.height + 1, diameter, diameter)
+    } else {
+        CreateRectRgn(0, 0, frame.width + 1, frame.height + 1)
+    };
+    if outline.is_null() {
+        return outline;
+    }
+    // Degenerate windows (smaller than the titlebar) keep the whole outline visible.
+    let page_width = frame.width - frame.border * 2;
+    let page_height = frame.height - frame.page_top - frame.border;
+    if page_width <= 0 || page_height <= 0 {
+        return outline;
+    }
+    let page = CreateRectRgn(
+        frame.border,
+        frame.page_top,
+        frame.border + page_width,
+        frame.page_top + page_height,
+    );
+    if page.is_null() {
+        DeleteObject(outline as _);
+        return std::ptr::null_mut();
+    }
+    let cut = CombineRgn(outline, outline, page, RGN_DIFF) != 0;
+    DeleteObject(page as _);
+    if cut {
+        outline
+    } else {
+        DeleteObject(outline as _);
+        std::ptr::null_mut()
+    }
+}
+
+pub fn set_web_toolbar_region(view: &tauri::Webview, region: WebToolbarRegion) {
     with_web_child(view, move |child| {
         // The validated child HWND is borrowed on the UI thread. Windows owns a region
         // after successful SetWindowRgn; on failure we retain ownership and release it.
         unsafe {
-            let Some((x, y, width, height)) = clip else {
-                SetWindowRgn(child, std::ptr::null_mut(), 1);
-                return;
+            let region = match region {
+                WebToolbarRegion::Full => {
+                    SetWindowRgn(child, std::ptr::null_mut(), 1);
+                    return;
+                }
+                WebToolbarRegion::Button {
+                    x,
+                    y,
+                    width,
+                    height,
+                } => CreateRectRgn(x, y, x + width, y + height),
+                WebToolbarRegion::CardFrame(frame) => card_frame_region(frame),
             };
-            let region = CreateRectRgn(x, y, x + width, y + height);
-            if !region.is_null() && SetWindowRgn(child, region, 1) == 0 {
-                DeleteObject(region as _);
+            if region.is_null() || SetWindowRgn(child, region, 1) == 0 {
+                if !region.is_null() {
+                    DeleteObject(region as _);
+                }
             }
         }
     });
@@ -1135,6 +1210,50 @@ mod tests {
                 }
             }
             DestroyWindow(hwnd);
+        }
+    }
+
+    #[test]
+    fn card_frame_region_keeps_the_titlebar_and_border_but_not_the_page() {
+        for (radius, border) in [(12, 1), (0, 2)] {
+            let frame = WebCardFrame {
+                width: 861,
+                height: 641,
+                page_top: 38,
+                border,
+                radius,
+            };
+            // SAFETY: the region is created and released inside this test only.
+            unsafe {
+                let region = card_frame_region(frame);
+                assert!(!region.is_null());
+                assert_ne!(PtInRegion(region, 430, 20), 0, "titlebar band");
+                assert_ne!(PtInRegion(region, 0, 300), 0, "left border");
+                assert_ne!(PtInRegion(region, border - 1, 300), 0, "left border");
+                assert_ne!(PtInRegion(region, 860, 300), 0, "right border");
+                assert_ne!(PtInRegion(region, 430, 640), 0, "bottom border");
+                assert_eq!(PtInRegion(region, 430, 300), 0, "page area");
+                assert_eq!(PtInRegion(region, border, 38), 0, "page origin");
+                DeleteObject(region as _);
+            }
+        }
+    }
+
+    #[test]
+    fn card_frame_region_survives_a_window_smaller_than_its_titlebar() {
+        let frame = WebCardFrame {
+            width: 10,
+            height: 20,
+            page_top: 38,
+            border: 1,
+            radius: 12,
+        };
+        // SAFETY: the region is created and released inside this test only.
+        unsafe {
+            let region = card_frame_region(frame);
+            assert!(!region.is_null());
+            assert_ne!(PtInRegion(region, 5, 10), 0);
+            DeleteObject(region as _);
         }
     }
 

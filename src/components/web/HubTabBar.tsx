@@ -302,9 +302,9 @@ export const HubTabBar: React.FC = () => {
   const posY = Math.min(contextMenu.y + 4, Math.max(10, window.innerHeight - menuHeight - 10));
 
   return (
-    <div className="web-titlebar-root w-full h-[38px] max-h-[38px] bg-transparent flex items-center justify-center box-border overflow-hidden select-none">
+    <div className="web-titlebar-root fixed inset-0 select-none overflow-hidden rounded-[var(--ui-web-card-radius)] bg-transparent">
       <header
-        className="w-full h-[38px] max-h-[38px] flex items-center justify-between px-3 bg-[var(--bg-overlay-card)] text-foreground rounded-t-[var(--ui-web-titlebar-radius)] border-t border-l border-r border-b border-black/10 dark:border-white/10 overflow-hidden backdrop-blur-2xl box-border"
+        className="web-card-titlebar flex h-[38px] max-h-[38px] items-center justify-between overflow-hidden border-b border-black/10 bg-[var(--bg-overlay-card)] px-3 text-foreground backdrop-blur-2xl dark:border-white/10"
         data-tauri-drag-region
         onMouseDown={handleMouseDownDrag}
         onDoubleClick={handleDoubleClickDrag}
@@ -464,6 +464,9 @@ export const HubTabBar: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {/* 卡片描边：标题栏之外的部分由原生裁切让给官网页面 */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 rounded-[var(--ui-web-card-radius)] ring-1 ring-inset ring-black/10 dark:ring-white/10" />
 
       {/* 标签页右键上下文菜单 */}
       {contextMenu.visible && (

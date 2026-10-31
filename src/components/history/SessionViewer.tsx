@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import type { ActionConfig } from '@/types/config';
 import type { ChatSessionData, SessionStorageError } from '@/types/session';
-import { Button, Select } from '@/components/ui';
+import { Button, ConfirmDialog, Select } from '@/components/ui';
 import { SessionStorageAlert } from '@/components/SessionStorageAlert';
 import { SessionTurnList } from '@/components/settings/SessionTurnList';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
@@ -53,7 +53,9 @@ export const SessionViewer: React.FC<SessionViewerProps> = ({
   const [loading, setLoading] = useState(false);
   const [storageError, setStorageError] = useState<SessionStorageError>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [confirmClear, setConfirmClear] = useState(false);
+  // 清空全部会话是破坏性操作，用独立弹窗二次确认
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const { copied, copy } = useCopyFeedback(1800);
 
   const alive = useRef(true);
@@ -88,15 +90,9 @@ export const SessionViewer: React.FC<SessionViewerProps> = ({
   useEffect(() => {
     setSelectedId(initialSessionId ?? null);
     setPendingDeleteId(null);
-    setConfirmClear(false);
+    setConfirmClearOpen(false);
     void fetchSessions();
   }, [requestRevision, initialSessionId, fetchSessions]);
-
-  useEffect(() => {
-    if (!confirmClear) return;
-    const timer = window.setTimeout(() => setConfirmClear(false), CONFIRM_TIMEOUT_MS);
-    return () => window.clearTimeout(timer);
-  }, [confirmClear]);
 
   useEffect(() => () => {
     if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
@@ -144,6 +140,14 @@ export const SessionViewer: React.FC<SessionViewerProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // 弹窗打开时独占键盘：Esc 只关闭弹窗，方向键不再切换会话
+      if (confirmClearOpen) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setConfirmClearOpen(false);
+        }
+        return;
+      }
       if (event.key === 'Escape') {
         event.preventDefault();
         onRequestClose?.();
@@ -161,7 +165,7 @@ export const SessionViewer: React.FC<SessionViewerProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onRequestClose, moveSelection]);
+  }, [confirmClearOpen, onRequestClose, moveSelection]);
 
   const exportLabels = useMemo(() => sessionExportLabels(t), [t]);
 
@@ -199,23 +203,27 @@ export const SessionViewer: React.FC<SessionViewerProps> = ({
     }
   };
 
+  const closeClearDialog = useCallback(() => setConfirmClearOpen(false), []);
+
   const handleClearAll = async () => {
-    if (!confirmClear) {
-      setConfirmClear(true);
-      return;
-    }
-    setConfirmClear(false);
+    if (clearing) return;
+    setClearing(true);
     try {
       await invoke('clear_all_chat_sessions');
       if (!alive.current) return;
       setSessions([]);
       setSelectedId(null);
       setStorageError((previous) => (previous === 'clear' ? null : previous));
+      setConfirmClearOpen(false);
       notifySessionsChanged();
     } catch (error) {
       if (!alive.current) return;
+      // 关闭弹窗，让列表上方的错误提示可见
       setStorageError('clear');
+      setConfirmClearOpen(false);
       console.error('Failed to clear chat sessions:', error);
+    } finally {
+      if (alive.current) setClearing(false);
     }
   };
 
@@ -292,15 +300,15 @@ export const SessionViewer: React.FC<SessionViewerProps> = ({
             <span>{t('sessionViewer.openDirectory')}</span>
           </Button>
           <Button
-            variant={confirmClear ? 'destructive' : 'outline'}
+            variant="outline"
             size="sm"
             className="gap-1.5"
-            onClick={() => void handleClearAll()}
+            onClick={() => setConfirmClearOpen(true)}
             disabled={sessions.length === 0}
-            title={confirmClear ? t('sessionViewer.confirmClear') : t('sessionViewer.clearAll')}
+            title={t('sessionViewer.clearAll')}
           >
             <Trash2 size={13} />
-            <span>{confirmClear ? t('sessionViewer.confirmClear') : t('sessionViewer.clearAll')}</span>
+            <span>{t('sessionViewer.clearAll')}</span>
           </Button>
         </div>
       </header>
@@ -501,6 +509,18 @@ export const SessionViewer: React.FC<SessionViewerProps> = ({
           )}
         </section>
       </div>
+
+      <ConfirmDialog
+        open={confirmClearOpen}
+        destructive
+        busy={clearing}
+        title={t('sessionViewer.clearDialog.title')}
+        description={t('sessionViewer.clearDialog.description', { count: sessions.length })}
+        confirmLabel={t('sessionViewer.clearDialog.confirm')}
+        cancelLabel={t('common.cancel')}
+        onConfirm={() => void handleClearAll()}
+        onCancel={closeClearDialog}
+      />
     </section>
   );
 };

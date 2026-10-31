@@ -153,7 +153,11 @@ export const zh = {
     allActions: '全部动作',
     openDirectory: '打开存储目录',
     clearAll: '清空全部会话',
-    confirmClear: '再次点击确认清空',
+    clearDialog: {
+      title: '清空全部历史会话？',
+      description: '共 {count} 条会话，清空后无法恢复。',
+      confirm: '清空全部',
+    },
     loading: '正在读取历史会话...',
     empty: '暂无历史会话',
     emptyHint: '与 AI 的对话会自动保存在这里',

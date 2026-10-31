@@ -56,6 +56,7 @@ export function mountSessionView(view = 'hook', invoke = async () => [], overrid
     '@/hooks/useTranslation': { useTranslation: () => ({ resolvedLanguage: 'en', t: (key) => key }) },
     '@/hooks/useCopyFeedback': { useCopyFeedback: () => ({ copied: false, copy() {} }) },
     '@/lib/utils': { cn: (...items) => items.filter(Boolean).join(' ') },
+    '@/components/ui': { ConfirmDialog: 'ConfirmDialog' },
     'lucide-react': new Proxy({}, { get: (_, name) => name }),
     '@/components/overlay/MarkdownContent': { MarkdownContent: 'MarkdownContent' },
     // 轮次渲染与视图模型由 tests/session-view.test.mjs 单独覆盖，这里只隔离设置页状态

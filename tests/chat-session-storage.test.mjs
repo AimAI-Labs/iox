@@ -75,6 +75,9 @@ test('settings failed delete and clear preserve loaded rows and report errors', 
   assert.equal(nodes(h.value, (node) => node.props?.role === 'alert').length, 1);
   const clearButton = nodes(h.value, (node) => node.type === 'button' && textOf(node).includes('sessions.clearAll'))[0];
   await clearButton.props.onClick(); h.render();
+  // 清空全部会话必须先经过弹窗确认，按钮本身不直接调用后端
+  const clearDialog = nodes(h.value, (node) => node.type === 'ConfirmDialog' && node.props?.open)[0];
+  clearDialog.props.onConfirm(); await h.settle();
   assert.ok(textOf(h.value).includes('Saved'));
   assert.equal(nodes(h.value, (node) => node.props?.role === 'alert').length, 1);
 });
