@@ -13,7 +13,7 @@
 - **桌面入口**：常驻悬浮球、全局快捷键、托盘、设置页，以及 API/Web 两类会话历史入口。
 - **界面**：暗色/浅色/跟随系统，中英双语；`classic` 自绘外框与 `windows` 原生外框两种样式。
 
-气泡与 API 卡片共用一个 `overlay` 窗口；整个应用还包含 `main` 设置窗口、`floating_ball` 悬浮球，以及动态创建的官网窗口和子 WebView。
+气泡与 API 卡片共用一个 `overlay` 窗口；整个应用还包含 `main` 设置窗口、`history` 历史会话查看窗口、`floating_ball` 悬浮球，以及动态创建的官网窗口和子 WebView。
 
 ## 2. 技术栈与开发环境
 
@@ -69,6 +69,7 @@ iox/
 │   ├── App.css                    # 全局与悬浮界面样式
 │   ├── components/
 │   │   ├── overlay/               # OverlaySurface、气泡、卡片、悬浮球、文件菜单等
+│   │   ├── history/               # 历史会话查看窗口与只读视图
 │   │   ├── settings/              # 设置与 API/Web 历史；actions/ 管理动作表单
 │   │   ├── web/                   # 官网标题栏与 Hub 标签栏
 │   │   ├── ui/                    # 通用界面组件

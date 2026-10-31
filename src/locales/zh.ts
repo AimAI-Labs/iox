@@ -144,8 +144,7 @@ export const zh = {
   },
   sessionViewer: {
     title: '历史会话',
-    back: '返回设置',
-    close: '关闭面板 (Esc)',
+    subtitle: '查看已保存的 API 会话，按时间分组浏览完整多轮对话',
     count: '{count} 条',
     listLabel: '会话列表',
     searchPlaceholder: '搜索标题、提问或回答',
@@ -210,7 +209,7 @@ export const zh = {
       assistant: '助手',
     },
     openViewer: '打开查看面板',
-    openViewerHint: '在查看面板中浏览完整多轮对话',
+    openViewerHint: '在新窗口中浏览完整多轮对话',
     viewerDetail: '详细查看',
   },
   settings: {

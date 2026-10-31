@@ -42,6 +42,20 @@
         "dragDropEnabled": false
       },
       {
+        "label": "history",
+        "title": "IOX",
+        "width": 980,
+        "height": 700,
+        "minWidth": 760,
+        "minHeight": 520,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "visible": false,
+        "dragDropEnabled": false
+      },
+      {
         "label": "floating_ball",
         "title": "IOX Floating Ball",
         "noRedirectionBitmap": true,

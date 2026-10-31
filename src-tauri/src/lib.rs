@@ -330,6 +330,60 @@ fn toggle_maximize_main_window(app: AppHandle) -> Result<(), String> {
     }
 }
 
+/// 历史会话窗口与设置窗口共用同一套外框：打开时重新应用原生样式并带着待定位的会话
+#[tauri::command]
+fn open_history_window(app: AppHandle, session_id: Option<String>) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("history") {
+        if let Ok(hwnd) = window.hwnd() {
+            let hwnd_raw = hwnd.0 as _;
+            window_manager::apply_main_window_native_style(hwnd_raw);
+            window_manager::bring_window_to_foreground(hwnd_raw);
+        }
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        // 窗口常驻隐藏，定位请求交给已挂载的前端；重复打开按新请求刷新
+        let _ = app.emit("open_history_session", session_id);
+        Ok(())
+    } else {
+        Err("History window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn hide_history_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("history") {
+        let _ = window.hide();
+        Ok(())
+    } else {
+        Err("History window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn minimize_history_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("history") {
+        let _ = window.minimize();
+        Ok(())
+    } else {
+        Err("History window not found".to_string())
+    }
+}
+
+#[tauri::command]
+fn toggle_maximize_history_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("history") {
+        if window.is_maximized().unwrap_or(false) {
+            let _ = window.unmaximize();
+        } else {
+            let _ = window.maximize();
+        }
+        Ok(())
+    } else {
+        Err("History window not found".to_string())
+    }
+}
+
 #[tauri::command]
 fn hide_overlay(app: AppHandle) {
     // 主动关闭先作废文件拖放会话，再结束本次悬浮窗会话。
@@ -681,9 +735,10 @@ pub fn run() {
                 &initial_config.general.ui_style,
                 &initial_config.general.theme,
             );
-            if let Some(main_win) = app.get_webview_window("main") {
-                let icon = tauri::include_image!("icons/icon.png");
-                let _ = main_win.set_icon(icon);
+            for label in ["main", "history"] {
+                if let Some(window) = app.get_webview_window(label) {
+                    let _ = window.set_icon(tauri::include_image!("icons/icon.png"));
+                }
             }
 
             // 初始化桌面常驻悬浮球
@@ -713,7 +768,8 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
+                // 设置与历史窗口都是常驻隐藏，关闭只隐藏，保留界面状态
+                if matches!(window.label(), "main" | "history") {
                     api.prevent_close();
                     let _ = window.hide();
                 }
@@ -736,6 +792,10 @@ pub fn run() {
             hide_main_window,
             minimize_main_window,
             toggle_maximize_main_window,
+            open_history_window,
+            hide_history_window,
+            minimize_history_window,
+            toggle_maximize_history_window,
             close_web_window,
             minimize_web_window,
             toggle_maximize_web_window,

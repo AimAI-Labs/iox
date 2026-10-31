@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import {
   MessageSquare,
   Search,
@@ -35,11 +36,9 @@ function formatFullTime(timestamp: number): string {
 export interface SessionsTabProps {
   actions: ActionConfig[];
   onOpenViewer: (sessionId?: string) => void;
-  /** 查看面板删除或清空会话后递增，用于刷新这里的列表。 */
-  refreshToken?: number;
 }
 
-export const SessionsTab: React.FC<SessionsTabProps> = ({ actions, onOpenViewer, refreshToken = 0 }) => {
+export const SessionsTab: React.FC<SessionsTabProps> = ({ actions, onOpenViewer }) => {
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
 
@@ -72,7 +71,24 @@ export const SessionsTab: React.FC<SessionsTabProps> = ({ actions, onOpenViewer,
 
   useEffect(() => {
     void fetchSessions();
-  }, [fetchSessions, refreshToken]);
+  }, [fetchSessions]);
+
+  // 查看窗口删除或清空会话后广播，这里保持列表与数据库一致
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen('chat_sessions_changed', () => {
+      void fetchSessions();
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch((error) => {
+        console.warn('Failed to listen for session changes:', error);
+      });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [fetchSessions]);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();

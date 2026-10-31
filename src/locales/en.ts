@@ -146,8 +146,7 @@ export const en: TranslationTree = {
   },
   sessionViewer: {
     title: 'Session History',
-    back: 'Back',
-    close: 'Close (Esc)',
+    subtitle: 'Review saved API conversations by date with every turn preserved',
     count: '{count} sessions',
     listLabel: 'Sessions',
     searchPlaceholder: 'Search titles, prompts, answers',
@@ -212,7 +211,7 @@ export const en: TranslationTree = {
       assistant: 'Assistant',
     },
     openViewer: 'Open viewer',
-    openViewerHint: 'Browse the full multi-turn conversation in the viewer panel',
+    openViewerHint: 'Browse the full multi-turn conversation in a new window',
     viewerDetail: 'Open viewer',
   },
   settings: {

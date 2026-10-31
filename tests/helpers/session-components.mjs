@@ -52,6 +52,7 @@ export function mountSessionView(view = 'hook', invoke = async () => [], overrid
   const modules = {
     react: { ...react, default: react },
     '@tauri-apps/api/core': { invoke: (command, args) => { calls.push({ command, args }); return invoke(command, args); } },
+    '@tauri-apps/api/event': { listen: async () => () => {}, emit: async () => {} },
     '@/hooks/useTranslation': { useTranslation: () => ({ resolvedLanguage: 'en', t: (key) => key }) },
     '@/hooks/useCopyFeedback': { useCopyFeedback: () => ({ copied: false, copy() {} }) },
     '@/lib/utils': { cn: (...items) => items.filter(Boolean).join(' ') },

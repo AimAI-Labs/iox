@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { emit } from '@tauri-apps/api/event';
 import {
-  ArrowLeft, Check, Clock, Copy, FolderOpen, Hash, Layers, MessageSquare,
+  Check, Clock, Copy, FolderOpen, Hash, Layers, MessageSquare,
   Search, Sparkles, Trash2, X,
 } from 'lucide-react';
 import type { ActionConfig } from '@/types/config';
 import type { ChatSessionData, SessionStorageError } from '@/types/session';
 import { Button, Select } from '@/components/ui';
 import { SessionStorageAlert } from '@/components/SessionStorageAlert';
+import { SessionTurnList } from '@/components/settings/SessionTurnList';
 import { useCopyFeedback } from '@/hooks/useCopyFeedback';
 import { useTranslation } from '@/hooks/useTranslation';
 import { cn } from '@/lib/utils';
@@ -22,32 +24,28 @@ import {
   sessionHasStatus,
   type SessionRecord,
 } from '@/lib/session-view';
-import { SessionTurnList } from './SessionTurnList';
 
-// 略长于退场动画，保证淡出完整播放后再卸载
-const EXIT_ANIMATION_MS = 180;
 // 破坏性操作需要二次确认的时间窗口
 const CONFIRM_TIMEOUT_MS = 4000;
+// 会话增删由窗口自己完成，其他窗口据此刷新各自的列表
+const SESSIONS_CHANGED_EVENT = 'chat_sessions_changed';
 
-export interface SessionViewerPanelProps {
-  isOpen: boolean;
+export interface SessionViewerProps {
   actions: ActionConfig[];
   initialSessionId?: string | null;
-  onClose: () => void;
-  /** 删除或清空会话后通知设置页刷新自己的列表。 */
-  onDataChanged?: () => void;
+  /** 每次从其他窗口请求打开时递增，用于重新读取列表并定位会话。 */
+  requestRevision?: number;
+  onRequestClose?: () => void;
 }
 
-/** 历史会话查看面板：覆盖设置内容区，提供列表检索、结构化轮次与元信息。 */
-export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
-  isOpen,
+/** 历史会话查看视图：窗口主体内容，列表检索、结构化轮次与元信息。 */
+export const SessionViewer: React.FC<SessionViewerProps> = ({
   actions,
   initialSessionId = null,
-  onClose,
-  onDataChanged,
+  requestRevision = 0,
+  onRequestClose,
 }) => {
   const { t } = useTranslation();
-  const [isMounted, setIsMounted] = useState(isOpen);
   const [sessions, setSessions] = useState<ChatSessionData[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId);
   const [query, setQuery] = useState('');
@@ -86,24 +84,13 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
     }
   }, []);
 
-  // 打开时重新读取，避免展示面板打开前的陈旧快照
+  // 每次打开请求重新读取，避免展示窗口打开前的陈旧快照
   useEffect(() => {
-    if (!isOpen) return;
     setSelectedId(initialSessionId ?? null);
     setPendingDeleteId(null);
     setConfirmClear(false);
     void fetchSessions();
-  }, [isOpen, initialSessionId, fetchSessions]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setIsMounted(true);
-      return;
-    }
-    if (!isMounted) return;
-    const timer = window.setTimeout(() => setIsMounted(false), EXIT_ANIMATION_MS);
-    return () => window.clearTimeout(timer);
-  }, [isOpen, isMounted]);
+  }, [requestRevision, initialSessionId, fetchSessions]);
 
   useEffect(() => {
     if (!confirmClear) return;
@@ -147,20 +134,19 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
 
   // 选中项滚动到可视区，并让详情回到顶部
   useEffect(() => {
-    if (!isOpen || !active) return;
+    if (!active) return;
     const node = listRef.current?.querySelector<HTMLElement>(
       `[data-session-id="${CSS.escape(active.session.id)}"]`
     );
     node?.scrollIntoView({ block: 'nearest' });
     detailRef.current?.scrollTo({ top: 0 });
-  }, [isOpen, active]);
+  }, [active]);
 
   useEffect(() => {
-    if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onClose();
+        onRequestClose?.();
         return;
       }
       if (event.altKey || event.ctrlKey || event.metaKey) return;
@@ -175,7 +161,7 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, moveSelection]);
+  }, [onRequestClose, moveSelection]);
 
   const exportLabels = useMemo(() => sessionExportLabels(t), [t]);
 
@@ -183,6 +169,12 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
     if (!active) return;
     await copy(exportSessionMarkdown(active.session, active.view, exportLabels));
   };
+
+  const notifySessionsChanged = useCallback(() => {
+    void emit(SESSIONS_CHANGED_EVENT).catch((error) => {
+      console.warn('Failed to broadcast session changes:', error);
+    });
+  }, []);
 
   const handleDelete = async (id: string) => {
     if (pendingDeleteId !== id) {
@@ -199,7 +191,7 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
       setSessions((previous) => previous.filter((session) => session.id !== id));
       setSelectedId((previous) => (previous === id ? null : previous));
       setStorageError((previous) => (previous === 'delete' ? null : previous));
-      onDataChanged?.();
+      notifySessionsChanged();
     } catch (error) {
       if (!alive.current) return;
       setStorageError('delete');
@@ -219,7 +211,7 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
       setSessions([]);
       setSelectedId(null);
       setStorageError((previous) => (previous === 'clear' ? null : previous));
-      onDataChanged?.();
+      notifySessionsChanged();
     } catch (error) {
       if (!alive.current) return;
       setStorageError('clear');
@@ -235,9 +227,6 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
     }
   };
 
-  if (!isMounted) return null;
-  const isClosing = isMounted && !isOpen;
-
   const dayLabel = (timestamp: number) => {
     if (!timestamp) return t('sessionViewer.unknownDate');
     const startOfToday = new Date();
@@ -249,93 +238,79 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-label={t('sessionViewer.title')}
-      className={cn(
-        'absolute inset-0 z-40 flex flex-col overflow-hidden bg-[var(--bg-overlay-card)] backdrop-blur-2xl select-text',
-        isClosing
-          ? 'animate-out fade-out duration-150 fill-mode-forwards pointer-events-none'
-          : 'animate-in fade-in duration-150'
-      )}
-    >
-      {/* 顶部工具条 */}
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/40 px-3 select-none">
-        <Button variant="ghost" size="sm" className="gap-1.5" onClick={onClose} title={t('sessionViewer.back')}>
-          <ArrowLeft size={14} />
-          <span>{t('sessionViewer.back')}</span>
-        </Button>
-        <div className="h-4 w-px bg-border/60" />
-        <div className="flex min-w-0 items-baseline gap-2">
-          <span className="text-[13px] font-semibold text-foreground">{t('sessionViewer.title')}</span>
-          <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-            {t('sessionViewer.count', { count: filtered.length })}
-          </span>
+    <section className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-5 select-none">
+      {/* 顶部：标题与检索工具，与设置页各 Tab 的头部结构一致 */}
+      <header className="flex shrink-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold text-foreground">{t('sessionViewer.title')}</h2>
+          <p className="mt-1 text-xs text-muted-foreground">{t('sessionViewer.subtitle')}</p>
         </div>
 
-        <div className="relative ml-auto w-56 min-w-0">
-          <Search
-            size={13}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/70"
-          />
-          <input
-            type="text"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={t('sessionViewer.searchPlaceholder')}
-            className="h-8 w-full rounded-lg border border-border/60 bg-background/60 pl-8 pr-7 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-primary/60"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              className="absolute right-1.5 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
-              title={t('sessionViewer.clearSearch')}
-            >
-              <X size={11} />
-            </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="relative w-52 min-w-0">
+            <Search
+              size={13}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/70"
+            />
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t('sessionViewer.searchPlaceholder')}
+              className="h-8 w-full rounded-lg border border-border/60 bg-background/60 pl-8 pr-7 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-primary/60"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="absolute right-1.5 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+                title={t('sessionViewer.clearSearch')}
+              >
+                <X size={11} />
+              </button>
+            )}
+          </div>
+
+          {actionOptions.length > 2 && (
+            <Select
+              value={actionFilter}
+              options={actionOptions}
+              onChange={setActionFilter}
+              wrapperClassName="w-32 shrink-0"
+              aria-label={t('sessionViewer.filterAction')}
+            />
           )}
-        </div>
 
-        {actionOptions.length > 2 && (
-          <Select
-            value={actionFilter}
-            options={actionOptions}
-            onChange={setActionFilter}
-            wrapperClassName="w-32 shrink-0"
-            aria-label={t('sessionViewer.filterAction')}
-          />
-        )}
-
-        <div className="flex shrink-0 items-center gap-1">
-          <Button variant="ghost" size="icon-sm" onClick={handleOpenDirectory} title={t('sessionViewer.openDirectory')}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => void handleOpenDirectory()}
+            title={t('sessionViewer.openDirectory')}
+          >
             <FolderOpen size={13} />
+            <span>{t('sessionViewer.openDirectory')}</span>
           </Button>
           <Button
-            variant={confirmClear ? 'destructive' : 'ghost'}
-            size="icon-sm"
+            variant={confirmClear ? 'destructive' : 'outline'}
+            size="sm"
+            className="gap-1.5"
             onClick={() => void handleClearAll()}
             disabled={sessions.length === 0}
             title={confirmClear ? t('sessionViewer.confirmClear') : t('sessionViewer.clearAll')}
           >
             <Trash2 size={13} />
-          </Button>
-          <Button variant="ghost" size="icon-sm" onClick={onClose} title={t('sessionViewer.close')}>
-            <X size={14} />
+            <span>{confirmClear ? t('sessionViewer.confirmClear') : t('sessionViewer.clearAll')}</span>
           </Button>
         </div>
       </header>
 
-      {storageError && (
-        <div className="shrink-0 px-3 py-2">
-          <SessionStorageAlert error={storageError} />
-        </div>
-      )}
+      {storageError && <SessionStorageAlert error={storageError} />}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-4">
         {/* 会话列表 */}
-        <div className="flex w-[280px] shrink-0 flex-col border-r border-border/40 select-none">
-          <div className="flex h-8 shrink-0 items-center justify-between px-3 text-[10.5px] text-muted-foreground">
+        <div className="flex w-[280px] shrink-0 flex-col overflow-hidden rounded-xl border border-border/50 bg-background/30">
+          <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/40 px-3 text-[11px] font-medium text-muted-foreground">
             <span>{t('sessionViewer.listLabel')}</span>
             <span className="font-mono tabular-nums">
               {filtered.length === records.length
@@ -344,7 +319,7 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
             </span>
           </div>
 
-          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 custom-scrollbar">
+          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-2 custom-scrollbar">
             {loading && records.length === 0 ? (
               <p className="px-2 py-10 text-center text-[11.5px] text-muted-foreground">
                 {t('sessionViewer.loading')}
@@ -443,10 +418,10 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
         </div>
 
         {/* 详情 */}
-        <section className="flex min-w-0 flex-1 flex-col">
+        <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/50 bg-background/30">
           {active ? (
             <>
-              <div className="flex shrink-0 items-start gap-3 border-b border-border/40 px-5 py-3">
+              <div className="flex shrink-0 items-start gap-3 border-b border-border/40 px-5 py-3 select-none">
                 <div className="min-w-0 flex-1">
                   <h2 className="truncate text-[14px] font-semibold text-foreground">
                     {active.session.title || t('sessionViewer.untitled')}
@@ -471,7 +446,7 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-1.5 select-none">
+                <div className="flex shrink-0 items-center gap-1.5">
                   <Button
                     variant="outline"
                     size="sm"
@@ -499,7 +474,7 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
                 </div>
               </div>
 
-              <div ref={detailRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4 custom-scrollbar">
+              <div ref={detailRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4 custom-scrollbar select-text">
                 {active.view.legacy && (
                   <div className="mb-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-400">
                     {t('sessionViewer.legacyHint')}
@@ -526,7 +501,7 @@ export const SessionViewerPanel: React.FC<SessionViewerPanelProps> = ({
           )}
         </section>
       </div>
-    </div>
+    </section>
   );
 };
 

@@ -11,6 +11,7 @@ import './App.css';
 
 // 懒加载非悬浮窗视图，极大加速 Overlay 首屏渲染与降低内存占用
 const Settings = lazy(() => import('@/components/settings').then((m) => ({ default: m.Settings })));
+const HistoryWindow = lazy(() => import('@/components/history').then((m) => ({ default: m.HistoryWindow })));
 const WebTitleBar = lazy(() => import('@/components/web').then((m) => ({ default: m.WebTitleBar })));
 
 export function App() {
@@ -85,7 +86,18 @@ export function App() {
     );
   }
 
-  // 3. Settings 设置面板视图 (主窗口异步载入)
+  // 3. 历史会话独立窗口：与设置窗口共用外框，只承载查看面板
+  if (windowLabel === 'history') {
+    return withTheme(
+      <I18nProvider languageSetting={config.general.language}>
+        <Suspense fallback={null}>
+          <HistoryWindow config={config} />
+        </Suspense>
+      </I18nProvider>
+    );
+  }
+
+  // 4. Settings 设置面板视图 (主窗口异步载入)
   return withTheme(
     <I18nProvider languageSetting={config.general.language}>
       <Toaster
