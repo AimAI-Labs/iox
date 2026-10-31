@@ -20,6 +20,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { WebWindowIcon } from './WebWindowIcon';
 
 export const HubTabBar: React.FC = () => {
   const uiTheme = useUiTheme();
@@ -305,6 +306,7 @@ export const HubTabBar: React.FC = () => {
 
   return (
     <div className="web-titlebar-root fixed inset-0 select-none overflow-hidden rounded-[var(--ui-web-card-radius)] bg-transparent">
+      <WebWindowIcon icon={activeIcon} actionId={currentActiveTab?.actionId} />
       <header
         className="web-card-titlebar flex h-[38px] max-h-[38px] items-center justify-between overflow-hidden border-b border-black/10 bg-[var(--bg-overlay-card)] px-3 text-foreground backdrop-blur-2xl dark:border-white/10"
         data-tauri-drag-region

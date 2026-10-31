@@ -119,6 +119,64 @@ pub fn apply_window_ui_style(window: &tauri::Window, native: bool, theme: Option
     }
 }
 
+const WEB_APP_ID_KEY: windows::Win32::Foundation::PROPERTYKEY = windows::Win32::Foundation::PROPERTYKEY {
+    fmtid: windows::core::GUID::from_u128(0x9f4c2855_9f79_4b39_a8d0_e1d42de1d5f3),
+    pid: 5,
+};
+
+/// SAFETY: hwnd is a live window owned by this process; the current thread has COM initialized.
+unsafe fn set_window_taskbar_id(
+    hwnd: windows::Win32::Foundation::HWND,
+    id: &str,
+) -> windows::core::Result<()> {
+    use windows::Win32::System::Com::StructuredStorage::{
+        PropVariantChangeType, PROPVARIANT, PVCHF_DEFAULT,
+    };
+    use windows::Win32::System::Variant::VT_LPWSTR;
+    use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow};
+    let source = PROPVARIANT::from(id);
+    let mut value = PROPVARIANT::default();
+    PropVariantChangeType(&mut value, &source, PVCHF_DEFAULT, VT_LPWSTR)?;
+    let store: IPropertyStore = SHGetPropertyStoreForWindow(hwnd)?;
+    store.SetValue(&WEB_APP_ID_KEY, &value)?;
+    store.Commit()
+}
+
+/// Give each Web card its own taskbar group before showing it, so its window icon is used.
+pub fn apply_web_taskbar_identity(window: &tauri::Window) -> Result<(), String> {
+    let hwnd = window.hwnd().map_err(|e| e.to_string())?;
+    let label_hash = blake3::hash(window.label().as_bytes()).to_hex();
+    let id = format!(
+        "{}.web.{}",
+        window.app_handle().config().identifier,
+        &label_hash[..16]
+    );
+    // SAFETY: Web cards are created on Tauri's COM-initialized UI thread. The property
+    // store copies the string; its COM reference and both variants are released on return.
+    unsafe { set_window_taskbar_id(windows::Win32::Foundation::HWND(hwnd.0 as _), &id) }
+        .map_err(|e| format!("Taskbar identity failed ({})", e.code()))
+}
+
+/// Tauri updates ICON_SMALL; Windows uses ICON_BIG for the taskbar and Alt+Tab.
+pub fn set_web_window_icon(
+    window: &tauri::Window,
+    icon: tauri::image::Image<'_>,
+) -> Result<(), String> {
+    window.set_icon(icon).map_err(|e| e.to_string())?;
+    let hwnd = window.hwnd().map_err(|e| e.to_string())?;
+    // SAFETY: called on the UI thread with a live owned window. Tauri retains the
+    // small icon until its next replacement or window destruction; the big icon
+    // shares that handle and must never destroy it independently.
+    unsafe {
+        let icon = SendMessageW(hwnd.0 as _, WM_GETICON, ICON_SMALL as _, 0);
+        if icon == 0 {
+            return Err("Web window icon unavailable".into());
+        }
+        SendMessageW(hwnd.0 as _, WM_SETICON, ICON_BIG as _, icon);
+    }
+    Ok(())
+}
+
 /// Run against the exact WRY container owned by this WebView, never another sibling view.
 fn with_web_child(view: &tauri::Webview, update: impl FnOnce(HWND) + Send + 'static) {
     let Ok(parent) = view.window().hwnd() else {
@@ -1033,6 +1091,44 @@ pub fn calculate_bubble_bar_width(actions: &[crate::config::ActionConfig], icon_
 mod tests {
     use super::*;
     use crate::config::ActionConfig;
+
+    #[test]
+    fn web_taskbar_identity_is_stored_on_its_window() {
+        use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+        use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow};
+        // SAFETY: this test owns COM initialization and a hidden window on this thread.
+        unsafe {
+            CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().unwrap();
+            let class = [83u16, 84, 65, 84, 73, 67, 0];
+            let hwnd = CreateWindowExW(
+                0,
+                class.as_ptr(),
+                std::ptr::null(),
+                WS_POPUP,
+                0,
+                0,
+                100,
+                100,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null(),
+            );
+            assert!(!hwnd.is_null());
+            let native = windows::Win32::Foundation::HWND(hwnd as _);
+            set_window_taskbar_id(native, "iox.test.web.alpha").unwrap();
+            {
+                let store: IPropertyStore = SHGetPropertyStoreForWindow(native).unwrap();
+                let value = store.GetValue(&WEB_APP_ID_KEY).unwrap();
+                assert_eq!(
+                    windows::core::BSTR::try_from(&value).unwrap().to_string(),
+                    "iox.test.web.alpha"
+                );
+            }
+            DestroyWindow(hwnd);
+            CoUninitialize();
+        }
+    }
 
     #[test]
     fn test_position_calculation_basic() {

@@ -565,6 +565,9 @@ fn execute_multi_window_action(
         crate::window_manager::to_window_theme(&config.general.theme),
     );
     let icon = tauri::include_image!("icons/icon.png");
+    if let Err(error) = crate::window_manager::apply_web_taskbar_identity(&window) {
+        eprintln!("{error}");
+    }
     let _ = window.set_icon(icon);
 
     let title_param = urlencoding::encode(&action.name);
@@ -798,6 +801,9 @@ fn execute_tabbed_hub_action(
         crate::window_manager::to_window_theme(&config.general.theme),
     );
     let icon = tauri::include_image!("icons/icon.png");
+    if let Err(error) = crate::window_manager::apply_web_taskbar_identity(&window) {
+        eprintln!("{error}");
+    }
     let _ = window.set_icon(icon);
 
     // 构建顶部 Hub 专用多标签栏 Webview

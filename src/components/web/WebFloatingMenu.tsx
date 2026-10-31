@@ -10,6 +10,8 @@ import type { WebMenuChange, WebMenuLayout } from '@/lib/webChromeClient';
 import { useWebWheel } from '@/hooks/useWebWheel';
 import { WebMenuAction, type WebMenuOperation } from './WebMenuAction';
 import { WebQuickWheel } from './WebQuickWheel';
+import { WebWindowIcon } from './WebWindowIcon';
+import { actionForWebWindow } from './WebFrame';
 import './WebFloatingMenu.css';
 
 interface WebFloatingMenuProps {
@@ -264,6 +266,9 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
     } finally { setRefreshing(false); }
   }, false);
   const currentIndex = hubState.tabs.findIndex((tab) => tab.actionId === hubState.activeTabId);
+  const activeTab = hubState.tabs[currentIndex];
+  const activeAction = hub ? actions.find((action) => action.id === activeTab?.actionId)
+    : actionForWebWindow(actions, windowLabel);
   const activeTitle = hubState.tabs[currentIndex]?.name ?? title;
   const available = actions.filter((action) => action.enabled && action.actionType === 'web'
     && !hubState.tabs.some((tab) => tab.actionId === action.id));
@@ -314,6 +319,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
       onPointerEnter={wheel.enter} onPointerLeave={wheel.leave}
       onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) wheel.leave(); }}
       role={layout.expanded ? 'dialog' : undefined} aria-label={t('settings.web.menu.title')}>
+      <WebWindowIcon icon={activeAction?.icon ?? activeTab?.icon} actionId={activeAction?.id ?? activeTab?.actionId} />
       <header className="web-menu-header" style={!layout.expanded ? { left: layout.buttonX, top: layout.buttonY } : undefined}>
         {layout.expanded && <>
           <button type="button" className="web-menu-grip" aria-label={t('settings.web.menu.drag')} {...dragHandlers}>

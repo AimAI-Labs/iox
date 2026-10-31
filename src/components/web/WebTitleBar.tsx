@@ -7,6 +7,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { HubTabBar } from './HubTabBar';
 import { getIconThemeColor } from '@/components/Icons';
 import { actionForWebWindow } from './WebFrame';
+import { WebWindowIcon } from './WebWindowIcon';
 import { WebFloatingMenu } from './WebFloatingMenu';
 import { useWebChrome } from '@/hooks/useWebChrome';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -133,6 +134,7 @@ const SingleWebTitleBar: React.FC<WebTitleBarProps> = ({
 
   return (
     <div className="web-titlebar-root fixed inset-0 select-none overflow-hidden rounded-[var(--ui-web-card-radius)] bg-transparent">
+      <WebWindowIcon icon={action?.icon} actionId={action?.id} />
       {/* 原生画布覆盖整张卡片，但只保留标题栏与描边区域可见，其余部分交给官网页面 */}
       <div className="web-card-titlebar flex h-[38px] max-h-[38px] flex-col overflow-hidden border-b border-black/10 bg-[var(--bg-overlay-card)] text-foreground backdrop-blur-2xl dark:border-white/10">
         <MacTitleBar

@@ -5,6 +5,7 @@ Run: uv run --offline --with playwright python tests/web_chrome_native.py
 """
 import ctypes
 from ctypes import wintypes
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -65,6 +66,62 @@ user32.GetDpiForWindow.argtypes = [wintypes.HWND]
 user32.GetDpiForWindow.restype = wintypes.UINT
 gdi32.GetPixel.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
 gdi32.GetPixel.restype = wintypes.DWORD
+user32.SendMessageTimeoutW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+    wintypes.UINT, wintypes.UINT, ctypes.POINTER(ctypes.c_size_t)]
+user32.SendMessageTimeoutW.restype = wintypes.LPARAM
+user32.DrawIconEx.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int, wintypes.HICON,
+    ctypes.c_int, ctypes.c_int, wintypes.UINT, wintypes.HBRUSH, wintypes.UINT]
+gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
+gdi32.CreateCompatibleDC.restype = wintypes.HDC
+gdi32.CreateDIBSection.argtypes = [wintypes.HDC, ctypes.c_void_p, wintypes.UINT,
+    ctypes.POINTER(ctypes.c_void_p), wintypes.HANDLE, wintypes.DWORD]
+gdi32.CreateDIBSection.restype = wintypes.HBITMAP
+gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HANDLE]
+gdi32.SelectObject.restype = wintypes.HANDLE
+gdi32.DeleteDC.argtypes = [wintypes.HDC]
+
+
+class BitmapHeader(ctypes.Structure):
+    _fields_ = [('size', wintypes.DWORD), ('width', wintypes.LONG), ('height', wintypes.LONG),
+        ('planes', wintypes.WORD), ('bits', wintypes.WORD), ('compression', wintypes.DWORD),
+        ('image_size', wintypes.DWORD), ('xppm', wintypes.LONG), ('yppm', wintypes.LONG),
+        ('colors', wintypes.DWORD), ('important', wintypes.DWORD)]
+
+
+def check_window_icon(pid, title, brand, page):
+    hwnd = native_window(pid, title)
+    checks = {
+        'DeepSeek': lambda b, g, r: b > 200 and 85 <= g <= 130 and 60 <= r <= 90,
+        'Qwen': lambda b, g, r: b > 170 and r > 85 and r > g + 15,
+        'Xiaomi': lambda b, g, r: r > 240 and 80 <= g <= 130 and b < 30,
+    }
+    for _ in range(50):
+        icon = ctypes.c_size_t()
+        assert user32.SendMessageTimeoutW(hwnd, 0x007F, 1, 0, 2, 2000, ctypes.byref(icon)), 'Window icon query blocked'
+        if not icon.value:
+            page.wait_for_timeout(100)
+            continue
+        dc = gdi32.CreateCompatibleDC(None)
+        header = BitmapHeader(ctypes.sizeof(BitmapHeader), 64, -64, 1, 32, 0, 0, 0, 0, 0, 0)
+        bits = ctypes.c_void_p()
+        bitmap = gdi32.CreateDIBSection(dc, ctypes.byref(header), 0, ctypes.byref(bits), None, 0)
+        assert bitmap and bits.value
+        previous = gdi32.SelectObject(dc, bitmap)
+        try:
+            ctypes.memset(bits, 0, 64 * 64 * 4)
+            assert user32.DrawIconEx(dc, 0, 0, icon.value, 64, 64, 0, None, 3), ctypes.get_last_error()
+            pixels = ctypes.string_at(bits, 64 * 64 * 4)
+            colored = sum(checks[brand](*pixels[index:index + 3]) for index in range(0, len(pixels), 4))
+        finally:
+            gdi32.SelectObject(dc, previous)
+            gdi32.DeleteObject(bitmap)
+            gdi32.DeleteDC(dc)
+        if colored > 20:
+            digest = hashlib.sha256(pixels).hexdigest()
+            print(f'{title}: native window icon matches {brand}', flush=True)
+            return {'title': title, 'iconBrand': brand, 'iconHash': digest}
+        page.wait_for_timeout(100)
+    raise AssertionError(('Native window icon did not update', title, brand))
 dwm = ctypes.WinDLL('dwmapi', use_last_error=True)
 dwm.DwmGetWindowAttribute.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
 dwm.DwmGetWindowAttribute.restype = wintypes.LONG
@@ -313,6 +370,13 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             bar.wait_for_selector('.web-menu-trigger')
             assert invoke(bar, 'get_web_chrome')['headless'], 'Web toolbar stopped responding after opening the card'
             assert invoke(main, 'get_config'), 'Main window stopped responding after opening the card'
+            alpha_icon = check_window_icon(process.pid, 'IOX Native Alpha', 'DeepSeek', main)
+            results.append(alpha_icon)
+            try:
+                invoke(main, 'set_web_window_icon', {'actionId': 'alpha', 'width': 64, 'height': 64, 'rgba': [0] * (64 * 64 * 4)})
+                raise AssertionError('Settings view must not set a Web window icon')
+            except Exception as error:
+                assert 'owning local Web toolbar' in str(error), error
             for _ in range(100):
                 frames = [page for page in context.pages if 'view=web_frame' in page.url and 'web_win_alpha' in page.url]
                 if frames:
@@ -399,6 +463,7 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             expect(site.get_by_role('textbox')).to_have_value('Keep native conversation')
             main.wait_for_timeout(150)
             results.append(inspect_window(process.pid, 'IOX Native Alpha', False))
+            assert check_window_icon(process.pid, 'IOX Native Alpha', 'DeepSeek', main)['iconHash'] == alpha_icon['iconHash']
             config['general'].update(webHeadlessMode=True, webWindowMode='tabbed')
             invoke(main, 'save_config', {'newConfig': config})
             for action in ['alpha', 'beta']:
@@ -410,6 +475,12 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
                 main.wait_for_timeout(100)
             hub = bars[0]
             hub.wait_for_selector('.web-menu-trigger')
+            beta_icon = check_window_icon(process.pid, 'IOX Web Hub', 'Qwen', main)
+            results.append(beta_icon)
+            assert beta_icon['iconHash'] != alpha_icon['iconHash']
+            assert invoke(hub, 'set_web_window_icon', {'actionId': 'alpha', 'width': 64, 'height': 64,
+                'rgba': [255, 0, 0, 255] * (64 * 64)}) is False, 'Late icon replaced the active tab icon'
+            assert check_window_icon(process.pid, 'IOX Web Hub', 'Qwen', main)['iconHash'] == beta_icon['iconHash']
             for _ in range(100):
                 frames = [page for page in context.pages if 'view=web_frame' in page.url and 'label=web_hub' in page.url]
                 if frames:
@@ -422,9 +493,18 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             main.wait_for_timeout(150)
             results.append(inspect_window(process.pid, 'IOX Web Hub', True))
             invoke(hub, 'switch_web_hub_tab', {'actionId': 'alpha'})
+            assert check_window_icon(process.pid, 'IOX Web Hub', 'DeepSeek', main)['iconHash'] == alpha_icon['iconHash']
             expect(hub_frame.locator('#root > div')).to_have_css('background-color', 'rgb(77, 107, 254)')
             if os.environ.get('IOX_NATIVE_TEST_CHECK_PIXELS'):
                 results.append(check_frame_pixels(process.pid, 'IOX Web Hub', (77, 107, 254), main))
+            config['general']['webHeadlessMode'] = False
+            invoke(main, 'save_config', {'newConfig': config})
+            hub.wait_for_selector('.web-titlebar-root')
+            invoke(hub, 'switch_web_hub_tab', {'actionId': 'beta'})
+            assert check_window_icon(process.pid, 'IOX Web Hub', 'Qwen', main)['iconHash'] == beta_icon['iconHash']
+            config['general']['webHeadlessMode'] = True
+            invoke(main, 'save_config', {'newConfig': config})
+            hub.wait_for_selector('.web-menu-trigger')
             invoke(hub, 'close_web_hub_tab', {'actionId': 'beta'})
             invoke(hub, 'close_web_hub_tab', {'actionId': 'alpha'})
             invoke(main, 'trigger_web_action', {'actionId': 'beta', 'text': '', 'copyToClipboard': False})
@@ -435,9 +515,13 @@ with (output / 'app.log').open('w', encoding='utf-8') as log:
             invoke(main, 'save_config', {'newConfig': config})
             main.wait_for_timeout(150)
             results.append(inspect_window(process.pid, 'IOX Web Hub', True))
+            config['actions'][0]['icon'] = 'Xiaomi'
+            invoke(main, 'save_config', {'newConfig': config})
+            invoke(main, 'trigger_web_action', {'actionId': 'alpha', 'text': '', 'copyToClipboard': False})
+            results.append(check_window_icon(process.pid, 'IOX Web Hub', 'Xiaomi', main))
             (output / 'result.json').write_text(json.dumps(results, indent=2), encoding='utf-8')
             browser.close()
-        print('Native Windows checks passed: frame colors and clipping, rounded corners, live configuration, full content, toolbar Z order, preserved input, maximize/restore, minimize anchor, caller validation, Hub reopen.')
+        print('Native Windows checks passed: AI taskbar icons, Hub icon switching, frame colors and clipping, rounded corners, live configuration, full content, toolbar Z order, preserved input, maximize/restore, minimize anchor, caller validation, Hub reopen.')
     finally:
         process.terminate()
         try:

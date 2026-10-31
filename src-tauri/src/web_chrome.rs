@@ -517,6 +517,77 @@ pub async fn layout_web_menu(
     menu_layout(webview, expanded, wheel, position, true).await
 }
 
+fn validate_window_icon(width: u32, height: u32, length: usize) -> Result<(), String> {
+    if width != height
+        || !(16..=128).contains(&width)
+        || length != width as usize * height as usize * 4
+    {
+        return Err("Invalid Web window icon image".into());
+    }
+    Ok(())
+}
+
+fn icon_action_matches(label: &str, action_id: &str, active_tab: Option<&str>) -> bool {
+    if label == "web_hub" {
+        return active_tab == Some(action_id);
+    }
+    let id: String = action_id
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    label == format!("web_win_{id}")
+}
+
+/// Only the owning local toolbar may submit its rendered action icon.
+#[tauri::command]
+pub async fn set_web_window_icon(
+    webview: tauri::Webview,
+    action_id: String,
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+) -> Result<bool, String> {
+    let window = caller_window(&webview)?;
+    validate_window_icon(width, height, rgba.len())?;
+    let dispatch = window.clone();
+    let (send, receive) = tokio::sync::oneshot::channel();
+    dispatch
+        .run_on_main_thread(move || {
+            let result = (|| {
+                let active = if window.label() == "web_hub" {
+                    window
+                        .app_handle()
+                        .state::<AppState>()
+                        .web_hub_state
+                        .lock()
+                        .map_err(|_| "Web Hub state unavailable".to_string())?
+                        .active_tab_id
+                        .clone()
+                } else {
+                    None
+                };
+                if !icon_action_matches(window.label(), &action_id, active.as_deref()) {
+                    return Ok(false);
+                }
+                // All state locks are released before calling the native window dispatcher.
+                crate::window_manager::set_web_window_icon(
+                    &window,
+                    tauri::image::Image::new_owned(rgba, width, height),
+                )?;
+                Ok(true)
+            })();
+            let _ = send.send(result);
+        })
+        .map_err(|e| e.to_string())?;
+    receive.await.map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 pub fn set_web_menu_action_pinned(
     webview: tauri::Webview,
@@ -569,6 +640,28 @@ pub async fn open_web_page_in_browser(webview: tauri::Webview) -> Result<(), Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn window_icon_rejects_invalid_image_buffers() {
+        assert!(validate_window_icon(64, 64, 64 * 64 * 4).is_ok());
+        for (width, height, length) in [
+            (0, 0, 0),
+            (256, 256, 256 * 256 * 4),
+            (64, 32, 64 * 32 * 4),
+            (64, 64, 64 * 64 * 4 - 1),
+        ] {
+            assert!(validate_window_icon(width, height, length).is_err());
+        }
+    }
+
+    #[test]
+    fn window_icon_only_accepts_the_current_action() {
+        assert!(icon_action_matches("web_win_alpha", "alpha", None));
+        assert!(!icon_action_matches("web_win_alpha", "beta", None));
+        assert!(icon_action_matches("web_hub", "beta", Some("beta")));
+        assert!(!icon_action_matches("web_hub", "alpha", Some("beta")));
+        assert!(!icon_action_matches("web_hub", "alpha", None));
+    }
 
     #[test]
     fn headless_frame_reserves_all_four_edges_at_each_dpi() {

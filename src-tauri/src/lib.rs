@@ -802,6 +802,7 @@ pub fn run() {
             reload_web_webview,
             web_chrome::get_web_chrome,
             web_chrome::layout_web_menu,
+            web_chrome::set_web_window_icon,
             web_chrome::set_web_menu_action_pinned,
             web_chrome::open_web_page_in_browser,
             open_in_browser,
