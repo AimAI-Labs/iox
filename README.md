@@ -1,268 +1,186 @@
-# IOX
+<p align="center">
+  <img src="public/iox.png" alt="IOX logo" width="88" height="88" />
+</p>
+
+<h1 align="center">IOX</h1>
+
+<p align="center"><strong>Select text. Ask AI. Keep working.</strong></p>
 
 <p align="center">
-  <img src="public/favicon.ico" alt="IOX Logo" width="80" height="80" style="border-radius: 16px; margin-bottom: 12px;" />
+  <strong>English</strong> · <a href="README_zh.md">简体中文</a> ·
+  <a href="https://github.com/AimAI-Labs/iox/releases">Downloads</a> ·
+  <a href="https://github.com/AimAI-Labs/iox/issues">Feedback</a>
 </p>
 
 <p align="center">
-  <strong>Lightning-fast, lightweight, and non-intrusive Windows global text-selection AI assistant & desktop productivity engine.</strong>
+  <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078d6" alt="Windows 10 and 11" />
+  <img src="https://img.shields.io/badge/Tauri-2-24c8d8?logo=tauri&amp;logoColor=white" alt="Tauri 2" />
+  <img src="https://img.shields.io/badge/Rust-2021-orange?logo=rust" alt="Rust 2021 edition" />
+  <img src="https://img.shields.io/badge/React-19-61dafb?logo=react&amp;logoColor=black" alt="React 19" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License" /></a>
 </p>
 
-<p align="center">
-  <a href="./README.md"><strong>English</strong></a> •
-  <a href="./README_zh.md">简体中文</a>
-</p>
+**IOX (Input/Output Extension)** is a Windows text-selection AI assistant built with Tauri 2, Rust, and React 19. Select text in another app, then translate, summarize, or run a custom action from a compact floating toolbar. Read API answers in place or continue in an integrated AI website window.
 
-<p align="center">
-  <a href="https://tauri.app/"><img src="https://img.shields.io/badge/Tauri-v2-blue?logo=tauri&logoColor=white" alt="Tauri v2"></a>
-  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-2021_Edition-orange?logo=rust&logoColor=white" alt="Rust 2021"></a>
-  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19.x-61dafb?logo=react&logoColor=black" alt="React 19"></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.8-blue?logo=typescript&logoColor=white" alt="TypeScript"></a>
-  <a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/TailwindCSS-v3.4-38bdf8?logo=tailwindcss&logoColor=white" alt="Tailwind CSS"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License MIT"></a>
-  <img src="https://img.shields.io/badge/Platform-Windows_10%2F11-0078d6?logo=windows&logoColor=white" alt="Platform">
-</p>
+![IOX selection toolbar with translation, summary, website, and copy actions](assets/readme/bubble-en.png)
 
-<p align="center">
-  <a href="#-key-features">Key Features</a> •
-  <a href="#-system-architecture">Architecture</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-configuration-guide">Configuration</a> •
-  <a href="#-roadmap">Roadmap</a> •
-  <a href="#-license">License</a>
-</p>
+[Features](#features) · [Screenshots](#screenshots) · [Getting started](#getting-started) · [Configuration](#configuration) · [Data and privacy](#data-and-privacy) · [Development](#development)
 
----
+## Features
 
-## 📖 Introduction
+- **Selection toolbar** — Global mouse and keyboard hooks detect selections. Movement checks, modifier filters, UI Automation, and a process blacklist help avoid accidental triggers. The bubble is shown without activating its window, preserving focus in the source app.
+- **API conversations** — OpenAI-compatible streaming, collapsible reasoning, Markdown, math, highlighted code, quotes, follow-up questions, message editing, regeneration, multiple tabs, and Markdown export. Pin a card to protect it from new selections and passive dismissal.
+- **Integrated websites** — Open web actions in separate WebView2 windows or one tabbed Web Hub. Pass text through URL templates or supported website input adapters, with optional automatic submission.
+- **Floating website controls** — Optional headless mode replaces the website title bar with a draggable menu. Hover for pinned shortcuts; expand it for navigation and window controls. Pinned actions are shared across website cards.
+- **File drag menu** — An optional global drag-and-hover menu passes attachments to supported website upload adapters. It is disabled by default; selecting a file with a click does not trigger it.
+- **History and sync** — Local SQLite API history with deduplication and up to 200 sessions; separate website history collection and caching. Optional PostgreSQL sync shares API history between devices while local access remains available offline.
+- **Desktop controls** — Floating ball, configurable global shortcut (default `Alt+Space`), system tray, Chinese/English UI, light/dark/system themes, and `classic` custom or `windows` native window frames.
 
-**IOX** is a next-generation global text-selection AI assistant designed specifically for Windows. Built on **Tauri v2 + Rust + React 19**, IOX integrates large language model capabilities seamlessly into your daily reading, coding, and writing workflows with sub-millisecond responsiveness, minimal memory footprint, and a non-intrusive user experience.
+## Screenshots
 
-Whether you are in a browser, code editor, PDF viewer, or office suite, simply select any text, and IOX instantly brings up a minimalist capsule bubble or an expandable streaming card beside your cursor—supporting in-place streaming answers, translations, code explanations, DeepSeek R1 reasoning chain visualization, and one-click direct navigation to major AI web portals.
+The images below are browser captures of the current UI components with sample data and simulated desktop calls. The website content is illustrative; these previews do not demonstrate native Windows focus, dragging, or live provider responses.
 
----
+**Action management** — Configure API, website, and copy actions, reorder them, and preview the selection toolbar.
 
-## ✨ Key Features
+![IOX action settings with a live toolbar preview and action list](assets/readme/settings-en.png)
 
-### 🖱️ 1. Global Non-Intrusive Text Selection & Bubble Bar
-* **Instant Selection Response**: Utilizes a native Windows low-level mouse hook (`WH_MOUSE_LL`) to detect text selection and release events with zero lag, popping up a sleek capsule bubble bar right beside your cursor.
-* **Icon-Only Minimalist Mode**: Supports switching to an ultra-clean icon-only mode to minimize visual distraction.
-* **Drag Files to AI Websites**: Enable **File drag menu** in **Settings → General** (off by default), drag files from the desktop or Explorer, and pause for 1 second to reveal the AI menu. Drop onto an AI to open its website and attach the files. Single clicks do not show the menu; movement resets the timer, and Escape or dropping outside cancels. Ctrl/Shift multi-selection is supported, up to 10 files and 20 MiB total; folders are excluded. Confirm the website's upload result, write your question, and send manually. On-page notices guide you when sign-in or an attachment button is needed.
-* **Smart Boundary Avoidance & Drag Awareness**: Automatically adjusts positioning based on cursor coordinates, screen edges, and HiDPI scaling factors to never obscure selected text.
+<details>
+<summary>API conversation and floating website menu</summary>
 
-### 🛡️ 2. Zero Focus Stealing & Native Anti-Mistouch
-* **`WS_EX_NOACTIVATE` Zero Focus Stealing**: The floating bubble window is injected with the Windows `WS_EX_NOACTIVATE` extended style, **never stealing focus from the host application**. Your highlighted text selection and cursor position stay intact.
-* **Quadruple Anti-Mistouch Filter**:
-  * **Euclidean Distance Check**: Accurately differentiates between simple clicks and text selection drags;
-  * **Valid Character & Whitespace Filter**: Ignores pure whitespace or meaningless ultra-short selections;
-  * **Modifier Key Filter**: Suppresses unintended triggers during system operations involving `Ctrl`, `Shift`, `Alt`, or `Win` keys;
-  * **Process Blacklist with Quick Picker**: Built-in blacklist filtering with an intuitive mouse picker to easily select and blacklist target app windows.
+| API card · dark theme | Website menu · light theme |
+| --- | --- |
+| ![API card displaying sample reasoning and a syntax-highlighted TypeScript answer](assets/readme/api-card-en.png) | ![Floating website menu with pinned actions, navigation, and window controls over an illustrative page](assets/readme/web-menu-en.png) |
 
-### 📋 3. Zero-Pollution Safe Clipboard Recovery
-* **Seamless Clipboard Protection**: When text extraction is triggered, IOX creates an in-memory backup of your system clipboard, simulates a millisecond-level `Ctrl+C` to copy the selected text, and **immediately restores the original clipboard content**—preserving your copy-paste history seamlessly.
+</details>
 
-### ⚡ 4. Hybrid Action Engine
-* **API In-Place Streaming Card**:
-  * Real-time character-by-character typewriter rendering powered by SSE (Server-Sent Events);
-  * **DeepSeek R1 / Reasoning Chains**: Native support for collapsible reasoning thought processes;
-  * **Rich Text Typography**: GitHub-flavored Markdown, KaTeX LaTeX mathematical formulas, syntax-highlighted code blocks with one-click copy;
-  * **Contextual Quotes & Follow-Up**: Select text within answers to quote it into the prompt box for continuous multi-turn conversations.
-* **Web Action Engine**:
-  * Uses dynamic URL templates (e.g., `https://tongyi.aliyun.com/qianwen/?q={text}`) or automatic clipboard injection to open your default browser;
-  * Seamlessly reuse existing logged-in sessions and free quotas on official AI websites (DeepSeek, Qwen, Kimi, ChatGPT, Claude, etc.).
+## Getting started
 
-### 🎨 5. Apple-Grade Modern UI/UX Design
-* **Frosted Glass / Mica Aesthetics**: Crystal-clear acrylic blur effects paired with refined soft shadows and smooth micro-animations.
-* **Water-Drop Ripple Theme Switch**: Smooth dark/light mode transitions triggered with a circular ripple origin centered on your mouse click.
-* **Mac-Style Traffic Light Title Bar**: Red (Close), Yellow (Collapse & retain current session context), Green (Full-screen expand).
-* **Multi-Tab Conversation Management**: Click `+` to open new sessions, horizontal mouse-wheel scrolling for overflowing tabs, and context menus to close tabs to the left, right, or others.
+1. Open [Releases](https://github.com/AimAI-Labs/iox/releases) and choose an available Windows installer or portable ZIP. Extract a portable archive before running `iox.exe`. Windows needs the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
+2. Open settings from the tray or floating ball. For API actions, enter your endpoint and API key in **Providers**, fetch or enter model IDs, and choose a default model. The bundled provider entries have no keys or models configured.
+3. In **Actions**, bind an API action to the provider, or enable a website action. Save your settings.
+4. Select text in an app and click an action in the bubble. API actions open a conversation card; website actions open an integrated website window. Website accounts must be signed in inside IOX.
 
-### 🔌 6. Open Model Ecosystem & Aggregation
-* Compatible with the standard **OpenAI API specification**, allowing instant connection to:
-  * **DeepSeek** (`deepseek-chat`, `deepseek-reasoner`)
-  * **OpenAI** (`gpt-4o`, `o1`, `gpt-4o-mini`)
-  * **Anthropic Claude** / **Google Gemini** (via compatible gateways)
-  * **Alibaba Cloud DashScope (Qwen)**
-  * **Zhipu AI (GLM-4)**
-  * **Moonshot AI (Kimi)**
-  * **SiliconFlow**
-  * **Local Ollama / vLLM / LocalAI** (Private offline deployment)
-* Offers provider and model cascading selection, connectivity testing, and automatic model list fetching.
+If the bubble does not appear, check automatic selection popup, the minimum selection length, required modifier, and the app blacklist in settings. You can also use the floating ball or change the global shortcut if another app already uses it.
 
-### 🌐 7. Local Privacy & Desktop Helpers
-* **Offline JSONL Persistence**: All chat history and configurations are stored locally under `%APPDATA%/iox`. Your data stays in your hands—zero telemetry or cloud uploads.
-* **Desktop Floating Ball**: Freely draggable and edge-snapping floating ball for quick-access operations.
-* **System Tray Integration**: Background daemon with right-click menu to quickly open settings, restart mouse hooks, or quit.
-* **Bilingual i18n**: Automatically adapts between English and Chinese based on system locale.
+## Configuration
 
----
+### API and copy actions
 
-## 🖼️ UI Gallery
+An API action binds a provider to a prompt template. `{text}` is replaced by the selected text:
 
-| Capsule Bubble Bar | In-Place Streaming Card & Reasoning |
-| :---: | :---: |
-| *Instantly appears beside the cursor upon selection; supports icon-only mode & quick actions* | *Streaming Q&A with DeepSeek R1 thought chains, LaTeX formulas, and syntax highlighting* |
+```text
+Summarize the following text in three concise points, preserving important numbers:
 
-| Multi-Tab Chat Management | Settings & Model Providers |
-| :---: | :---: |
-| *Independent multi-session switching, JSONL persistence, wheel scrolling, and tab context menus* | *OpenAI compatible protocol, automatic model discovery, and customizable action prompts* |
-
----
-
-## 🏗️ System Architecture
-
-IOX uses a **native Rust backend** for OS-level interactions (low-level mouse hooks, Win32 window style manipulation, clipboard protection, and async SSE streaming) and a **React 19 + TypeScript frontend** for a fluid, modern interface.
-
-```mermaid
-stateDiagram-v2
-    [*] --> HIDDEN : App resident in tray / Mouse hook initialized
-    
-    HIDDEN --> BUBBLE : Global text selected (Euclidean & anti-mistouch checks pass)
-    note right of BUBBLE
-      Injected WS_EX_NOACTIVATE
-      Zero host focus stealing
-    end note
-    
-    BUBBLE --> HIDDEN : Left click blank area / Side button / Esc / Timeout
-    
-    BUBBLE --> CARD : Click API action (Translate / Explain / Summarize / Custom)
-    note right of CARD
-      Smooth borderless card expansion
-      SSE typewriter streaming render
-    end note
-    
-    BUBBLE --> BROWSER : Click Web action
-    note right of BROWSER
-      URL placeholder / Clipboard injection
-      Launch default browser
-    end note
-    BROWSER --> HIDDEN
-    
-    CARD --> CARD : Quote text / Follow-up / Switch model / New tab
-    CARD --> HIDDEN : Close button / Esc / Click outside (when unpinned)
+{text}
 ```
 
-### Tech Stack Overview
+Provider configuration includes the base URL, API key, model list, and default model. Use an endpoint implementing the OpenAI-compatible chat-completions streaming protocol; models and supported reasoning options depend on that endpoint. Compatible local services can also be used. IOX does not supply API credits.
 
-| Layer | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Desktop Framework** | [Tauri v2](https://v2.tauri.app/) | Ultra-lightweight, low-memory cross-platform app framework |
-| **System Backend** | **Rust 2021**, `windows-sys` | Win32 API bindings, `WH_MOUSE_LL` global hook, clipboard protection |
-| **Async & Networking**| `reqwest`, `eventsource-stream`, `tokio` | High-performance asynchronous HTTP client & SSE streaming parser |
-| **Frontend Framework**| **React 19**, **TypeScript ~5.8**, **Vite 7** | Modern component architecture & instant HMR |
-| **Styling & Motion**  | **Tailwind CSS v3.4**, CSS Variables | Frosted glass design system, water-drop ripple transitions |
-| **Rich Text Engine**  | `react-markdown`, `remark-math`, `rehype-katex` | GFM standard parsing, LaTeX mathematical formulas & code highlighting |
-| **Icons & Feedback**  | `lucide-react`, `@lobehub/icons`, `sonner` | Sleek vector icons & elegant toast notifications |
+A `copy` action copies the selected text without sending an AI request.
 
----
+In **API Card**, configure card size, pinning and input focus on open, reasoning display, font size, code wrapping and line numbers, context turns, and `Enter` or `Ctrl+Enter` to send. Input autofocus is off by default.
 
-## 🚀 Quick Start
+### Website actions and Web Hub
 
-### 1. Prerequisites
+Website actions run inside IOX's WebView2 environment. Its login state is separate from your external browser; existing browser sign-ins are not automatically reused.
 
-Before building IOX, ensure the following prerequisites are installed on your Windows machine:
+- **URL template** — Include `{text}` in a query URL, for example `https://www.google.com/search?q={text}`. Selected text is URL-encoded before navigation.
+- **Website input** — Supported presets fill the site's input through DOM adapters. You can configure input/submit selectors and automatic submission for custom actions. Website changes and login requirements can affect these integrations.
+- **Window mode** — In **Web Hub**, choose independent windows or a shared tabbed window. Optionally enable **headless mode** to replace the title bar with a floating menu.
 
-* **Operating System**: Windows 10 / Windows 11 (64-bit)
-* **Node.js**: `>= 18.0.0`
-* **Package Manager**: `pnpm` (`pnpm >= 9.0.0` recommended)
-* **Rust Toolchain**: `rustc` & `cargo` (`>= 1.75.0`), installable via [rustup.rs](https://rustup.rs/)
-* **C++ Build Tools**: Visual Studio 2022 (with the "Desktop development with C++" workload)
+In headless mode, click the floating button to open the menu. By default, drag it to reposition the menu, or hold for 300 ms and drag to move the whole card. The delay is configurable from 0–10000 ms; 0 makes dragging move the card immediately. The menu's direct-drag toggle swaps these drag targets for that toolbar. Pin menu rows to add hover shortcuts across all website cards; unpin every row to disable those shortcuts.
 
-### 2. Clone & Install Dependencies
+Enable the file drag menu in **General** if needed, then drag files and pause for the configured hover delay (default 1000 ms). Attachment support depends on the target website adapter. **Web Conversations** contains collected website history, separate from locally saved API sessions; availability depends on the site and its signed-in state.
+
+### Optional PostgreSQL sync
+
+In **Remote Sync**, configure the PostgreSQL connection, SSL mode, and namespace. **Test Connection** checks the current form without saving it. Turn on the sync switch and save to enable background synchronization; **Sync Now** runs an immediate sync using the saved configuration and requires sync to be enabled. Sync is disabled by default and covers API history; SQLite remains the local source of truth if the remote database is unavailable.
+
+Devices sharing history must use the same namespace. Different users must use different namespaces. Changes use timestamps to resolve conflicts; deletion records are retained locally for 30 days, so a device offline longer than that may restore an old deleted session. The 200-session retention limit also applies to synchronized history.
+
+## Data and privacy
+
+The data directory is resolved from `USERPROFILE`, then `HOME`, then the working directory:
+
+| Build/environment | Default directory on Windows |
+| --- | --- |
+| Debug, or explicitly `IOX_ENV=dev` | `%USERPROFILE%\.iox-dev\` |
+| Other Release builds | `%USERPROFILE%\.iox\` |
+
+| File | Contents |
+| --- | --- |
+| `config.json` | Settings, actions, provider credentials, and optional sync credentials |
+| `sessions.db` | SQLite API conversation history; `-wal` / `-shm` files may accompany it |
+| `web-history-dev.json` / `web-history.json` | Debug / Release website history cache |
+| `sessions.jsonl.migrated` | Backup of legacy JSONL history after successful one-time import |
+
+API history is saved locally. Running an API action sends its request content to the configured provider; website actions pass content to the target website. Enabling PostgreSQL sync uploads API history to the database you configure.
+
+API keys and the PostgreSQL password are currently stored as plaintext in `config.json`. Do not publish that file or include it in screenshots. For a consistent history backup, quit IOX before copying the data directory.
+
+Selection extraction uses a guarded `Ctrl+C` flow with text clipboard backup and restoration. It does **not** guarantee restoration of images, file lists, rich text, or clipboard history. Copy actions and optional website auto-copy deliberately replace clipboard text.
+
+## Development
+
+### Requirements
+
+Develop and validate the desktop app on Windows 10/11 x64 with:
+
+- **Node.js 22**, matching [mise.toml](mise.toml).
+- **pnpm 11.20.0**, declared in [package.json](package.json).
+- **Rust stable with the MSVC toolchain**.
+- **Microsoft C++ Build Tools**, including the **Desktop development with C++** workload and Windows SDK.
+- **Microsoft Edge WebView2 Runtime**.
+
+See the [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/) for native build dependencies.
 
 ```powershell
-# Clone the repository
 git clone https://github.com/AimAI-Labs/iox.git
 cd iox
-
-# Install frontend dependencies
 pnpm install
-```
-
-### 3. Development Mode
-
-```powershell
-# Launch Tauri dev mode (runs Vite + compiles Rust backend + enables hot reloading)
 pnpm tauri dev
 ```
 
-### 4. Production Build
+`pnpm tauri dev` starts Vite and the native app, using the development data directory. Vite requires port **1420** and fails if it is occupied. `pnpm dev` starts only the frontend server; a plain browser cannot provide native hooks, desktop IPC, or integrated website windows.
 
-```powershell
-# Run TypeScript checks and compile the release Windows installer and portable executable
-pnpm tauri build
-```
+### Checks and packaging
 
-The compiled binaries will be located in: `src-tauri/target/release/bundle/`
+Run commands from the repository root in PowerShell:
 
----
+| Command | Purpose |
+| --- | --- |
+| `pnpm build` | TypeScript checks and Vite production build |
+| `pnpm test` | Node regression tests in `tests/*.test.mjs` |
+| `pnpm test:files` | File input and menu regressions |
+| `pnpm test:floating-ball` | Floating ball regressions |
+| `cargo check --manifest-path src-tauri/Cargo.toml` | Rust compile check |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | Rust regression tests |
+| `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` | Rust format check |
+| `pnpm tauri build` | Build the release executable and NSIS installer |
 
-## ⚙️ Configuration Guide
+The release executable is `src-tauri/target/release/iox.exe`; NSIS installers are under `src-tauri/target/release/bundle/nsis/`. The [release workflow](.github/workflows/release.yml) runs on `v*` tags or manual dispatch and additionally packages a portable ZIP. A local `pnpm tauri build` does not produce that ZIP automatically.
 
-IOX provides extensive customization options for actions and model providers.
+Node tests do not run the Python browser scripts or manual desktop checks. Changes to focus, pinning, multi-monitor/DPI behavior, file dragging, or website injection also need Windows desktop verification.
 
-### 1. Custom Action Templates
+### Code layout
 
-In **Settings -> Action Management**, you can customize existing actions or create new ones:
+| Path | Responsibility |
+| --- | --- |
+| [`src-tauri/src/`](src-tauri/src/) | Native hooks, window policy, configuration, AI requests, website adapters, and storage |
+| [`src-tauri/src/chat_store/`](src-tauri/src/chat_store/) | SQLite transactions, deduplication, migration, and retention |
+| [`src-tauri/src/sync/`](src-tauri/src/sync/) | Optional PostgreSQL history sync |
+| [`src/conversation/`](src/conversation/) | Conversation, generation, tab, and save-revision state |
+| [`src/components/`](src/components/) | Overlay, settings, history, and website controls |
+| [`src/hooks/`](src/hooks/) and [`src/lib/`](src/lib/) | Event/IPC adapters and shared logic |
+| [`src/themes/`](src/themes/) and [`src/locales/`](src/locales/) | Interface styles, tokens, and Chinese/English text |
+| [`tests/`](tests/) | Regression tests and controlled browser fixtures |
 
-* **API Card Action (Prompt Mode)**:
-  Use `{text}` as the dynamic placeholder for the highlighted text.
-  ```markdown
-  You are an expert translator. Please translate the following text into fluent, natural English:
-  {text}
-  ```
-* **Web Action (URL Mode)**:
-  Use `{text}` to pass queries directly via URL parameters:
-  * **Tongyi Qianwen**: `https://tongyi.aliyun.com/qianwen/?q={text}`
-  * **Google Search**: `https://www.google.com/search?q={text}`
-  * **DeepSeek Web**: `https://chat.deepseek.com/` (auto-copies to clipboard and opens the browser)
+The frontend uses TypeScript 5.8, Vite 7, Tailwind CSS 3.4, and Zod 4. The Rust backend uses Tokio, reqwest, SQLite, and Win32/COM integrations. See [AGENTS.md](AGENTS.md) for state ownership and change-specific verification requirements.
 
-### 2. Provider Setup
+## Contributing
 
-IOX natively connects to any service compatible with the standard OpenAI API specification:
+Report problems through [Issues](https://github.com/AimAI-Labs/iox/issues), including the IOX build, Windows version, reproduction steps, and expected behavior. Remove credentials and private conversation content from logs and screenshots. For code changes, follow [AGENTS.md](AGENTS.md), update both UI languages when adding text, and include the checks you actually ran in your pull request.
 
-| Provider | Base URL Example | Recommended Models |
-| :--- | :--- | :--- |
-| **DeepSeek Official** | `https://api.deepseek.com/v1` | `deepseek-chat`, `deepseek-reasoner` |
-| **OpenAI Official** | `https://api.openai.com/v1` | `gpt-4o`, `gpt-4o-mini`, `o1` |
-| **Alibaba DashScope (Qwen)** | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-max`, `qwen-plus`, `qwen-turbo` |
-| **Zhipu AI (GLM)** | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-plus`, `glm-4-flash` |
-| **SiliconFlow** | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-R1`, `Qwen/Qwen2.5-72B-Instruct` |
-| **Local Ollama** | `http://localhost:11434/v1` | `deepseek-r1:7b`, `llama3.1`, `qwen2.5` |
+## License
 
----
-
-## 🗺️ Roadmap
-
-- [x] Global `WH_MOUSE_LL` text selection & compact capsule bubble bar (BubbleBar)
-- [x] Win32 `WS_EX_NOACTIVATE` zero focus stealing guarantee
-- [x] In-memory clipboard automatic backup & instant restoration
-- [x] OpenAI-compatible SSE streaming & DeepSeek R1 collapsible reasoning chains
-- [x] Markdown typography, LaTeX math rendering, and one-click code copy
-- [x] Water-drop ripple dark/light theme switching animation
-- [x] Multi-tab conversation management with horizontal wheel scrolling
-- [x] Local offline JSONL chat session persistence and export
-- [x] Resident system tray & draggable desktop floating ball
-- [x] Bilingual i18n automatic locale detection (English / Chinese)
-- [ ] 🖼️ Clipboard image recognition & Multimodal Vision models (GPT-4o / Qwen-VL)
-- [ ] 📂 Drag-and-drop file perception & long-document auto-summarization
-- [ ] 🔊 Speech-to-text (STT) and voice readout (TTS) support
-- [ ] 🐧 Cross-platform exploration (macOS Accessibility / Linux X11/Wayland)
-
----
-
-## 🤝 Contributing
-
-Contributions, issues, and feature requests are welcome!
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'feat: add some amazing feature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE). Free for personal learning, commercial usage, and redistribution.
+This project is licensed under the [MIT License](LICENSE).
