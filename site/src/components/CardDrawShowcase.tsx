@@ -25,30 +25,64 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
   workflow,
 }) => {
   const containerRef = useRef<HTMLElement | null>(null);
-  // Normalized overall scroll progress P in [0, 1] across the entire 580vh stage
+  const targetProgressRef = useRef<number>(0);
+  const currentProgressRef = useRef<number>(0);
   const [progress, setProgress] = useState<number>(0);
   const totalCards = deck.cards.length;
 
   useEffect(() => {
     let rafId = 0;
+    let isAnimating = false;
+    let lastTime = performance.now();
 
-    const updateScroll = () => {
+    const measureTargetScroll = () => {
       const container = containerRef.current;
-      if (!container) return;
+      if (!container) return 0;
 
       const rect = container.getBoundingClientRect();
       const vh = window.innerHeight || 800;
       const scrollable = Math.max(1, rect.height - vh);
       const scrolled = clamp(-rect.top, 0, scrollable);
-      setProgress(scrolled / scrollable);
+      return scrolled / scrollable;
+    };
+
+    const tick = (now: number) => {
+      const dt = Math.min(64, Math.max(1, now - lastTime));
+      lastTime = now;
+
+      const target = targetProgressRef.current;
+      const current = currentProgressRef.current;
+      const diff = target - current;
+
+      if (Math.abs(diff) < 0.00015) {
+        currentProgressRef.current = target;
+        setProgress(target);
+        isAnimating = false;
+        return;
+      }
+
+      // Frame-rate independent exponential smoothing (~0.11 per 16.67ms frame)
+      const alpha = 1 - Math.pow(1 - 0.11, dt / 16.67);
+      const next = current + diff * alpha;
+      currentProgressRef.current = next;
+      setProgress(next);
+      rafId = requestAnimationFrame(tick);
     };
 
     const handleScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(updateScroll);
+      targetProgressRef.current = measureTargetScroll();
+      if (!isAnimating) {
+        isAnimating = true;
+        lastTime = performance.now();
+        rafId = requestAnimationFrame(tick);
+      }
     };
 
-    updateScroll();
+    const initial = measureTargetScroll();
+    targetProgressRef.current = initial;
+    currentProgressRef.current = initial;
+    setProgress(initial);
+
     window.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", handleScroll);
 
@@ -60,7 +94,7 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
   }, []);
 
   // Timeline allocation across P in [0, 1]:
-  // - [0.00, 0.58]: Phase 1 — Card Draw & 3D Flip Showcase (Plates 01 -> 05)
+  // - [0.00, 0.58]: Phase 1 — Card Flip & Draw Showcase (Plates 01 -> 05)
   // - [0.58, 0.80]: Phase 2 — 4-way Fly-out of 01 components (Up/Down/Left/Right) + Center Emergence of 02 Workflow
   // - [0.80, 1.00]: Phase 3 — 02 Workflow Hold & Step Highlight (Step 01 -> 02 -> 03)
   const PHASE1_END = 0.58;
@@ -80,7 +114,6 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
   const flyOut = easeInOutCubic(rawTransition);
 
   // Workflow emergence starts slightly into the fly-out (rawTransition in [0.18, 1.0])
-  // so the center opens up as the 4 parts of 01 split apart
   const workflowEnter = easeOutCubic(
     clamp((rawTransition - 0.18) / 0.82, 0, 1)
   );
@@ -120,7 +153,7 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
       ref={containerRef}
       className="relative h-[580vh] w-full select-none"
     >
-      {/* Anchor marker at 82% of container height so #workflow nav link scrolls straight to Stage 3 */}
+      {/* Anchor marker at 78% of container height so #workflow nav link scrolls straight to Stage 3 */}
       <div
         id="workflow"
         className="pointer-events-none absolute left-0 top-[78%] h-px w-full"
@@ -145,7 +178,7 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                 1 - flyOut * 0.04
               })`,
             }}
-            className="mono-wireframe-strong bg-[#F5F1E8]/95 px-4 py-3 backdrop-blur-sm will-change-transform"
+            className="mono-wireframe-strong bg-[#F5F1E8] px-4 py-3 will-change-transform"
           >
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -218,10 +251,9 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                   </span>
                 </div>
 
-                {/* Keyed content wrapper for crisp text update when activeIndex changes */}
                 <div
                   key={activeCard.id}
-                  className="animate-fade-in transition-opacity duration-300 ease-editorial"
+                  className="transition-opacity duration-300 ease-editorial"
                 >
                   <h2 className="heading-4 mt-5 text-[#242321]">
                     {activeCard.title}
@@ -294,61 +326,72 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
               </div>
             </div>
 
-            {/* 1C. RIGHT 3D CARD FLIP & DRAW STACK — Flies RIGHT on transition */}
+            {/* 1C. RIGHT PHYSICAL CARD FLIP & TUCK-TO-BACK DECK — Flies RIGHT on transition */}
             <div
               style={{
                 opacity: Math.max(0, 1 - flyOut * 1.15),
                 transform: `translate3d(${flyOut * 560}px, 0, 0) rotate(${
                   flyOut * 5
                 }deg)`,
-                perspective: "1400px",
               }}
               className="relative flex min-h-[320px] items-center justify-center will-change-transform sm:min-h-[420px] lg:col-span-7 lg:min-h-[480px]"
             >
               {/* Background Halftone Registration Mat */}
               <div className="mono-halftone-bg mono-wireframe-box absolute inset-4 hidden sm:block" />
 
-              {/* 3D Stacked Deck Container */}
-              <div
-                className="relative aspect-[3/2] w-full max-w-[660px]"
-                style={{ transformStyle: "preserve-3d" }}
-              >
+              {/* Flat Z-Sorted Deck Container (Zero-overlap upper-right arc clearance) */}
+              <div className="relative aspect-[3/2] w-full max-w-[490px] lg:-ml-8">
                 {deck.cards.map((card, idx) => {
-                  // delta = idx - continuousIndex:
-                  // - delta == 0: card is active on top of the stack
-                  // - delta > 0: card is waiting underneath in the deck (fanned down-right)
-                  // - delta < 0: card is being flipped & drawn off the top of the deck
                   const delta = idx - continuousIndex;
-                  const isFlippedOut = delta < 0;
-                  const flipAmount = isFlippedOut ? clamp(-delta, 0, 1.15) : 0;
-                  const stackDepth = !isFlippedOut ? clamp(delta, 0, 4) : 0;
+                  const activeDrawU =
+                    continuousIndex - Math.floor(continuousIndex);
+                  const deckRecoil = Math.sin(activeDrawU * Math.PI);
 
-                  // 3D Card Flip + Draw Physics:
-                  // As a card flips out (delta: 0 -> -1), it lifts up, rotates around Y (-38deg) and X (14deg) and Z (8deg),
-                  // and arcs away while revealing the next card rising smoothly from stackDepth 1 -> 0!
-                  const translateX = isFlippedOut
-                    ? flipAmount * 145
-                    : stackDepth * 14;
-                  const translateY = isFlippedOut
-                    ? -flipAmount * 95 -
-                      Math.sin(Math.min(1, flipAmount) * Math.PI) * 38
-                    : stackDepth * 15;
-                  const translateZ = isFlippedOut
-                    ? flipAmount * 90
-                    : -stackDepth * 28;
-                  const rotateY = isFlippedOut ? -flipAmount * 36 : 0;
-                  const rotateX = isFlippedOut ? flipAmount * 14 : 0;
-                  const rotateZ = isFlippedOut
-                    ? flipAmount * 9
-                    : stackDepth * 1.5;
-                  const scale = isFlippedOut
-                    ? 1 + flipAmount * 0.02
-                    : Math.max(0.85, 1 - stackDepth * 0.038);
-                  const opacity = isFlippedOut
-                    ? Math.max(0, 1 - Math.pow(flipAmount, 1.25))
-                    : Math.max(0.28, 1 - stackDepth * 0.18);
+                  let translateX = 0;
+                  let translateY = 0;
+                  let rotateZ = 0;
+                  let scale = 1;
+                  let zIndex = 50;
 
-                  const zIndex = totalCards * 10 - idx * 2;
+                  if (delta >= 0) {
+                    // Card is currently on top (delta == 0) or waiting in the stack (delta > 0)
+                    // Steps toward upper-right (+12px X, -9px Y per card) and gently recoils left-down while top card is drawn
+                    const stackDepth = delta;
+                    translateX = stackDepth * 12 - deckRecoil * 36;
+                    translateY = -stackDepth * 9 + deckRecoil * 20;
+                    rotateZ = stackDepth * 1.1 - deckRecoil * 1.2;
+                    scale = 1 - stackDepth * 0.03;
+                    zIndex = 50 - idx * 5;
+                  } else if (delta > -1) {
+                    // Card is actively lifting along an upper-right circular arc and tucking behind the last card (u in (0, 1))
+                    const u = -delta; // 0 -> 1
+                    const easedU = easeInOutCubic(u);
+                    const targetBackDepth = totalCards - 1; // 4 (last card slot)
+                    const baseDepth = easedU * targetBackDepth;
+
+                    // Upper-right circular arc:
+                    // u in [0, 0.5]: sweeps up (-Y) and far right (+X) until completely clearing the deck's right edge at u = 0.5
+                    // u in (0.5, 1.0]: switches zIndex at zero-overlap apex (u = 0.5) and arcs back behind the deck into slot #5
+                    const sinPi = Math.sin(u * Math.PI);
+                    const sin2Pi = Math.sin(2 * u * Math.PI);
+
+                    translateX = baseDepth * 12 + 415 * sinPi + 28 * sin2Pi;
+                    translateY = -baseDepth * 9 - 170 * sinPi - 34 * sin2Pi;
+                    rotateZ = baseDepth * 1.1 + 12.5 * sinPi;
+                    scale = 1 - baseDepth * 0.03 - 0.1 * sinPi;
+
+                    // At u = 0.5, the lifted card is at (+439px, -188px) while the deck is at (-30px, +15px) -> 0% pixel overlap!
+                    zIndex = u <= 0.5 ? 60 : 10 - idx;
+                  } else {
+                    // Card has settled at the back of the deck (delta <= -1) and advances one slot as subsequent cards are drawn
+                    const backDepth = totalCards + delta;
+                    translateX = backDepth * 12 - deckRecoil * 36;
+                    translateY = -backDepth * 9 + deckRecoil * 20;
+                    rotateZ = backDepth * 1.1 - deckRecoil * 1.2;
+                    scale = 1 - backDepth * 0.03;
+                    zIndex = 10 + idx;
+                  }
+
                   const accentBorder =
                     card.inkAccent === "cobalt"
                       ? "border-[#2148B8]"
@@ -360,15 +403,12 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                       onClick={() => scrollToCard(idx)}
                       style={{
                         zIndex,
-                        opacity,
-                        transform: `translate3d(${translateX}px, ${translateY}px, ${translateZ}px) rotateY(${rotateY}deg) rotateX(${rotateX}deg) rotateZ(${rotateZ}deg) scale(${scale})`,
-                        pointerEvents:
-                          Math.abs(delta) < 0.55 || delta > 0 ? "auto" : "none",
+                        transform: `translate3d(${translateX}px, ${translateY}px, 0) rotateZ(${rotateZ}deg) scale(${scale})`,
                       }}
-                      className="mono-wireframe-strong absolute inset-0 flex cursor-pointer flex-col justify-between bg-[#F5F1E8] p-2 will-change-transform sm:p-3"
+                      className="mono-wireframe-strong absolute inset-0 flex cursor-pointer flex-col justify-between bg-[#F5F1E8] p-2 shadow-[0_6px_20px_rgba(36,35,33,0.08)] will-change-transform sm:p-3"
                     >
                       {/* Top Specimen Plate Header */}
-                      <div className="flex items-center justify-between border-b border-[#30343A] px-3 py-2">
+                      <div className="flex items-center justify-between border-b border-[#30343A] bg-[#F5F1E8] px-3 py-2">
                         <div className="flex items-center gap-2 font-mono text-[#30343A] caption-3">
                           <span
                             className={`inline-block h-2 w-2 ${
@@ -384,20 +424,20 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                         </span>
                       </div>
 
-                      {/* Wireframe SVG Artwork */}
+                      {/* Solid Opaque Wireframe SVG Artwork */}
                       <div
                         className={`relative flex-1 overflow-hidden border ${accentBorder} bg-[#F5F1E8]`}
                       >
                         <img
                           src={card.placeholder.src}
                           alt={card.placeholder.label}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full bg-[#F5F1E8] object-cover"
                           draggable={false}
                         />
                       </div>
 
                       {/* Bottom Replacement Path & Registration Footer */}
-                      <figcaption className="flex items-center justify-between border-t border-[#30343A] px-3 py-1.5 font-mono text-[#30343A]/80 caption-5">
+                      <figcaption className="flex items-center justify-between border-t border-[#30343A] bg-[#F5F1E8] px-3 py-1.5 font-mono text-[#30343A]/80 caption-5">
                         <span className="truncate">{card.placeholder.hint}</span>
                         <span className="ml-2 shrink-0 uppercase">
                           {card.plateNo}
@@ -418,7 +458,7 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                 1 - flyOut * 0.04
               })`,
             }}
-            className="mono-wireframe-box flex items-center justify-between bg-[#F5F1E8]/90 px-4 py-2 font-mono text-[#30343A] will-change-transform caption-4"
+            className="mono-wireframe-box flex items-center justify-between bg-[#F5F1E8] px-4 py-2 font-mono text-[#30343A] will-change-transform caption-4"
           >
             <span>
               {deck.drawStatusLabel}: 0{activeIndex + 1} / 0{totalCards}
