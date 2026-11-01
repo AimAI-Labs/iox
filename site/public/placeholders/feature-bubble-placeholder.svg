@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <defs>
+    <pattern id="halftoneB" width="10" height="10" patternUnits="userSpaceOnUse">
+      <circle cx="5" cy="5" r="1.4" fill="#30343A" opacity="0.26" />
+    </pattern>
+    <pattern id="halftoneTerracotta" width="8" height="8" patternUnits="userSpaceOnUse">
+      <circle cx="4" cy="4" r="1.5" fill="#C65F38" opacity="0.25" />
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="800" fill="#F5F1E8" />
+  <rect x="36" y="36" width="1128" height="728" fill="none" stroke="#30343A" stroke-width="1.5" />
+  <line x1="36" y1="88" x2="1164" y2="88" stroke="#30343A" stroke-width="1" />
+  <line x1="36" y1="712" x2="1164" y2="712" stroke="#30343A" stroke-width="1" />
+
+  <text x="64" y="67" fill="#30343A" font-family="Geist Mono, monospace" font-size="12" font-weight="600" letter-spacing="1.5">
+    PLATE 02 · ZERO FOCUS SELECTION BUBBLE
+  </text>
+  <text x="900" y="67" fill="#C65F38" font-family="Geist Mono, monospace" font-size="12" font-weight="500">
+    INK: #30343A + #C65F38
+  </text>
+
+  <!-- Selection Geometry Diagram -->
+  <g transform="translate(140, 170)">
+    <line x1="0" y1="40" x2="720" y2="40" stroke="#30343A" stroke-width="2" opacity="0.3" />
+    <rect x="0" y="72" width="620" height="54" fill="url(#halftoneTerracotta)" stroke="#C65F38" stroke-width="1.8" />
+    <text x="24" y="104" fill="#30343A" font-family="Geist Mono, monospace" font-size="15" font-weight="600">
+      fn capture_selection_without_focus_loss() -&gt; Result&lt;Payload&gt;
+    </text>
+
+    <!-- Euclidean Distance Dimension Line -->
+    <line x1="0" y1="152" x2="620" y2="152" stroke="#C65F38" stroke-width="1.2" stroke-dasharray="4 4" />
+    <circle cx="0" cy="152" r="4" fill="#C65F38" />
+    <circle cx="620" cy="152" r="4" fill="#C65F38" />
+    <text x="230" y="174" fill="#C65F38" font-family="Geist Mono, monospace" font-size="12">
+      EUCLIDEAN_DRAG_DISTANCE &gt; THRESHOLD
+    </text>
+
+    <!-- Dominant Capsule Specimen -->
+    <g transform="translate(160, 224)">
+      <rect x="10" y="10" width="680" height="96" rx="48" fill="url(#halftoneB)" stroke="#30343A" stroke-width="1" />
+      <rect width="680" height="96" rx="48" fill="#F5F1E8" stroke="#30343A" stroke-width="2.5" />
+      <circle cx="52" cy="48" r="22" fill="#30343A" />
+      <rect x="96" y="30" width="118" height="36" rx="18" fill="none" stroke="#30343A" stroke-width="1.5" />
+      <text x="122" y="53" fill="#30343A" font-family="Geist Mono, monospace" font-size="13" font-weight="600">EXPLAIN</text>
+      <rect x="228" y="30" width="132" height="36" rx="18" fill="none" stroke="#30343A" stroke-width="1.5" />
+      <text x="252" y="53" fill="#30343A" font-family="Geist Mono, monospace" font-size="13" font-weight="600">TRANSLATE</text>
+      <rect x="374" y="30" width="124" height="36" rx="18" fill="none" stroke="#30343A" stroke-width="1.5" />
+      <text x="402" y="53" fill="#30343A" font-family="Geist Mono, monospace" font-size="13" font-weight="600">DEEPSEEK</text>
+      <rect x="512" y="30" width="138" height="36" rx="18" fill="none" stroke="#C65F38" stroke-width="1.5" />
+      <text x="538" y="53" fill="#C65F38" font-family="Geist Mono, monospace" font-size="13" font-weight="600">ASK_INPUT</text>
+    </g>
+  </g>
+
+  <text x="64" y="742" fill="#30343A" font-family="Geist Mono, monospace" font-size="12">
+    PLACEHOLDER · /public/placeholders/feature-bubble-placeholder.svg
+  </text>
+  <text x="940" y="742" fill="#30343A" font-family="Geist Mono, monospace" font-size="12">
+    SCALE 1:1 · 1200 × 800 PX
+  </text>
+</svg>

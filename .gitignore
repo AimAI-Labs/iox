@@ -37,4 +37,9 @@ reference/
 
 
 
-site/public/placeholders/
+site/public/placeholders/*
+!site/public/placeholders/preview-overview-placeholder.svg
+!site/public/placeholders/feature-bubble-placeholder.svg
+!site/public/placeholders/feature-card-placeholder.svg
+!site/public/placeholders/feature-web-placeholder.svg
+!site/public/placeholders/feature-file-drag-placeholder.svg

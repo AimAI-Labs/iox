@@ -432,7 +432,7 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                         className={`wireframe-preview__artwork relative flex-1 overflow-hidden border ${accentBorder} bg-paper`}
                       >
                         <img
-                          src={card.placeholder.src}
+                          src={`${import.meta.env.BASE_URL}${card.placeholder.src.replace(/^\//, "")}`}
                           alt={card.placeholder.label}
                           className="h-full w-full bg-paper object-cover"
                           draggable={false}
