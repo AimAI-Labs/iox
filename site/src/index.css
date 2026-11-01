@@ -35,7 +35,10 @@ body {
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
+}
+
+body {
+  overflow-x: clip;
 }
 
 /* ── B1 Named Text Styles (landing-page-design) ─────────────────── */

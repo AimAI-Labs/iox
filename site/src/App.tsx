@@ -3,7 +3,6 @@ import { SITE_CONTENT, type Locale } from "./locales/content";
 import { HeroSection } from "./components/HeroSection";
 import { TaglineRevealSection } from "./components/TaglineRevealSection";
 import { CardDrawShowcase } from "./components/CardDrawShowcase";
-import { WorkflowSection } from "./components/WorkflowSection";
 import { EcosystemSection } from "./components/EcosystemSection";
 import { FaqSection } from "./components/FaqSection";
 import { Footer } from "./components/Footer";
@@ -30,7 +29,6 @@ export default function App() {
 
     const updateScrollColor = () => {
       const vh = window.innerHeight || 800;
-      // Transition starts at 15% of hero height and completes by 95% of hero height
       const mix = Math.max(
         0,
         Math.min(1, (window.scrollY - vh * 0.15) / (vh * 0.8))
@@ -79,13 +77,15 @@ export default function App() {
         onToggleLocale={handleToggleLocale}
       />
 
-      {/* 2. Below the Fold: Transitions into Mono-Color Editorial Print Wireframe */}
+      {/* 2. Below the Fold: Mono-Color Editorial Print Wireframe */}
       <main>
         <TaglineRevealSection tagline={content.tagline} />
 
-        <CardDrawShowcase deck={content.deck} />
-
-        <WorkflowSection workflow={content.workflow} />
+        {/* Unified Sticky Stage: 01 Card Flip Showcase -> 4-Way Fly-Out -> 02 Workflow Center Emergence */}
+        <CardDrawShowcase
+          deck={content.deck}
+          workflow={content.workflow}
+        />
 
         <EcosystemSection ecosystem={content.ecosystem} />
 
