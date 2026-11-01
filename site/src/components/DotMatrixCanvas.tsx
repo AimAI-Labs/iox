@@ -4,12 +4,18 @@ import {
   computeDissolveSeed,
   computeHandMotion,
   computeRowShift,
+  createDotGridBuffers,
+  DEFAULT_DOT_GRID_CONFIG,
+  DotGridPhysicsBuffers,
   getDotRadius,
   getQuantizedLevel,
   hash,
   LOOP,
   mixAt,
+  PointerFieldState,
+  Shockwave,
   smooth,
+  stepDotGridPhysics,
   HandParams,
 } from '../utils/matrix-math';
 
@@ -89,7 +95,15 @@ export const DotMatrixCanvas: React.FC = () => {
 
     let animId = 0;
     const t0 = performance.now();
+    let lastTimeSec = -1;
     let isMounted = true;
+
+    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let prefersReducedMotion = reducedMotionQuery.matches;
+    const handleMotionChange = (e: MediaQueryListEvent) => {
+      prefersReducedMotion = e.matches;
+    };
+    reducedMotionQuery.addEventListener('change', handleMotionChange);
 
     // Offscreen field canvases
     const fA = document.createElement('canvas');
@@ -100,6 +114,17 @@ export const DotMatrixCanvas: React.FC = () => {
     let tiles: Tiles | null = null;
     let seedGrid = new Float32Array(0);
     let rowShifts = new Int16Array(0);
+    let physicsBuffers: DotGridPhysicsBuffers = createDotGridBuffers(0, 0);
+
+    const pointerState: PointerFieldState = {
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      active: false,
+    };
+    let lastPointerTime = performance.now();
+    const shockwaves: Shockwave[] = [];
 
     let W = 0;
     let H = 0;
@@ -139,10 +164,68 @@ export const DotMatrixCanvas: React.FC = () => {
         }
       }
       rowShifts = new Int16Array(rows);
+      physicsBuffers = createDotGridBuffers(cols, rows);
+    }
+
+    function handlePointerMove(e: PointerEvent) {
+      if (!canvas || prefersReducedMotion) return;
+      const rect = canvas.getBoundingClientRect();
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+
+      if (localX < -40 || localX > rect.width + 40 || localY < -40 || localY > rect.height + 40) {
+        pointerState.active = false;
+        return;
+      }
+
+      const now = performance.now();
+      const dtMs = Math.max(4, now - lastPointerTime);
+      lastPointerTime = now;
+
+      if (pointerState.active) {
+        const instVx = ((localX - pointerState.x) / dtMs) * 1000;
+        const instVy = ((localY - pointerState.y) / dtMs) * 1000;
+        pointerState.vx = pointerState.vx * 0.45 + clamp(instVx, -2400, 2400) * 0.55;
+        pointerState.vy = pointerState.vy * 0.45 + clamp(instVy, -2400, 2400) * 0.55;
+      } else {
+        pointerState.vx = 0;
+        pointerState.vy = 0;
+      }
+
+      pointerState.x = localX;
+      pointerState.y = localY;
+      pointerState.active = true;
+    }
+
+    function handlePointerLeave() {
+      pointerState.active = false;
+    }
+
+    function handlePointerDown(e: PointerEvent) {
+      if (!canvas || prefersReducedMotion) return;
+      const rect = canvas.getBoundingClientRect();
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+      if (localX < 0 || localX > rect.width || localY < 0 || localY > rect.height) {
+        return;
+      }
+
+      const nowSec = lastTimeSec >= 0 ? lastTimeSec : (performance.now() - t0) / 1000;
+      shockwaves.push({
+        x: localX,
+        y: localY,
+        startTime: nowSec,
+      });
+      if (shockwaves.length > 6) {
+        shockwaves.shift();
+      }
     }
 
     handleResize();
     window.addEventListener('resize', handleResize);
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
+    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    document.addEventListener('mouseleave', handlePointerLeave);
 
     // Load sheet image
     const img = new Image();
@@ -197,8 +280,31 @@ export const DotMatrixCanvas: React.FC = () => {
     function render(timeSec: number) {
       if (!ctx || !ctxA || !ctxB || cols <= 0 || rows <= 0) return;
 
+      const dt = lastTimeSec >= 0 ? clamp(timeSec - lastTimeSec, 0.001, 0.033) : 0.016;
+      lastTimeSec = timeSec;
+
       const t = ((timeSec % LOOP) + LOOP) % LOOP;
       const isPortrait = H > W;
+
+      // Step React Bits DotGrid spring-damper & shockwave simulation
+      if (!prefersReducedMotion) {
+        pointerState.vx *= 0.84;
+        pointerState.vy *= 0.84;
+        stepDotGridPhysics(
+          physicsBuffers,
+          step,
+          rowStep,
+          pointerState,
+          shockwaves,
+          timeSec,
+          dt,
+          DEFAULT_DOT_GRID_CONFIG
+        );
+        // Prune expired shockwaves
+        while (shockwaves.length > 0 && timeSec - shockwaves[0].startTime > 0.72) {
+          shockwaves.shift();
+        }
+      }
 
       // Clear main canvas with high-DPI transform
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -239,9 +345,15 @@ export const DotMatrixCanvas: React.FC = () => {
         rowShifts[j] = computeRowShift(j, tick);
       }
 
-      // Draw all dots in dark ink `#0d0d0d`
-      ctx.fillStyle = '#0d0d0d';
-      ctx.beginPath();
+      // Three-plate paths: base ink (#0d0d0d), mid transition (#1a2f6b), active cobalt (#2148b8)
+      const basePath = new Path2D();
+      const midPath = new Path2D();
+      const activePath = new Path2D();
+      let hasMid = false;
+      let hasActive = false;
+
+      const { ox, oy, activity } = physicsBuffers;
+      const swellFactor = DEFAULT_DOT_GRID_CONFIG.swell;
 
       const quietCenterY = isPortrait ? 0.33 : 0.385;
       const quietWidthScale = isPortrait ? 0.44 : 0.2;
@@ -251,11 +363,15 @@ export const DotMatrixCanvas: React.FC = () => {
         const dotY = (j + 0.5) * rowStep;
         const ey = (dotY / H - quietCenterY) / 0.085;
         const ey2 = ey * ey;
+        const rowOffset = j * cols;
 
         for (let i = 0; i < cols; i++) {
+          const cellIdx = rowOffset + i;
+          const act = prefersReducedMotion ? 0 : activity[cellIdx];
+
           const sampleI = clamp(i - shift, 0, cols - 1);
-          const pixelIdx = (j * cols + sampleI) * 4;
-          const seed = seedGrid[j * cols + i];
+          const pixelIdx = (rowOffset + sampleI) * 4;
+          const seed = seedGrid[cellIdx];
 
           const isLeftHalf = i < halfCols;
           const m = isLeftHalf ? mL : mR;
@@ -264,47 +380,80 @@ export const DotMatrixCanvas: React.FC = () => {
           const red = useB ? dataB[pixelIdx] : dataA[pixelIdx];
           const lum = red / 255;
 
-          let v = clamp((1 - lum - 0.16) / 0.42, 0, 1);
-          if (v <= 0) continue;
-
-          // Glitch front during switch
-          if (m > 0.001 && m < 0.999) {
-            const diff = Math.abs(seed - m);
-            if (diff < 0.12) {
-              v *= diff / 0.12;
-              if (hash(i + tick, j) <= 0.4) {
-                v *= 0.3;
-              }
-            }
-          }
-
-          // Shimmer
-          v *= 0.86 + 0.14 * Math.sin(t * 3.2 + seed * 40);
-
-          // Centre fade
           const cx = Math.abs((i + 0.5) / cols - 0.5);
-          v *= smooth(0.035, 0.11, cx);
-
-          // Copy quiet zone
           const ex = cx / quietWidthScale;
           const distQuiet = Math.sqrt(ex * ex + ey2);
-          v *= smooth(0.85, 1.25, distQuiet);
+          const quietMask = smooth(0.85, 1.25, distQuiet);
 
-          // Quantise level
-          const level = getQuantizedLevel(v);
-          if (level <= 0) continue;
+          let v = clamp((1 - lum - 0.16) / 0.42, 0, 1);
 
-          const radius = getDotRadius(level, R);
+          if (v > 0) {
+            // Glitch front during switch
+            if (m > 0.001 && m < 0.999) {
+              const diff = Math.abs(seed - m);
+              if (diff < 0.12) {
+                v *= diff / 0.12;
+                if (hash(i + tick, j) <= 0.4) {
+                  v *= 0.3;
+                }
+              }
+            }
+
+            // Shimmer
+            v *= 0.86 + 0.14 * Math.sin(t * 3.2 + seed * 40);
+
+            // Centre fade & copy quiet zone
+            v *= smooth(0.035, 0.11, cx) * quietMask;
+          }
+
+          // Quantise level for hand halftone dots
+          const level = v > 0 ? getQuantizedLevel(v) : 0;
+          let radius = level > 0 ? getDotRadius(level, R) : 0;
+
+          // React Bits DotGrid ambient wakeup: reveal subtle grid dots under cursor/shockwave
+          if (radius <= 0 && act > 0.08 && quietMask > 0.1) {
+            const wake = clamp((act - 0.08) / 0.72, 0, 1);
+            radius = R * 0.42 * wake * quietMask;
+          }
+
           if (radius <= 0) continue;
 
-          const dotX = (i + 0.5) * step;
+          // Apply DotGrid swell & spring displacement
+          if (act > 0.005) {
+            radius *= 1 + swellFactor * act * 0.62;
+          }
 
-          ctx.moveTo(dotX + radius, dotY);
-          ctx.arc(dotX, dotY, radius, 0, 6.2831853);
+          const dotX = (i + 0.5) * step;
+          const drawX = dotX + (prefersReducedMotion ? 0 : ox[cellIdx] * quietMask);
+          const drawY = dotY + (prefersReducedMotion ? 0 : oy[cellIdx] * quietMask);
+
+          if (act >= 0.46) {
+            activePath.moveTo(drawX + radius, drawY);
+            activePath.arc(drawX, drawY, radius, 0, 6.2831853);
+            hasActive = true;
+          } else if (act >= 0.16) {
+            midPath.moveTo(drawX + radius, drawY);
+            midPath.arc(drawX, drawY, radius, 0, 6.2831853);
+            hasMid = true;
+          } else {
+            basePath.moveTo(drawX + radius, drawY);
+            basePath.arc(drawX, drawY, radius, 0, 6.2831853);
+          }
         }
       }
 
-      ctx.fill();
+      ctx.fillStyle = '#0d0d0d';
+      ctx.fill(basePath);
+
+      if (hasMid) {
+        ctx.fillStyle = '#1b2f6e';
+        ctx.fill(midPath);
+      }
+
+      if (hasActive) {
+        ctx.fillStyle = '#2148b8';
+        ctx.fill(activePath);
+      }
     }
 
     // Expose window.__render for deterministic tests & recorders
@@ -323,8 +472,13 @@ export const DotMatrixCanvas: React.FC = () => {
       isMounted = false;
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('mouseleave', handlePointerLeave);
+      reducedMotionQuery.removeEventListener('change', handleMotionChange);
     };
   }, []);
 
   return <canvas id="dots" ref={canvasRef} data-testid="dot-matrix-canvas" />;
 };
+
