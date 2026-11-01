@@ -11,6 +11,8 @@
     "test:files": "node --test tests/overlay-file-selection.test.mjs tests/file-drop.test.mjs",
     "test:floating-ball": "node --test tests/floating-ball.test.mjs",
     "preview": "vite preview",
+    "dev:site": "pnpm --filter @iox/site dev",
+    "build:site": "pnpm --filter @iox/site build",
     "tauri": "tauri"
   },
   "dependencies": {

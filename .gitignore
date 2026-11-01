@@ -32,3 +32,9 @@ Requirements.md
 # AI agent local state (do not commit)
 .agents/
 .claude/
+
+reference/
+
+
+
+site/public/placeholders/

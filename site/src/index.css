@@ -1,0 +1,261 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f7f7f5;
+  --surface: #fafaf8;
+  --ink: #111111;
+  --mute: #9a9a9a;
+  --sub: #7b7b7b;
+  --line: #e5e5e0;
+  --line-strong: #dcdcd6;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ── Reference Hero Layout & Dot-Matrix Canvas Rules ────────────── */
+.hero {
+  position: relative;
+  height: 100vh;
+  min-height: 680px;
+  overflow: hidden;
+  background-color: var(--bg);
+  width: 100%;
+  border-bottom: 1px solid var(--line);
+}
+
+canvas#dots {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 1;
+}
+
+nav.hero-nav {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(18px, 2.6vw, 40px);
+  padding-top: 32px;
+  font-size: 13.5px;
+}
+
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-decoration: none;
+  margin-right: 10px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: clamp(18px, 2.6vw, 40px);
+}
+
+.nav-link {
+  color: #3a3a3a;
+  text-decoration: none;
+  transition: color 0.2s ease;
+  font-weight: 400;
+}
+
+.nav-link:hover {
+  color: #000000;
+}
+
+.signin-btn {
+  background: #111111;
+  color: #ffffff;
+  padding: 9px 19px;
+  border-radius: 999px;
+  font-weight: 500;
+  font-size: 13px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s ease;
+  will-change: transform;
+}
+
+.signin-btn:hover {
+  transform: translateY(-1px);
+}
+
+.copy {
+  position: absolute;
+  left: 50%;
+  top: 24.5%;
+  transform: translateX(-50%);
+  text-align: center;
+  width: min(92vw, 720px);
+  z-index: 3;
+  pointer-events: auto;
+}
+
+.copy h1 {
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 1.04;
+  font-size: clamp(38px, 3.75vw, 68px);
+}
+
+.copy h1 .line-reconnecting {
+  display: block;
+  color: #9a9a9a;
+}
+
+.copy h1 .line-creativity {
+  display: block;
+  color: #111111;
+}
+
+.copy p.subline {
+  margin-top: 20px;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 340px;
+  color: #7b7b7b;
+  font-size: clamp(13px, 1.02vw, 15.5px);
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.cta {
+  display: inline-block;
+  position: relative;
+  margin-top: clamp(34px, 3.6vw, 52px);
+  text-decoration: none;
+}
+
+.cta::before {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: -6px;
+  height: 16px;
+  border-radius: 50%;
+  background: linear-gradient(
+    90deg,
+    #ffcf5a,
+    #7dffa8,
+    #5ad7ff,
+    #9b7bff,
+    #ff6fd8,
+    #ffb36b
+  );
+  filter: blur(9px);
+  opacity: 0.85;
+  transition: opacity 0.3s ease, filter 0.3s ease, bottom 0.3s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cta:hover::before {
+  opacity: 1;
+  filter: blur(12px);
+  bottom: -9px;
+}
+
+.cta-pill {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  background: #111111;
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 11px 22px;
+  border-radius: 999px;
+  text-decoration: none;
+  transition: transform 0.3s ease;
+  will-change: transform;
+}
+
+.cta:hover .cta-pill {
+  transform: translateY(-1px);
+}
+
+.logos {
+  position: absolute;
+  bottom: clamp(28px, 5.5vh, 56px);
+  left: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(24px, 4.4vw, 62px);
+  flex-wrap: wrap;
+  padding: 0 16px;
+  z-index: 3;
+  color: #8d8d8d;
+  font-size: clamp(13.5px, 1.15vw, 16.5px);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.logo-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  user-select: none;
+}
+
+.logo-item svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+  nav.hero-nav {
+    justify-content: space-between;
+    padding: 20px 18px 0;
+  }
+
+  .nav-links {
+    display: none;
+  }
+
+  .copy {
+    top: 19%;
+  }
+
+  .logos {
+    gap: 14px 24px;
+    font-size: 13px;
+  }
+}
