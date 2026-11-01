@@ -1,3 +1,5 @@
+import { PROVIDER_MODELS } from "../data/ecosystemModels";
+
 export type Locale = "zh" | "en";
 
 export interface PlaceholderSpec {
@@ -35,7 +37,8 @@ export interface EcosystemItem {
   name: string;
   category: string;
   protocol: string;
-  models: string;
+  models: readonly string[];
+  modelsUrl: string;
 }
 
 export interface FaqItem {
@@ -47,9 +50,12 @@ export interface SiteContent {
   nav: {
     brandSubtitle: string;
     links: { label: string; href: string }[];
-    langSwitch: string;
+    navigationLabel: string;
+    homeLabel: string;
+    languageLabel: string;
+    switchToDark: string;
+    switchToLight: string;
     github: string;
-    download: string;
   };
   hero: {
     titleMuted: string;
@@ -81,6 +87,9 @@ export interface SiteContent {
     sectionTag: string;
     title: string;
     subtitle: string;
+    modelsUpdatedLabel: string;
+    modelsLinkLabel: string;
+    modelsNote: string;
     items: EcosystemItem[];
     highlights: { code: string; title: string; body: string }[];
   };
@@ -102,12 +111,14 @@ export interface SiteContent {
   };
   footer: {
     tagline: string;
-    recipeNote: string;
-    placeholderGuideTitle: string;
-    placeholderGuideText: string;
+    description: string;
+    highlights: string[];
+    resourcesTitle: string;
+    links: { label: string; href: string; external?: boolean }[];
     privacyLabel: string;
     termsLabel: string;
     copyright: string;
+    backToTop: string;
   };
 }
 
@@ -121,9 +132,12 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
         { label: "模型生态", href: "#ecosystem" },
         { label: "常见问题", href: "#faq" },
       ],
-      langSwitch: "EN",
+      navigationLabel: "主导航",
+      homeLabel: "IOX 首页",
+      languageLabel: "选择语言",
+      switchToDark: "切换为深色主题",
+      switchToLight: "切换为浅色主题",
       github: "GitHub",
-      download: "下载 Windows 版",
     },
     hero: {
       titleMuted: "划词即达，无感唤醒。",
@@ -315,6 +329,9 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
     ecosystem: {
       sectionTag: "03 / 开放模型与官网档案",
       title: "自有 API 密钥与主流 AI 官网无缝兼得",
+      modelsUpdatedLabel: "模型核验",
+      modelsLinkLabel: "官方模型目录",
+      modelsNote: "展示各平台当前代表模型，实际可用性以账号权限与接入方式为准。",
       subtitle:
         "遵循显式默认模型到首个非空模型的确定性解析策略，支持一键拉取服务商模型列表与连通性测试。",
       items: [
@@ -322,37 +339,37 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
           name: "DeepSeek",
           category: "API 与官网直达",
           protocol: "OpenAI SSE / DOM Adapter",
-          models: "deepseek chat · deepseek reasoner",
+          ...PROVIDER_MODELS.deepseek,
         },
         {
           name: "OpenAI / ChatGPT",
           category: "API 与官网直达",
           protocol: "OpenAI SSE / DOM Adapter",
-          models: "gpt 4o · o3 mini · gpt 4.1",
+          ...PROVIDER_MODELS.openai,
         },
         {
           name: "Anthropic Claude",
           category: "兼容网关与官网直达",
           protocol: "OpenAI Gateway / DOM Adapter",
-          models: "claude 3.7 sonnet · claude 3.5 haiku",
+          ...PROVIDER_MODELS.claude,
         },
         {
           name: "通义千问 Qwen",
           category: "百炼 API 与官网直达",
           protocol: "DashScope Compatible / Web",
-          models: "qwen max · qwen plus · qwq 32b",
+          ...PROVIDER_MODELS.qwen,
         },
         {
           name: "Google Gemini",
           category: "兼容端点与官网直达",
           protocol: "OpenAI Endpoint / Web Adapter",
-          models: "gemini 2.5 pro · gemini 2.5 flash",
+          ...PROVIDER_MODELS.gemini,
         },
         {
           name: "Ollama / vLLM",
           category: "本地离线私有部署",
           protocol: "Localhost OpenAI API",
-          models: "llama 3.3 · qwen 2.5 coder · deepseek r1",
+          ...PROVIDER_MODELS.local,
         },
       ],
       highlights: [
@@ -417,12 +434,17 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
       systemReq: "运行环境：Windows 10 / 11 (x64) · WebView2 Runtime",
     },
     footer: {
-      tagline: "IOX · 基于 Tauri v2、Rust 与 React 19 构建的 Windows 全局划词 AI 助手。",
-      recipeNote:
-        "RECIPE · Substrate: Warm Paper #F5F1E8 · Inks: Charcoal #30343A (80%) + Cobalt #2148B8 / Terracotta #C65F38 (20%) · Process: Wireframe & Halftone Plate",
-      placeholderGuideTitle: "线框占位图片替换指南",
-      placeholderGuideText:
-        "页面中 5 张印版预览图均位于 site/public/placeholders/ 目录，直接覆盖同名文件即可替换为真实产品截图。",
+      tagline: "让 AI 随选随用，让思路保持连贯。",
+      description: "配置与 API 会话默认保存在本机，AI 请求由你选择的服务商处理。",
+      highlights: ["Windows 10 / 11", "API + Web", "本地优先"],
+      resourcesTitle: "继续探索 IOX",
+      links: [
+        { label: "GitHub 仓库", href: "https://github.com/AimAI-Labs/iox", external: true },
+        { label: "版本与更新", href: "https://github.com/AimAI-Labs/iox/releases", external: true },
+        { label: "模型生态", href: "#ecosystem" },
+        { label: "常见问题", href: "#faq" },
+      ],
+      backToTop: "回到顶部",
       privacyLabel: "本地隐私说明",
       termsLabel: "MIT 开源许可",
       copyright: "© 2026 AimAI Labs. Released under the MIT License.",
@@ -437,9 +459,12 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
         { label: "Ecosystem", href: "#ecosystem" },
         { label: "FAQ", href: "#faq" },
       ],
-      langSwitch: "中文",
+      navigationLabel: "Main navigation",
+      homeLabel: "IOX home",
+      languageLabel: "Select language",
+      switchToDark: "Switch to dark theme",
+      switchToLight: "Switch to light theme",
       github: "GitHub",
-      download: "Download for Windows",
     },
     hero: {
       titleMuted: "Select to Invoke.",
@@ -648,6 +673,9 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
     ecosystem: {
       sectionTag: "03 / ARCHIVAL PLATE MATRIX",
       title: "Bring Your Own API Key or Use Official Web Sessions",
+      modelsUpdatedLabel: "Models checked",
+      modelsLinkLabel: "Official model catalog",
+      modelsNote: "Current model examples. Availability depends on your account and connection method.",
       subtitle:
         "Deterministic model resolution with one click model discovery and connectivity verification.",
       items: [
@@ -655,37 +683,37 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
           name: "DeepSeek",
           category: "API & Web Portal",
           protocol: "OpenAI SSE / DOM Adapter",
-          models: "deepseek chat · deepseek reasoner",
+          ...PROVIDER_MODELS.deepseek,
         },
         {
           name: "OpenAI / ChatGPT",
           category: "API & Web Portal",
           protocol: "OpenAI SSE / DOM Adapter",
-          models: "gpt 4o · o3 mini · gpt 4.1",
+          ...PROVIDER_MODELS.openai,
         },
         {
           name: "Anthropic Claude",
           category: "Gateway & Web Portal",
           protocol: "OpenAI Gateway / DOM Adapter",
-          models: "claude 3.7 sonnet · claude 3.5 haiku",
+          ...PROVIDER_MODELS.claude,
         },
         {
           name: "Qwen (Tongyi)",
           category: "DashScope & Web Portal",
           protocol: "DashScope Compatible / Web",
-          models: "qwen max · qwen plus · qwq 32b",
+          ...PROVIDER_MODELS.qwen,
         },
         {
           name: "Google Gemini",
           category: "Compatible API & Web",
           protocol: "OpenAI Endpoint / Web Adapter",
-          models: "gemini 2.5 pro · gemini 2.5 flash",
+          ...PROVIDER_MODELS.gemini,
         },
         {
           name: "Ollama / vLLM",
           category: "Local Offline Runtime",
           protocol: "Localhost OpenAI API",
-          models: "llama 3.3 · qwen 2.5 coder · deepseek r1",
+          ...PROVIDER_MODELS.local,
         },
       ],
       highlights: [
@@ -750,12 +778,17 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
       systemReq: "Requires Windows 10 / 11 (x64) · WebView2 Runtime",
     },
     footer: {
-      tagline: "IOX · Windows Global Selection AI Assistant built with Tauri v2, Rust & React 19.",
-      recipeNote:
-        "RECIPE · Substrate: Warm Paper #F5F1E8 · Inks: Charcoal #30343A (80%) + Cobalt #2148B8 / Terracotta #C65F38 (20%) · Process: Wireframe & Halftone Plate",
-      placeholderGuideTitle: "Wireframe Placeholder Guide",
-      placeholderGuideText:
-        "All 5 specimen plates reside in site/public/placeholders/. Replace the SVG files directly to swap in product screenshots.",
+      tagline: "Select, ask, and keep your train of thought.",
+      description: "Settings and API chat history stay on your device by default. AI requests go to the provider you choose.",
+      highlights: ["Windows 10 / 11", "API + Web", "Local first"],
+      resourcesTitle: "Explore IOX",
+      links: [
+        { label: "GitHub repository", href: "https://github.com/AimAI-Labs/iox", external: true },
+        { label: "Releases & updates", href: "https://github.com/AimAI-Labs/iox/releases", external: true },
+        { label: "Model ecosystem", href: "#ecosystem" },
+        { label: "FAQ", href: "#faq" },
+      ],
+      backToTop: "Back to top",
       privacyLabel: "Local Privacy Policy",
       termsLabel: "MIT License",
       copyright: "© 2026 AimAI Labs. Released under the MIT License.",

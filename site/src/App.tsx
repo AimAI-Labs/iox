@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { SITE_CONTENT, type Locale } from "./locales/content";
 import { HeroSection } from "./components/HeroSection";
 import { TaglineRevealSection } from "./components/TaglineRevealSection";
@@ -6,6 +6,7 @@ import { CardDrawShowcase } from "./components/CardDrawShowcase";
 import { EcosystemSection } from "./components/EcosystemSection";
 import { FaqSection } from "./components/FaqSection";
 import { Footer } from "./components/Footer";
+import { useSiteTheme } from "./hooks/useSiteTheme";
 
 /**
  * Interpolate RGB between Hero off-white (#F7F7F5 -> 247, 247, 245)
@@ -16,13 +17,29 @@ function interpolateSubstrateColor(mix: number): string {
   const r = Math.round(247 + (245 - 247) * clamped);
   const g = Math.round(247 + (241 - 247) * clamped);
   const b = Math.round(245 + (232 - 245) * clamped);
-  return `rgb(${r}, ${g}, ${b})`;
+  return `${r} ${g} ${b}`;
 }
 
 export default function App() {
-  const [locale, setLocale] = useState<Locale>("zh");
+  const [locale, setLocale] = useState<Locale>(() => {
+    try {
+      return localStorage.getItem("iox-site-locale") === "en" ? "en" : "zh";
+    } catch {
+      return "zh";
+    }
+  });
+  const { theme, toggleTheme } = useSiteTheme();
   const [paperMix, setPaperMix] = useState<number>(0);
   const content = SITE_CONTENT[locale];
+
+  useEffect(() => {
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+    try {
+      localStorage.setItem("iox-site-locale", locale);
+    } catch {
+      // Language selection also works without browser storage.
+    }
+  }, [locale]);
 
   useEffect(() => {
     let rafId = 0;
@@ -52,20 +69,16 @@ export default function App() {
     };
   }, []);
 
-  const handleToggleLocale = () => {
-    setLocale((prev) => (prev === "zh" ? "en" : "zh"));
-  };
-
   const substrateBg = interpolateSubstrateColor(paperMix);
 
   return (
     <div
-      className="min-h-screen text-[#111111] transition-colors duration-300 ease-editorial"
-      style={{ backgroundColor: substrateBg }}
+      className="site-shell min-h-screen text-ink"
+      style={{ "--substrate-rgb": substrateBg } as CSSProperties}
     >
       <a
         href="#showcase"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:bg-[#242321] focus:px-4 focus:py-2 focus:text-[#F5F1E8]"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:bg-ink-carbon focus:px-4 focus:py-2 focus:text-canvas"
       >
         Skip to content
       </a>
@@ -74,7 +87,9 @@ export default function App() {
       <HeroSection
         content={content}
         locale={locale}
-        onToggleLocale={handleToggleLocale}
+        onLocaleChange={setLocale}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* 2. Below the Fold: Mono-Color Editorial Print Wireframe */}

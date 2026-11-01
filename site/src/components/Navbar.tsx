@@ -1,36 +1,26 @@
 import React from "react";
+import { Moon, Sun } from "lucide-react";
 import type { Locale, SiteContent } from "../locales/content";
+import type { SiteTheme } from "../hooks/useSiteTheme";
 
 interface NavbarProps {
   content: SiteContent["nav"];
   locale: Locale;
-  onToggleLocale: () => void;
+  onLocaleChange: (locale: Locale) => void;
+  theme: SiteTheme;
+  onToggleTheme: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   content,
-  onToggleLocale,
+  locale,
+  onLocaleChange,
+  theme,
+  onToggleTheme,
 }) => {
   return (
-    <nav className="hero-nav" aria-label="Main Navigation">
-      <a href="#top" className="brand-link" aria-label="IOX Home">
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <rect x="2" y="2" width="4" height="16" rx="1.5" />
-          <circle
-            cx="13"
-            cy="10"
-            r="5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3.2"
-          />
-        </svg>
+    <nav className="hero-nav" aria-label={content.navigationLabel}>
+      <a href="#top" className="brand-link" aria-label={content.homeLabel}>
         <span>IOX</span>
       </a>
 
@@ -50,19 +40,33 @@ export const Navbar: React.FC<NavbarProps> = ({
         </a>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="nav-controls">
+        <div className="locale-switch" role="group" aria-label={content.languageLabel} data-locale={locale}>
+          <span className="locale-switch__indicator" aria-hidden="true" />
+          {(["zh", "en"] as const).map((language) => (
+            <button
+              key={language}
+              type="button"
+              className="locale-switch__option button-xsm"
+              aria-pressed={locale === language}
+              aria-label={language === "zh" ? "切换为中文" : "Switch to English"}
+              lang={language === "zh" ? "zh-CN" : "en"}
+              onClick={() => onLocaleChange(language)}
+            >
+              {language === "zh" ? "中" : "EN"}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
-          onClick={onToggleLocale}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[#30343A]/30 bg-white/75 px-3 py-1.5 font-mono text-xs font-semibold text-[#30343A] backdrop-blur-sm transition-colors duration-300 ease-editorial hover:border-[#111111] hover:text-[#111111]"
-          aria-label="Switch Language"
+          className="theme-toggle"
+          onClick={onToggleTheme}
+          aria-label={theme === "light" ? content.switchToDark : content.switchToLight}
+          aria-pressed={theme === "dark"}
         >
-          <span>{content.langSwitch}</span>
+          <Sun className="theme-toggle__sun" size={18} strokeWidth={1.7} aria-hidden="true" />
+          <Moon className="theme-toggle__moon" size={18} strokeWidth={1.7} aria-hidden="true" />
         </button>
-
-        <a href="#download" className="signin-btn">
-          {content.download}
-        </a>
       </div>
     </nav>
   );

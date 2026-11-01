@@ -146,6 +146,8 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
 
   const isPhase1Interactive = rawTransition < 0.45;
   const isWorkflowInteractive = rawTransition >= 0.35;
+  // Keep readable content opaque while it can still be interacted with.
+  const phase1Opacity = 1 - easeOutCubic((rawTransition - 0.45) / 0.55);
 
   return (
     <section
@@ -173,19 +175,19 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
           {/* 1A. TOP BAR — Flies UP on transition */}
           <div
             style={{
-              opacity: Math.max(0, 1 - flyOut * 1.25),
+              opacity: phase1Opacity,
               transform: `translate3d(0, ${-flyOut * 180}px, 0) scale(${
                 1 - flyOut * 0.04
               })`,
             }}
-            className="mono-wireframe-strong bg-[#F5F1E8] px-4 py-3 will-change-transform"
+            className="wireframe-bar mono-wireframe-strong bg-paper px-4 py-3 will-change-transform"
           >
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <span className="font-mono text-[#2148B8] caption-3">
+                <span className="font-mono text-plate-cobalt caption-3">
                   ⊕ {deck.sectionTag}
                 </span>
-                <span className="hidden font-mono text-[#30343A]/60 caption-4 sm:inline">
+                <span className="hidden font-mono text-ink-muted caption-4 sm:inline">
                   / {deck.scrollHint}
                 </span>
               </div>
@@ -200,8 +202,8 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                   const isSelected = idx === activeIndex;
                   const accentBg =
                     card.inkAccent === "cobalt"
-                      ? "bg-[#2148B8] text-[#F5F1E8]"
-                      : "bg-[#C65F38] text-[#F5F1E8]";
+                      ? "bg-plate-cobalt text-on-accent"
+                      : "bg-plate-terracotta text-on-accent";
                   return (
                     <button
                       key={card.id}
@@ -209,10 +211,10 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                       role="tab"
                       aria-selected={isSelected}
                       onClick={() => scrollToCard(idx)}
-                      className={`px-3 py-1 font-mono transition-colors duration-300 ease-editorial caption-3 focus:outline-none focus:ring-2 focus:ring-[#2148B8] ${
+                      className={`px-3 py-1 font-mono transition-colors duration-300 ease-editorial caption-3 focus:outline-none focus:ring-2 focus:ring-plate-cobalt ${
                         isSelected
                           ? accentBg
-                          : "border border-[#30343A]/30 bg-transparent text-[#30343A] hover:border-[#30343A]"
+                          : "border border-rule/30 bg-transparent text-ink-charcoal hover:border-rule"
                       }`}
                     >
                       0{idx + 1}
@@ -228,25 +230,25 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
             {/* 1B. LEFT INTRODUCTION PANEL — Flies LEFT on transition */}
             <div
               style={{
-                opacity: Math.max(0, 1 - flyOut * 1.15),
+                opacity: phase1Opacity,
                 transform: `translate3d(${-flyOut * 520}px, 0, 0) rotate(${
                   -flyOut * 5
                 }deg)`,
               }}
               className="flex flex-col justify-between will-change-transform lg:col-span-5"
             >
-              <div className="mono-wireframe-strong bg-[#F5F1E8] p-6 md:p-8">
-                <div className="flex items-center justify-between border-b border-[#30343A]/30 pb-3">
+              <div className="wireframe-panel mono-wireframe-strong bg-paper p-6 md:p-8">
+                <div className="flex items-center justify-between border-b border-rule/30 pb-3">
                   <span
                     className={`font-mono caption-3 ${
                       activeCard.inkAccent === "cobalt"
-                        ? "text-[#2148B8]"
-                        : "text-[#C65F38]"
+                        ? "text-plate-cobalt"
+                        : "text-plate-terracotta"
                     }`}
                   >
                     {activeCard.plateNo}
                   </span>
-                  <span className="font-mono text-[#30343A]/70 caption-4">
+                  <span className="font-mono text-ink-muted caption-4">
                     {activeCard.badge}
                   </span>
                 </div>
@@ -255,31 +257,31 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                   key={activeCard.id}
                   className="transition-opacity duration-300 ease-editorial"
                 >
-                  <h2 className="heading-4 mt-5 text-[#242321]">
+                  <h2 className="heading-4 mt-5 text-ink-carbon">
                     {activeCard.title}
                   </h2>
 
                   <div
                     className={`mt-4 border p-3 font-mono caption-3 ${
                       activeCard.inkAccent === "cobalt"
-                        ? "border-[#2148B8] bg-[#2148B8]/5 text-[#2148B8]"
-                        : "border-[#C65F38] bg-[#C65F38]/5 text-[#C65F38]"
+                        ? "border-plate-cobalt bg-plate-cobalt/5 text-plate-cobalt"
+                        : "border-plate-terracotta bg-plate-terracotta/5 text-plate-terracotta"
                     }`}
                   >
                     ✦ {activeCard.outcome}
                   </div>
 
-                  <p className="body-6 mt-4 text-[#30343A]">
+                  <p className="body-6 mt-4 text-ink-charcoal">
                     {activeCard.description}
                   </p>
 
-                  <ul className="mt-5 space-y-2 border-t border-[#30343A]/30 pt-4">
+                  <ul className="mt-5 space-y-2 border-t border-rule/30 pt-4">
                     {activeCard.bullets.map((bullet, bIdx) => (
                       <li
                         key={bullet}
-                        className="flex items-start gap-2 text-[#242321] body-6"
+                        className="flex items-start gap-2 text-ink-carbon body-6"
                       >
-                        <span className="font-mono text-[#2148B8] caption-3">
+                        <span className="font-mono text-plate-cobalt caption-3">
                           0{bIdx + 1}
                         </span>
                         <span>{bullet}</span>
@@ -289,22 +291,22 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                 </div>
 
                 {/* Ruled Stat Strip & Manual Prev/Next Buttons */}
-                <div className="mt-6 flex items-center justify-between border-t border-[#30343A] pt-4">
-                  <div>
-                    <div className="font-mono text-2xl font-semibold text-[#242321]">
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-4">
+                  <div className="shrink-0">
+                    <div className="whitespace-nowrap font-mono text-xl font-semibold text-ink-carbon">
                       {activeCard.statValue}
                     </div>
-                    <div className="font-mono text-[#30343A]/75 caption-4">
+                    <div className="whitespace-nowrap font-mono text-ink-muted caption-4">
                       {activeCard.statLabel}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="ml-auto flex shrink-0 items-center gap-2">
                     <button
                       type="button"
                       disabled={activeIndex === 0}
                       onClick={() => scrollToCard(Math.max(0, activeIndex - 1))}
-                      className="mono-wireframe-strong px-3 py-2 font-mono text-[#30343A] transition-transform duration-300 ease-editorial caption-3 hover:bg-[#30343A] hover:text-[#F5F1E8] active:scale-95 disabled:opacity-30"
+                      className="mono-wireframe-strong inline-flex shrink-0 items-center justify-center whitespace-nowrap px-2 py-2 font-mono text-ink-charcoal transition-transform duration-300 ease-editorial caption-3 hover:bg-ink-charcoal hover:text-on-accent active:scale-95 disabled:opacity-60"
                     >
                       ← PREV
                     </button>
@@ -317,7 +319,7 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                           scrollToProgress(0.86);
                         }
                       }}
-                      className="mono-wireframe-strong px-3 py-2 font-mono text-[#30343A] transition-transform duration-300 ease-editorial caption-3 hover:bg-[#30343A] hover:text-[#F5F1E8] active:scale-95"
+                      className="mono-wireframe-strong inline-flex shrink-0 items-center justify-center whitespace-nowrap px-2 py-2 font-mono text-ink-charcoal transition-transform duration-300 ease-editorial caption-3 hover:bg-ink-charcoal hover:text-on-accent active:scale-95"
                     >
                       DRAW NEXT →
                     </button>
@@ -329,7 +331,7 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
             {/* 1C. RIGHT PHYSICAL CARD FLIP & TUCK-TO-BACK DECK — Flies RIGHT on transition */}
             <div
               style={{
-                opacity: Math.max(0, 1 - flyOut * 1.15),
+                opacity: phase1Opacity,
                 transform: `translate3d(${flyOut * 560}px, 0, 0) rotate(${
                   flyOut * 5
                 }deg)`,
@@ -394,50 +396,51 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
 
                   const accentBorder =
                     card.inkAccent === "cobalt"
-                      ? "border-[#2148B8]"
-                      : "border-[#C65F38]";
+                      ? "border-plate-cobalt"
+                      : "border-plate-terracotta";
 
                   return (
                     <figure
                       key={card.id}
+                      data-accent={card.inkAccent}
                       onClick={() => scrollToCard(idx)}
                       style={{
                         zIndex,
                         transform: `translate3d(${translateX}px, ${translateY}px, 0) rotateZ(${rotateZ}deg) scale(${scale})`,
                       }}
-                      className="mono-wireframe-strong absolute inset-0 flex cursor-pointer flex-col justify-between bg-[#F5F1E8] p-2 shadow-[0_6px_20px_rgba(36,35,33,0.08)] will-change-transform sm:p-3"
+                      className="wireframe-preview mono-wireframe-strong absolute inset-0 flex cursor-pointer flex-col justify-between bg-paper p-2 shadow-[0_6px_20px_rgba(36,35,33,0.08)] will-change-transform sm:p-3"
                     >
                       {/* Top Specimen Plate Header */}
-                      <div className="flex items-center justify-between border-b border-[#30343A] bg-[#F5F1E8] px-3 py-2">
-                        <div className="flex items-center gap-2 font-mono text-[#30343A] caption-3">
+                      <div className="wireframe-preview__chrome flex items-center justify-between border-b border-rule bg-paper px-3 py-2">
+                        <div className="flex items-center gap-2 font-mono text-ink-charcoal caption-3">
                           <span
                             className={`inline-block h-2 w-2 ${
                               card.inkAccent === "cobalt"
-                                ? "bg-[#2148B8]"
-                                : "bg-[#C65F38]"
+                                ? "bg-plate-cobalt"
+                                : "bg-plate-terracotta"
                             }`}
                           />
                           <span>{card.placeholder.label}</span>
                         </div>
-                        <span className="font-mono text-[#30343A]/75 caption-4">
+                        <span className="font-mono text-ink-muted caption-4">
                           {card.placeholder.dimensions}
                         </span>
                       </div>
 
                       {/* Solid Opaque Wireframe SVG Artwork */}
                       <div
-                        className={`relative flex-1 overflow-hidden border ${accentBorder} bg-[#F5F1E8]`}
+                        className={`wireframe-preview__artwork relative flex-1 overflow-hidden border ${accentBorder} bg-paper`}
                       >
                         <img
                           src={card.placeholder.src}
                           alt={card.placeholder.label}
-                          className="h-full w-full bg-[#F5F1E8] object-cover"
+                          className="h-full w-full bg-paper object-cover"
                           draggable={false}
                         />
                       </div>
 
                       {/* Bottom Replacement Path & Registration Footer */}
-                      <figcaption className="flex items-center justify-between border-t border-[#30343A] bg-[#F5F1E8] px-3 py-1.5 font-mono text-[#30343A]/80 caption-5">
+                      <figcaption className="wireframe-preview__chrome flex items-center justify-between border-t border-rule bg-paper px-3 py-1.5 font-mono text-ink-muted caption-5">
                         <span className="truncate">{card.placeholder.hint}</span>
                         <span className="ml-2 shrink-0 uppercase">
                           {card.plateNo}
@@ -453,19 +456,19 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
           {/* 1D. BOTTOM PROGRESS RULER — Flies DOWN on transition */}
           <div
             style={{
-              opacity: Math.max(0, 1 - flyOut * 1.25),
+              opacity: phase1Opacity,
               transform: `translate3d(0, ${flyOut * 180}px, 0) scale(${
                 1 - flyOut * 0.04
               })`,
             }}
-            className="mono-wireframe-box flex items-center justify-between bg-[#F5F1E8] px-4 py-2 font-mono text-[#30343A] will-change-transform caption-4"
+            className="wireframe-bar mono-wireframe-box flex items-center justify-between bg-paper px-4 py-2 font-mono text-ink-charcoal will-change-transform caption-4"
           >
             <span>
               {deck.drawStatusLabel}: 0{activeIndex + 1} / 0{totalCards}
             </span>
-            <div className="mx-4 h-1 flex-1 bg-[#30343A]/15">
+            <div className="mx-4 h-1 flex-1 bg-ink-charcoal/15">
               <div
-                className="h-full origin-left bg-[#2148B8]"
+                className="h-full origin-left bg-plate-cobalt"
                 style={{
                   transform: `scaleX(${
                     (continuousIndex + 1) / totalCards
@@ -481,7 +484,7 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
         <div
           aria-hidden={!isWorkflowInteractive}
           style={{
-            opacity: workflowEnter,
+            opacity: isWorkflowInteractive ? 1 : workflowEnter,
             transform: `translate3d(0, ${(1 - workflowEnter) * 28}px, 0) scale(${
               0.82 + 0.18 * workflowEnter
             })`,
@@ -489,28 +492,28 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
           }}
           className="absolute inset-0 flex items-center justify-center px-6 py-8 will-change-transform"
         >
-          <div className="mono-wireframe-strong mx-auto w-full max-w-6xl bg-[#F5F1E8] p-6 md:p-10">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#30343A] pb-4">
-              <span className="font-mono text-[#2148B8] caption-3">
+          <div className="wireframe-panel mono-wireframe-strong mx-auto w-full max-w-6xl bg-paper p-6 md:p-10">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-rule pb-4">
+              <span className="font-mono text-plate-cobalt caption-3">
                 ⊕ {workflow.sectionTag}
               </span>
               <div className="flex items-center gap-4">
                 <button
                   type="button"
                   onClick={() => scrollToCard(totalCards - 1)}
-                  className="border border-[#30343A]/40 px-2.5 py-1 font-mono text-[#30343A] transition-colors hover:border-[#2148B8] hover:text-[#2148B8] caption-4"
+                  className="border border-rule/40 px-2.5 py-1 font-mono text-ink-charcoal transition-colors hover:border-plate-cobalt hover:text-plate-cobalt caption-4"
                 >
                   ↑ BACK TO DECK (05)
                 </button>
-                <span className="hidden font-mono text-[#30343A]/75 caption-4 sm:inline">
+                <span className="hidden font-mono text-ink-muted caption-4 sm:inline">
                   LAYOUT: RULED INFORMATION POSTER
                 </span>
               </div>
             </div>
 
             <div className="mt-6 max-w-[680px] md:mt-8">
-              <h2 className="heading-2 text-[#242321]">{workflow.title}</h2>
-              <p className="body-3 mt-3 text-[#30343A]">{workflow.subtitle}</p>
+              <h2 className="heading-2 text-ink-carbon">{workflow.title}</h2>
+              <p className="body-3 mt-3 text-ink-charcoal">{workflow.subtitle}</p>
             </div>
 
             {/* 3-Column Wireframe Steps with Scroll-Linked Step Emphasis */}
@@ -526,46 +529,47 @@ export const CardDrawShowcase: React.FC<CardDrawShowcaseProps> = ({
                 return (
                   <article
                     key={step.step}
+                    data-active={isHighlighted}
                     style={{
-                      opacity: stepOffset,
+                      opacity: isWorkflowInteractive ? 1 : stepOffset,
                       transform: `translate3d(0, ${
                         (1 - stepOffset) * 24
                       }px, 0)`,
                     }}
-                    className={`flex flex-col justify-between border p-6 transition-colors duration-300 ease-editorial ${
+                    className={`wireframe-step flex flex-col justify-between border p-6 transition-colors duration-300 ease-editorial ${
                       isHighlighted
-                        ? "border-[#2148B8] bg-[#2148B8]/[0.04]"
-                        : "border-[#30343A] bg-[#F5F1E8]"
+                        ? "border-plate-cobalt bg-plate-cobalt/[0.04]"
+                        : "border-rule bg-paper"
                     }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between border-b border-[#30343A]/30 pb-3">
+                      <div className="flex items-center justify-between border-b border-rule/30 pb-3">
                         <span
                           className={`font-mono caption-3 ${
                             isHighlighted
-                              ? "text-[#2148B8]"
-                              : "text-[#C65F38]"
+                              ? "text-plate-cobalt"
+                              : "text-plate-terracotta"
                           }`}
                         >
                           {step.step}
                         </span>
-                        <span className="font-mono text-[#30343A]/60 caption-5">
+                        <span className="font-mono text-ink-muted caption-5">
                           0{index + 1} / 03
                         </span>
                       </div>
 
-                      <h3 className="title-1 mt-5 text-[#242321]">
+                      <h3 className="title-1 mt-5 text-ink-carbon">
                         {step.title}
                       </h3>
-                      <div className="mt-1 font-mono text-[#30343A]/75 caption-4">
+                      <div className="mt-1 font-mono text-ink-muted caption-4">
                         {step.subtitle}
                       </div>
-                      <p className="body-6 mt-4 text-[#30343A]">
+                      <p className="body-6 mt-4 text-ink-charcoal">
                         {step.detail}
                       </p>
                     </div>
 
-                    <div className="mt-6 border-t border-[#30343A]/40 pt-3 font-mono text-[#30343A] caption-4">
+                    <div className="mt-6 border-t border-rule/40 pt-3 font-mono text-ink-charcoal caption-4">
                       MODULE: {step.tag}
                     </div>
                   </article>

@@ -14,19 +14,19 @@ export const FaqSection: React.FC<FaqSectionProps> = ({ faq }) => {
         {/* Left Column: Editorial Header & Active Negative Space */}
         <div className="flex flex-col justify-between lg:col-span-5">
           <div>
-            <div className="mono-wireframe-box inline-flex items-center gap-2 px-3 py-1 font-mono text-[#2148B8] caption-3">
+            <div className="mono-wireframe-box inline-flex items-center gap-2 px-3 py-1 font-mono text-plate-cobalt caption-3">
               <span>⊕</span>
               <span>{faq.sectionTag}</span>
             </div>
-            <h2 className="heading-3 mt-6 text-[#242321]">{faq.title}</h2>
-            <p className="body-6 mt-4 text-[#30343A]">{faq.subtitle}</p>
+            <h2 className="heading-3 mt-6 text-ink-carbon">{faq.title}</h2>
+            <p className="body-6 mt-4 text-ink-charcoal">{faq.subtitle}</p>
           </div>
 
           <div className="mono-halftone-cobalt mono-wireframe-box mt-8 hidden h-40 p-4 lg:flex lg:flex-col lg:justify-between">
-            <span className="font-mono text-[#2148B8] caption-4">
+            <span className="font-mono text-plate-cobalt caption-4">
               RELEASE ZONE · ACTIVE NEGATIVE SPACE
             </span>
-            <span className="font-mono text-[#30343A] caption-5">
+            <span className="font-mono text-ink-charcoal caption-5">
               VERIFIED AGAINST RUST / TAURI SOURCE
             </span>
           </div>
@@ -39,30 +39,31 @@ export const FaqSection: React.FC<FaqSectionProps> = ({ faq }) => {
             return (
               <div
                 key={item.question}
-                className="mono-wireframe-strong bg-[#F5F1E8] transition-colors duration-300 ease-editorial"
+                data-open={isOpen}
+                className="wireframe-panel wireframe-faq mono-wireframe-strong bg-paper transition-colors duration-300 ease-editorial"
               >
                 <button
                   type="button"
                   aria-expanded={isOpen}
                   onClick={() => setOpenIndex(isOpen ? null : idx)}
-                  className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left focus:outline-none focus:ring-2 focus:ring-[#2148B8]"
+                  className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left focus:outline-none focus:ring-2 focus:ring-plate-cobalt"
                 >
                   <div className="flex items-start gap-3">
-                    <span className="font-mono text-[#2148B8] caption-3">
+                    <span className="font-mono text-plate-cobalt caption-3">
                       Q0{idx + 1}
                     </span>
-                    <span className="title-3 text-[#242321]">
+                    <span className="title-3 text-ink-carbon">
                       {item.question}
                     </span>
                   </div>
-                  <span className="shrink-0 font-mono text-[#30343A] title-3">
+                  <span className="wireframe-faq__toggle shrink-0 font-mono text-ink-charcoal title-3">
                     {isOpen ? "−" : "+"}
                   </span>
                 </button>
 
                 {isOpen && (
-                  <div className="border-t border-[#30343A]/30 px-6 py-4">
-                    <p className="body-6 text-[#30343A]">{item.answer}</p>
+                  <div className="border-t border-rule/30 px-6 py-4">
+                    <p className="body-6 text-ink-charcoal">{item.answer}</p>
                   </div>
                 )}
               </div>

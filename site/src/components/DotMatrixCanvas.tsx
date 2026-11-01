@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import type { SiteTheme } from '../hooks/useSiteTheme';
 import {
   clamp,
   computeDissolveSeed,
@@ -83,8 +84,15 @@ function createFallbackTile(isLeft: boolean, isPoseA: boolean): HTMLCanvasElemen
   return canvas;
 }
 
-export const DotMatrixCanvas: React.FC = () => {
+export const DotMatrixCanvas: React.FC<{ theme: SiteTheme }> = ({ theme }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const themeRef = useRef(theme);
+  const redrawRef = useRef<(() => void) | null>(null);
+
+  useLayoutEffect(() => {
+    themeRef.current = theme;
+    redrawRef.current?.();
+  }, [theme]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -442,22 +450,24 @@ export const DotMatrixCanvas: React.FC = () => {
         }
       }
 
-      ctx.fillStyle = '#0d0d0d';
+      const dark = themeRef.current === 'dark';
+      ctx.fillStyle = dark ? '#d4d4d4' : '#0d0d0d';
       ctx.fill(basePath);
 
       if (hasMid) {
-        ctx.fillStyle = '#1b2f6e';
+        ctx.fillStyle = dark ? '#a5b4e8' : '#1b2f6e';
         ctx.fill(midPath);
       }
 
       if (hasActive) {
-        ctx.fillStyle = '#2148b8';
+        ctx.fillStyle = dark ? '#8fa9ff' : '#2148b8';
         ctx.fill(activePath);
       }
     }
 
     // Expose window.__render for deterministic tests & recorders
     (window as unknown as { __render: (t: number) => void }).__render = render;
+    redrawRef.current = () => render(Math.max(0, lastTimeSec));
 
     function frameLoop(now: number) {
       if (!isMounted) return;
@@ -470,6 +480,7 @@ export const DotMatrixCanvas: React.FC = () => {
 
     return () => {
       isMounted = false;
+      redrawRef.current = null;
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('pointermove', handlePointerMove);

@@ -63,19 +63,19 @@ export const TaglineRevealSection: React.FC<TaglineRevealSectionProps> = ({
       className="relative mx-auto max-w-6xl px-6 py-20 md:py-24"
     >
       {/* Editorial registration header strip */}
-      <div className="mono-wireframe-box flex flex-wrap items-center justify-between gap-4 px-4 py-2">
-        <div className="flex items-center gap-2 font-mono text-[#2148B8] caption-3">
+      <div className="wireframe-bar mono-wireframe-box flex flex-wrap items-center justify-between gap-4 px-4 py-2">
+        <div className="flex items-center gap-2 font-mono text-plate-cobalt caption-3">
           <span>⊕</span>
           <span>{tagline.indexLabel}</span>
         </div>
-        <span className="font-mono text-[#30343A]/70 caption-4">
+        <span className="font-mono text-ink-muted caption-4">
           PLATE 00 · EDITORIAL STATEMENT
         </span>
       </div>
 
       {/* B11 Mandatory Word-by-Word Tagline Reveal */}
-      <div className="mt-12 max-w-[680px]">
-        <p className="heading-3 flex flex-wrap gap-x-2 gap-y-2 leading-tight">
+      <div className="mt-12 max-w-5xl">
+        <p className="heading-2 flex flex-wrap gap-x-2 gap-y-2 leading-tight">
           {tagline.words.map((word, idx) => {
             const isRevealed = idx < activeWordCount;
             return (
@@ -83,8 +83,8 @@ export const TaglineRevealSection: React.FC<TaglineRevealSectionProps> = ({
                 key={`${word}-${idx}`}
                 className="transition-opacity duration-500 ease-editorial"
                 style={{
-                  color: idx === 2 || word === "IOX" ? "#2148B8" : "#30343A",
-                  opacity: isRevealed ? 1 : 0.26,
+                  color: idx === 2 || word === "IOX" ? "var(--plate-cobalt)" : "var(--ink-charcoal)",
+                  opacity: isRevealed ? 1 : "var(--tagline-rest-opacity)",
                 }}
               >
                 {word}
@@ -95,7 +95,7 @@ export const TaglineRevealSection: React.FC<TaglineRevealSectionProps> = ({
       </div>
 
       {/* Active negative space release zone + bottom ruled microcopy */}
-      <div className="mt-12 flex items-center justify-between border-t border-[#30343A]/30 pt-4 font-mono text-[#30343A]/75 caption-4">
+      <div className="mt-12 flex items-center justify-between border-t border-rule/30 pt-4 font-mono text-ink-muted caption-4">
         <span>{tagline.caption}</span>
         <span>EMPTY PAPER QUOTA ≥ 35%</span>
       </div>

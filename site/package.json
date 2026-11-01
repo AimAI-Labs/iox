@@ -10,6 +10,7 @@
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@lobehub/icons": "^5.16.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.31.0",
     "react": "^19.1.0",

@@ -10,22 +10,25 @@ export default {
   theme: {
     extend: {
       colors: {
-        canvas: "var(--bg)",
+        canvas: "rgb(var(--bg-rgb) / <alpha-value>)",
+        rule: "rgb(var(--rule-rgb) / <alpha-value>)",
+        "on-accent": "rgb(var(--on-accent-rgb) / <alpha-value>)",
         paper: {
-          DEFAULT: "#F5F1E8",
+          DEFAULT: "rgb(var(--paper-rgb) / <alpha-value>)",
           neutral: "#FAFAF7",
           cool: "#E9E9E5",
         },
         ink: {
-          DEFAULT: "#111111",
-          charcoal: "#30343A",
-          carbon: "#242321",
+          DEFAULT: "rgb(var(--ink-rgb) / <alpha-value>)",
+          charcoal: "rgb(var(--charcoal-rgb) / <alpha-value>)",
+          muted: "rgb(var(--muted-rgb) / <alpha-value>)",
+          carbon: "rgb(var(--carbon-rgb) / <alpha-value>)",
           mute: "#7B7B7B",
           sub: "#9A9A9A",
         },
         plate: {
-          cobalt: "#2148B8",
-          terracotta: "#C65F38",
+          cobalt: "rgb(var(--cobalt-rgb) / <alpha-value>)",
+          terracotta: "rgb(var(--terracotta-rgb) / <alpha-value>)",
           signal: "#C83232",
           botanical: "#008A4B",
         },
