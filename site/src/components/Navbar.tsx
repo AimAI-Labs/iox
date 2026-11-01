@@ -1,5 +1,4 @@
 import React from "react";
-import { Globe } from "lucide-react";
 import type { Locale, SiteContent } from "../locales/content";
 
 interface NavbarProps {
@@ -23,7 +22,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           aria-hidden="true"
         >
           <rect x="2" y="2" width="4" height="16" rx="1.5" />
-          <circle cx="13" cy="10" r="5" fill="none" stroke="currentColor" strokeWidth="3.2" />
+          <circle
+            cx="13"
+            cy="10"
+            r="5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.2"
+          />
         </svg>
         <span>IOX</span>
       </a>
@@ -44,14 +50,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         </a>
       </div>
 
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={onToggleLocale}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[#d8d8d2] bg-white/70 px-3 py-1.5 text-xs font-medium text-[#3a3a3a] backdrop-blur-sm transition-colors hover:border-[#111111] hover:text-[#111111]"
+          className="inline-flex items-center gap-1.5 rounded-full border border-[#30343A]/30 bg-white/75 px-3 py-1.5 font-mono text-xs font-semibold text-[#30343A] backdrop-blur-sm transition-colors duration-300 ease-editorial hover:border-[#111111] hover:text-[#111111]"
           aria-label="Switch Language"
         >
-          <Globe className="h-3.5 w-3.5" />
           <span>{content.langSwitch}</span>
         </button>
 

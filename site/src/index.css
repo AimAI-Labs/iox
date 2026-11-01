@@ -4,12 +4,15 @@
 
 :root {
   --bg: #f7f7f5;
-  --surface: #fafaf8;
+  --paper-warm: #f5f1e8;
   --ink: #111111;
+  --ink-charcoal: #30343a;
+  --ink-carbon: #242321;
+  --plate-cobalt: #2148b8;
+  --plate-terracotta: #c65f38;
   --mute: #9a9a9a;
   --sub: #7b7b7b;
-  --line: #e5e5e0;
-  --line-strong: #dcdcd6;
+  --line-rule: #30343a;
 }
 
 * {
@@ -27,22 +30,139 @@ body {
   min-height: 100%;
   background: var(--bg);
   color: var(--ink);
-  font-family: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system,
-    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "Geist", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system,
+    sans-serif;
+  font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
 
-/* ── Reference Hero Layout & Dot-Matrix Canvas Rules ────────────── */
+/* ── B1 Named Text Styles (landing-page-design) ─────────────────── */
+@layer components {
+  .heading-1 {
+    @apply text-4xl md:text-6xl font-semibold tracking-tight;
+    text-wrap: balance;
+  }
+  .heading-2 {
+    @apply text-3xl md:text-5xl font-semibold tracking-tight;
+    text-wrap: balance;
+  }
+  .heading-3 {
+    @apply text-2xl md:text-4xl font-semibold tracking-tight;
+    text-wrap: balance;
+  }
+  .heading-4 {
+    @apply text-xl md:text-3xl font-semibold tracking-tight;
+    text-wrap: balance;
+  }
+  .heading-5 {
+    @apply text-lg md:text-2xl font-semibold tracking-tight;
+    text-wrap: balance;
+  }
+  .heading-6 {
+    @apply text-xl font-semibold tracking-tight;
+    text-wrap: balance;
+  }
+
+  .title-1 {
+    @apply text-xl font-medium;
+  }
+  .title-2 {
+    @apply text-lg font-medium;
+  }
+  .title-3 {
+    @apply text-base font-medium;
+  }
+  .title-4 {
+    @apply text-sm font-medium;
+  }
+  .title-5 {
+    @apply text-xs font-medium;
+  }
+
+  .body-1 {
+    @apply text-base font-semibold;
+    text-wrap: pretty;
+  }
+  .body-2 {
+    @apply text-base font-medium;
+    text-wrap: pretty;
+  }
+  .body-3 {
+    @apply text-base font-normal;
+    text-wrap: pretty;
+  }
+  .body-4 {
+    @apply text-sm font-semibold;
+    text-wrap: pretty;
+  }
+  .body-5 {
+    @apply text-sm font-medium;
+    text-wrap: pretty;
+  }
+  .body-6 {
+    @apply text-sm font-normal;
+    text-wrap: pretty;
+  }
+
+  .button-lg {
+    @apply text-lg font-semibold;
+  }
+  .button-md {
+    @apply text-base font-semibold;
+  }
+  .button-sm {
+    @apply text-sm font-semibold;
+  }
+  .button-xsm {
+    @apply text-xs font-semibold;
+  }
+
+  .caption-1 {
+    @apply text-sm font-medium;
+  }
+  .caption-2 {
+    @apply text-sm font-normal;
+  }
+  .caption-3 {
+    @apply text-xs font-semibold;
+  }
+  .caption-4 {
+    @apply text-xs font-medium;
+  }
+  .caption-5 {
+    @apply text-xs font-normal;
+  }
+}
+
+/* ── Mono-Color Editorial Print & Wireframe Utilities ───────────── */
+.mono-halftone-bg {
+  background-image: radial-gradient(rgba(48, 52, 58, 0.16) 1px, transparent 1px);
+  background-size: 12px 12px;
+}
+
+.mono-halftone-cobalt {
+  background-image: radial-gradient(rgba(33, 72, 184, 0.18) 1.25px, transparent 1.25px);
+  background-size: 10px 10px;
+}
+
+.mono-wireframe-box {
+  border: 1px solid rgba(48, 52, 58, 0.38);
+}
+
+.mono-wireframe-strong {
+  border: 1px solid #30343a;
+}
+
+/* ── Reference Hero Layout & Dot-Matrix Canvas Rules (Preserved) ── */
 .hero {
   position: relative;
   height: 100vh;
   min-height: 680px;
   overflow: hidden;
-  background-color: var(--bg);
+  background-color: transparent;
   width: 100%;
-  border-bottom: 1px solid var(--line);
 }
 
 canvas#dots {
@@ -62,7 +182,7 @@ nav.hero-nav {
   justify-content: center;
   gap: clamp(18px, 2.6vw, 40px);
   padding-top: 32px;
-  font-size: 13.5px;
+  font-size: 14px;
 }
 
 .brand-link {
@@ -70,11 +190,11 @@ nav.hero-nav {
   align-items: center;
   gap: 8px;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 16px;
   letter-spacing: -0.01em;
   color: var(--ink);
   text-decoration: none;
-  margin-right: 10px;
+  margin-right: 12px;
 }
 
 .nav-links {
@@ -86,7 +206,7 @@ nav.hero-nav {
 .nav-link {
   color: #3a3a3a;
   text-decoration: none;
-  transition: color 0.2s ease;
+  transition: color 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   font-weight: 400;
 }
 
@@ -97,20 +217,24 @@ nav.hero-nav {
 .signin-btn {
   background: #111111;
   color: #ffffff;
-  padding: 9px 19px;
-  border-radius: 999px;
-  font-weight: 500;
-  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 14px;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.25s ease;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 
 .signin-btn:hover {
   transform: translateY(-1px);
+}
+
+.signin-btn:active {
+  transform: scale(0.98);
 }
 
 .copy {
@@ -119,26 +243,30 @@ nav.hero-nav {
   top: 24.5%;
   transform: translateX(-50%);
   text-align: center;
-  width: min(92vw, 720px);
+  width: min(92vw, 680px);
   z-index: 3;
   pointer-events: auto;
 }
 
 .copy h1 {
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: -0.035em;
   line-height: 1.04;
-  font-size: clamp(38px, 3.75vw, 68px);
+  font-size: clamp(36px, 3.75vw, 60px);
+  text-wrap: balance;
 }
 
 .copy h1 .line-reconnecting {
   display: block;
-  color: #9a9a9a;
+  color: #7a7a7a;
 }
 
 .copy h1 .line-creativity {
   display: block;
-  color: #111111;
+  background: linear-gradient(90deg, #000000 0%, #555555 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .copy p.subline {
@@ -146,10 +274,11 @@ nav.hero-nav {
   margin-left: auto;
   margin-right: auto;
   max-width: 340px;
-  color: #7b7b7b;
-  font-size: clamp(13px, 1.02vw, 15.5px);
-  line-height: 1.4;
+  color: #6b6b6b;
+  font-size: 14px;
+  line-height: 20px;
   font-weight: 400;
+  text-wrap: pretty;
 }
 
 .cta {
@@ -178,7 +307,9 @@ nav.hero-nav {
   );
   filter: blur(9px);
   opacity: 0.85;
-  transition: opacity 0.3s ease, filter 0.3s ease, bottom 0.3s ease;
+  transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    bottom 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
   z-index: 0;
 }
@@ -195,12 +326,13 @@ nav.hero-nav {
   display: inline-block;
   background: #111111;
   color: #ffffff;
-  font-size: 13.5px;
-  font-weight: 500;
-  padding: 11px 22px;
-  border-radius: 999px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  padding: 10px 22px;
+  border-radius: 9999px;
   text-decoration: none;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 
@@ -208,9 +340,13 @@ nav.hero-nav {
   transform: translateY(-1px);
 }
 
+.cta:active .cta-pill {
+  transform: scale(0.98);
+}
+
 .logos {
   position: absolute;
-  bottom: clamp(28px, 5.5vh, 56px);
+  bottom: clamp(28px, 6vh, 64px);
   left: 0;
   width: 100%;
   display: flex;
@@ -220,8 +356,8 @@ nav.hero-nav {
   flex-wrap: wrap;
   padding: 0 16px;
   z-index: 3;
-  color: #8d8d8d;
-  font-size: clamp(13.5px, 1.15vw, 16.5px);
+  color: #7b7b7b;
+  font-size: 14px;
   font-weight: 500;
   letter-spacing: -0.01em;
 }
@@ -229,7 +365,7 @@ nav.hero-nav {
 .logo-item {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   user-select: none;
 }
 
@@ -243,7 +379,7 @@ nav.hero-nav {
 @media (max-width: 760px) {
   nav.hero-nav {
     justify-content: space-between;
-    padding: 20px 18px 0;
+    padding: 20px 16px 0;
   }
 
   .nav-links {
@@ -251,11 +387,22 @@ nav.hero-nav {
   }
 
   .copy {
-    top: 19%;
+    top: 20%;
   }
 
   .logos {
-    gap: 14px 24px;
-    font-size: 13px;
+    gap: 12px 24px;
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -1,5 +1,4 @@
 import React from "react";
-import { Download, Package } from "lucide-react";
 import type { SiteContent } from "../locales/content";
 
 interface FooterProps {
@@ -9,89 +8,124 @@ interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ cta, footer }) => {
   return (
-    <footer className="border-t border-[#e5e5e0] bg-[#f7f7f5]">
-      {/* Bottom Call-to-Action Section */}
+    <footer className="mx-auto max-w-6xl px-6 pb-16 pt-12">
+      {/* Final Conversion Plate (Mono-Color Editorial Poster) */}
       <div
         id="download"
-        className="mx-auto max-w-5xl px-6 py-20 text-center md:py-28"
+        className="mono-wireframe-strong mono-halftone-bg relative bg-[#F5F1E8] p-8 md:p-16"
       >
-        <span className="font-mono text-xs font-medium uppercase tracking-widest text-[#8d8d8d]">
-          {cta.tag}
-        </span>
-
-        <h2 className="mt-4 text-4xl font-medium tracking-tight md:text-6xl">
-          <span className="block text-[#9a9a9a]">{cta.titleMuted}</span>
-          <span className="block text-[#111111]">{cta.titleInk}</span>
-        </h2>
-
-        <p className="mx-auto mt-5 max-w-md text-sm leading-relaxed text-[#7b7b7b] md:text-base">
-          {cta.subtitle}
-        </p>
-
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          <a
-            href="https://github.com/AimAI-Labs/iox/releases"
-            target="_blank"
-            rel="noreferrer"
-            className="cta !mt-0"
-          >
-            <span className="cta-pill inline-flex items-center gap-2">
-              <Download className="h-4 w-4" />
-              <span>{cta.downloadNsis}</span>
-            </span>
-          </a>
-
-          <a
-            href="https://github.com/AimAI-Labs/iox/releases"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-full border border-[#d4d4ce] bg-white px-5 py-2.5 text-[13.5px] font-medium text-[#111111] transition-colors hover:border-[#111111]"
-          >
-            <Package className="h-4 w-4 text-[#5a5a5a]" />
-            <span>{cta.downloadPortable}</span>
-          </a>
+        {/* Corner Registration Marks */}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#30343A] pb-4">
+          <span className="font-mono text-[#C65F38] caption-3">
+            ⊕ {cta.tag}
+          </span>
+          <span className="font-mono text-[#30343A] caption-4">
+            FINAL EDITION · WINDOWS X64
+          </span>
         </div>
 
-        <p className="mt-5 font-mono text-xs text-[#8d8d8d]">{cta.systemReq}</p>
+        <div className="mt-10 max-w-[680px]">
+          <h2 className="heading-1">
+            <span className="block text-[#30343A]/60">{cta.titleMuted}</span>
+            <span className="block text-[#242321]">{cta.titleInk}</span>
+          </h2>
+
+          <p className="body-3 mt-6 text-[#30343A]">{cta.subtitle}</p>
+
+          {/* Risk Reversal Strip */}
+          <div className="mt-4 font-mono text-[#2148B8] caption-3">
+            ✦ {cta.riskReversal}
+          </div>
+
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <a
+              href="https://github.com/AimAI-Labs/iox/releases"
+              target="_blank"
+              rel="noreferrer"
+              className="border border-[#242321] bg-[#242321] px-6 py-3 text-[#F5F1E8] transition-transform duration-300 ease-editorial button-sm hover:-translate-y-0.5 active:scale-95"
+            >
+              {cta.downloadNsis}
+            </a>
+
+            <a
+              href="https://github.com/AimAI-Labs/iox/releases"
+              target="_blank"
+              rel="noreferrer"
+              className="border border-[#30343A] bg-[#F5F1E8] px-6 py-3 text-[#242321] transition-colors duration-300 ease-editorial button-sm hover:border-[#2148B8] hover:text-[#2148B8] active:scale-95"
+            >
+              {cta.downloadPortable}
+            </a>
+          </div>
+
+          <p className="mt-6 font-mono text-[#30343A]/75 caption-4">
+            {cta.systemReq}
+          </p>
+        </div>
       </div>
 
-      {/* Bottom Legal & Placeholder Asset Notice */}
-      <div className="border-t border-[#e5e5e0] bg-[#f2f2ee]/70 py-10">
-        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-6 md:flex-row md:items-center">
-          <div>
-            <div className="flex items-center gap-2 font-semibold text-[#111111]">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <rect x="2" y="2" width="4" height="16" rx="1.5" />
-                <circle
-                  cx="13"
-                  cy="10"
-                  r="5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3.2"
-                />
-              </svg>
-              <span>IOX</span>
-            </div>
-            <p className="mt-1.5 text-xs text-[#7b7b7b]">{footer.tagline}</p>
+      {/* Editorial Print Colophon & Placeholder Guide */}
+      <div className="mono-wireframe-box mt-6 grid grid-cols-1 gap-6 bg-[#F5F1E8] p-6 md:grid-cols-12">
+        <div className="md:col-span-6">
+          <div className="flex items-center gap-2 font-semibold text-[#242321] title-3">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <rect x="2" y="2" width="4" height="16" rx="1.5" />
+              <circle
+                cx="13"
+                cy="10"
+                r="5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3.2"
+              />
+            </svg>
+            <span>IOX</span>
           </div>
-
-          <div className="max-w-md rounded-xl border border-[#dcdcd6] bg-[#fafaf8] px-4 py-3 text-xs text-[#6b6b6b]">
-            <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#3a3a3a]">
-              {footer.placeholderGuideTitle}
-            </div>
-            <p className="mt-1 leading-relaxed">{footer.placeholderGuideText}</p>
-          </div>
+          <p className="body-6 mt-2 text-[#30343A]">{footer.tagline}</p>
+          <p className="mt-3 font-mono text-[#2148B8] caption-5">
+            {footer.recipeNote}
+          </p>
         </div>
 
-        <div className="mx-auto mt-8 max-w-6xl border-t border-[#e5e5e0] px-6 pt-6 text-xs text-[#8d8d8d]">
-          {footer.copyright}
+        <div className="border border-[#30343A]/40 p-4 md:col-span-6">
+          <div className="font-mono text-[#242321] caption-3">
+            {footer.placeholderGuideTitle}
+          </div>
+          <p className="body-6 mt-1 text-[#30343A]">
+            {footer.placeholderGuideText}
+          </p>
+        </div>
+      </div>
+
+      {/* Legal & Navigation Bottom Bar */}
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-4 font-mono text-[#30343A]/80 caption-4">
+        <span>{footer.copyright}</span>
+        <div className="flex items-center gap-6">
+          <a
+            href="#faq"
+            className="underline-offset-4 hover:text-[#2148B8] hover:underline"
+          >
+            {footer.privacyLabel}
+          </a>
+          <a
+            href="https://github.com/AimAI-Labs/iox/blob/main/LICENSE"
+            target="_blank"
+            rel="noreferrer"
+            className="underline-offset-4 hover:text-[#2148B8] hover:underline"
+          >
+            {footer.termsLabel}
+          </a>
+          <a
+            href="#top"
+            className="underline-offset-4 hover:text-[#2148B8] hover:underline"
+          >
+            ↑ TOP
+          </a>
         </div>
       </div>
     </footer>

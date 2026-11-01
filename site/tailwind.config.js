@@ -9,30 +9,36 @@ export default {
     extend: {
       colors: {
         canvas: "var(--bg)",
-        surface: "var(--surface)",
-        ink: {
-          DEFAULT: "var(--ink)",
-          mute: "var(--mute)",
-          sub: "var(--sub)",
+        paper: {
+          DEFAULT: "#F5F1E8",
+          neutral: "#FAFAF7",
+          cool: "#E9E9E5",
         },
-        line: {
-          DEFAULT: "var(--line)",
-          strong: "var(--line-strong)",
+        ink: {
+          DEFAULT: "#111111",
+          charcoal: "#30343A",
+          carbon: "#242321",
+          mute: "#7B7B7B",
+          sub: "#9A9A9A",
+        },
+        plate: {
+          cobalt: "#2148B8",
+          terracotta: "#C65F38",
+          signal: "#C83232",
+          botanical: "#008A4B",
         },
       },
       fontFamily: {
         sans: [
-          "'Inter'",
+          "'Geist'",
           "'PingFang SC'",
           "'Microsoft YaHei'",
           "system-ui",
           "-apple-system",
-          "BlinkMacSystemFont",
-          "'Segoe UI'",
           "sans-serif",
         ],
         mono: [
-          "'JetBrains Mono'",
+          "'Geist Mono'",
           "ui-monospace",
           "SFMono-Regular",
           "Menlo",
@@ -40,9 +46,8 @@ export default {
           "monospace",
         ],
       },
-      boxShadow: {
-        card: "0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 36px rgba(0, 0, 0, 0.06)",
-        hairline: "0 1px 2px rgba(0, 0, 0, 0.035)",
+      transitionTimingFunction: {
+        editorial: "cubic-bezier(0.22, 1, 0.36, 1)",
       },
     },
   },

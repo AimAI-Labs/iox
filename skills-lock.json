@@ -6,6 +6,12 @@
       "sourceType": "github",
       "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
       "computedHash": "f74b0bf1be26220dd615523fc1c0562567f9c463d9e9b255d4031345ffb37cd3"
+    },
+    "landing-page-design": {
+      "source": "elayadesign/ai-design-skills",
+      "sourceType": "github",
+      "skillPath": "skills/landing-page-design/SKILL.md",
+      "computedHash": "c4f760690439298d9ef3238534919ee3fd558a3345c414ff6c7e7acacd973a08"
     }
   }
 }
