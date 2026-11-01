@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 3000",
-    "build": "tsc && vite build",
+    "build": "tsc && tsc --project tsconfig.node.json --noEmit && vite build",
     "preview": "vite preview --port 3000",
     "test": "node --test tests/*.test.mjs"
   },
@@ -22,7 +22,9 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.5.4",
+    "jiti": "^1.21.7",
     "postcss": "^8.5.26",
+    "postcss-load-config": "^6.0.1",
     "tailwindcss": "^3.4.19",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "~5.8.3",

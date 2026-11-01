@@ -136,9 +136,15 @@ importers:
       autoprefixer:
         specifier: ^10.5.4
         version: 10.5.4(postcss@8.5.26)
+      jiti:
+        specifier: ^1.21.7
+        version: 1.21.7
       postcss:
         specifier: ^8.5.26
         version: 8.5.26
+      postcss-load-config:
+        specifier: ^6.0.1
+        version: 6.0.1(jiti@1.21.7)(postcss@8.5.26)
       tailwindcss:
         specifier: ^3.4.19
         version: 3.4.19
