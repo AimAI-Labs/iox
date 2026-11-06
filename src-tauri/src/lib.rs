@@ -39,6 +39,10 @@ impl config::ConfigPublisher for TauriConfigPublisher {
     fn publish(&self, previous: &AppConfig, current: &AppConfig) {
         let _ = self.app.emit("config_updated", current);
         window_manager::apply_config_effects(&self.app, previous, current);
+        if !previous.general.auto_check_update && current.general.auto_check_update {
+            // Turning the switch back on should not wait for the 12 hour sleep.
+            update::wake();
+        }
     }
 }
 
