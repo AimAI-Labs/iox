@@ -20,6 +20,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { resolveTitleBarPress } from '@/lib/titleBarGesture';
 import { WebWindowIcon } from './WebWindowIcon';
 
 export const HubTabBar: React.FC = () => {
@@ -148,24 +149,22 @@ export const HubTabBar: React.FC = () => {
   };
 
   const handleMouseDownDrag = async (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button, .traffic-light, input, select, .tab-item')) {
+    const interactive = Boolean(
+      (e.target as HTMLElement).closest('button, .traffic-light, input, select, textarea, a, .tab-item, [data-no-drag="true"]')
+    );
+    const gesture = resolveTitleBarPress(e.button, e.detail, interactive);
+    if (gesture === 'ignore') return;
+    if (gesture === 'toggle-maximize') {
+      e.preventDefault();
+      await handleMaximize();
       return;
     }
-    if (e.button === 0) {
-      try {
-        const win = getCurrentWebviewWindow();
-        await win.startDragging();
-      } catch (err) {
-        console.warn('startDragging failed:', err);
-      }
+    try {
+      const win = getCurrentWebviewWindow();
+      await win.startDragging();
+    } catch (err) {
+      console.warn('startDragging failed:', err);
     }
-  };
-
-  const handleDoubleClickDrag = async (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button, .traffic-light, input, select, .tab-item')) {
-      return;
-    }
-    await handleMaximize();
   };
 
   // 3. Tab 切换与关闭
@@ -309,9 +308,7 @@ export const HubTabBar: React.FC = () => {
       <WebWindowIcon icon={activeIcon} actionId={currentActiveTab?.actionId} />
       <header
         className="web-card-titlebar flex h-[38px] max-h-[38px] items-center justify-between overflow-hidden border-b border-black/10 bg-[var(--bg-overlay-card)] px-3 text-foreground backdrop-blur-2xl dark:border-white/10"
-        data-tauri-drag-region
         onMouseDown={handleMouseDownDrag}
-        onDoubleClick={handleDoubleClickDrag}
       >
         {/* 左侧：经典样式下的交通灯；原生样式由系统标题栏提供控制按钮 */}
         {uiTheme.windowChrome === 'custom' && (
@@ -327,7 +324,6 @@ export const HubTabBar: React.FC = () => {
         {/* 中间：可滚动的 Tab 标签页列表 */}
         <div
           className="flex-1 flex items-center gap-1.5 overflow-x-auto overflow-y-hidden no-scrollbar px-1 min-w-0 h-[38px]"
-          data-tauri-drag-region
         >
           {hubState.tabs.map((tab, index) => {
             const isActive = tab.actionId === hubState.activeTabId;

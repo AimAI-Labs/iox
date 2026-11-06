@@ -400,7 +400,13 @@ pub fn set_web_outline(view: &tauri::Webview, frame: WebCardFrame) {
     });
 }
 
-pub fn set_web_content_round(view: &tauri::Webview, radius: Option<i32>, all_corners: bool) {
+pub fn set_web_content_round(
+    view: &tauri::Webview,
+    radius: Option<i32>,
+    all_corners: bool,
+    width: u32,
+    height: u32,
+) {
     with_web_child(view, move |child| {
         // This exact content container clips all its descendants. On success Windows takes
         // ownership of the region; on failure we must release it. None also clears old clips.
@@ -409,16 +415,15 @@ pub fn set_web_content_round(view: &tauri::Webview, radius: Option<i32>, all_cor
                 SetWindowRgn(child, std::ptr::null_mut(), 1);
                 return;
             };
-            let mut rect: RECT = std::mem::zeroed();
-            if GetClientRect(child, &mut rect) == 0 {
+            if width == 0 || height == 0 {
                 return;
             }
             let diameter = radius * 2;
             let region = CreateRoundRectRgn(
                 0,
                 if all_corners { 0 } else { -diameter },
-                rect.right + 1,
-                rect.bottom + 1,
+                width as i32 + 1,
+                height as i32 + 1,
                 diameter,
                 diameter,
             );
@@ -432,7 +437,11 @@ pub fn set_web_content_round(view: &tauri::Webview, radius: Option<i32>, all_cor
 /// 为主设置窗口与浮窗启用 Windows 11/10 原生 DWM 硬件级抗锯齿圆角与亚克力材质。
 /// Windows 原生标题栏样式下改为直角边框。
 pub fn apply_main_window_native_style(hwnd: HWND) {
-    set_window_corner_preference(hwnd, !is_native_chrome());
+    // A maximized card must stay square: keeping DWMWA_WINDOW_CORNER_PREFERENCE rounded
+    // leaves visibly cut screen corners after a double-click on the custom titlebar.
+    // SAFETY: the caller passes a live HWND; IsZoomed only reads its window state.
+    let maximized = unsafe { IsZoomed(hwnd) != 0 };
+    set_window_corner_preference(hwnd, !is_native_chrome() && !maximized);
     unsafe {
         // DWMWA_SYSTEMBACKDROP_TYPE = 38
         // 3 = DWMSBT_ACRYLIC (亚克力), 2 = DWMSBT_MICA (云母)

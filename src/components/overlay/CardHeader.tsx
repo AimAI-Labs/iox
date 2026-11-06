@@ -73,7 +73,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
     >
       {/* 左侧：经典样式下的 Mac 交通灯三色圆点；原生样式改用右侧系统风格按钮 */}
       {!isNativeStyle && (
-        <div data-tauri-drag-region className="flex shrink-0 items-center">
+        <div className="flex shrink-0 items-center">
           <MacTrafficLights
             onClose={onClose}
             onMinimize={onMinimize}
@@ -101,7 +101,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
           />
         </div>
       ) : (
-        <div data-tauri-drag-region className="flex flex-1 min-w-0 items-center gap-1.5 pl-1">
+        <div className="flex flex-1 min-w-0 items-center gap-1.5 pl-1">
           {icon && (
             <DynamicIcon
               name={icon}
@@ -110,7 +110,6 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
             />
           )}
           <span
-            data-tauri-drag-region
             className="max-w-36 truncate text-[13px] font-medium leading-[1.4] text-zinc-900 dark:text-zinc-100 cursor-grab active:cursor-grabbing"
           >
             {title}
@@ -133,7 +132,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
       )}
 
       {/* 右侧：工具按钮组 + 会话历史 + 钉住 (Pin) 按钮 */}
-      <div data-tauri-drag-region className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1">
         {tools}
 
         {/* 会话历史列表按钮 */}
