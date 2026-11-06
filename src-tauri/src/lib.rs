@@ -327,6 +327,10 @@ fn toggle_maximize_main_window(app: AppHandle) -> Result<(), String> {
         } else {
             let _ = window.maximize();
         }
+        // Reapply DWM rounding so a maximized window does not keep custom-chrome corners.
+        if let Ok(hwnd) = window.hwnd() {
+            window_manager::apply_main_window_native_style(hwnd.0 as _);
+        }
         Ok(())
     } else {
         Err("Main window not found".to_string())
@@ -380,6 +384,9 @@ fn toggle_maximize_history_window(app: AppHandle) -> Result<(), String> {
             let _ = window.unmaximize();
         } else {
             let _ = window.maximize();
+        }
+        if let Ok(hwnd) = window.hwnd() {
+            window_manager::apply_main_window_native_style(hwnd.0 as _);
         }
         Ok(())
     } else {
@@ -472,6 +479,9 @@ fn toggle_maximize_web_window(app: AppHandle, label: String) -> Result<(), Strin
         } else {
             let _ = window.maximize();
         }
+        // Reconcile the card radius and WebView clips immediately; waiting for Resized can
+        // observe a stale size and leave rounded corners on a maximized card.
+        crate::web_chrome::layout_window(&window);
         Ok(())
     } else {
         Err("Window not found".to_string())
@@ -772,6 +782,18 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             web_shortcuts::window_event(window, event);
+            // The setting and history windows keep native DWM rounding; a maximize transition
+            // must reapply it after the native size is committed, not only in the toggle command.
+            if matches!(window.label(), "main" | "history")
+                && matches!(
+                    event,
+                    tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+                )
+            {
+                if let Ok(hwnd) = window.hwnd() {
+                    window_manager::apply_main_window_native_style(hwnd.0 as _);
+                }
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // 设置与历史窗口都是常驻隐藏，关闭只隐藏，保留界面状态
                 if matches!(window.label(), "main" | "history") {

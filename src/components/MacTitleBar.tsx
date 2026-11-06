@@ -4,6 +4,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { MacTrafficLights } from '@/components/MacTrafficLights';
 import { useUiTheme } from '@/themes/ThemeProvider';
 import { cn } from '@/lib/utils';
+import { useTitleBarDrag } from '@/hooks/useTitleBarDrag';
 
 export interface MacTitleBarProps {
   title?: React.ReactNode;
@@ -78,31 +79,11 @@ export const MacTitleBar: React.FC<MacTitleBarProps> = ({
     }
   };
 
-  const handleMouseDown = async (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button, .traffic-light, input, select')) {
-      return;
-    }
-    if (e.button === 0) {
-      try {
-        const appWindow = getCurrentWebviewWindow();
-        await appWindow.startDragging();
-      } catch (err) {
-        console.warn('startDragging failed:', err);
-      }
-    }
-  };
-
-  const handleDoubleClick = async (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button, .traffic-light, input, select')) {
-      return;
-    }
-    await handleMaximize();
-  };
+  const { handleMouseDown, handleDoubleClick } = useTitleBarDrag({ onMaximize: handleMaximize });
 
   return (
     <header
       className={cn("mac-titlebar", className)}
-      data-tauri-drag-region
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
     >
@@ -117,10 +98,7 @@ export const MacTitleBar: React.FC<MacTitleBarProps> = ({
         {badge}
       </div>
 
-      <div
-        className="mac-titlebar-title"
-        data-tauri-drag-region
-      >
+      <div className="mac-titlebar-title">
         {title}
       </div>
 

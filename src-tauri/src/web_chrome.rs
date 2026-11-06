@@ -227,6 +227,16 @@ struct WindowLayout {
     toolbar: ToolbarShape,
 }
 
+/// Card corners belong to the floating window only. Maximized cards fill the work area and
+/// native chrome supplies its own frame, so both must stay square and unclipped.
+fn card_radius(maximized: bool, headless: bool, native_chrome: bool, scale: f64) -> Option<i32> {
+    if maximized || (!headless && native_chrome) {
+        None
+    } else {
+        Some((12.0 * scale).round() as i32)
+    }
+}
+
 fn headless_frame(
     size: tauri::PhysicalSize<u32>,
     scale: f64,
@@ -342,13 +352,12 @@ fn apply_layout(
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let hub = window.label() == "web_hub";
     let (top, height) = content_layout(size.height, scale, headless);
-    let radius = if window.is_maximized().unwrap_or(false)
-        || (!headless && crate::window_manager::is_native_chrome())
-    {
-        None
-    } else {
-        Some((12.0 * scale).round() as i32)
-    };
+    let radius = card_radius(
+        crate::window_manager::window_is_maximized(window),
+        headless,
+        crate::window_manager::is_native_chrome(),
+        scale,
+    );
     let (layout, toolbar, previous_toolbar, relayout_content) = {
         let mut windows = state.web_chrome.windows.lock().map_err(|e| e.to_string())?;
         let previous = windows.get(window.label()).copied();
@@ -420,7 +429,9 @@ fn apply_layout(
             size: tauri::PhysicalSize::new(size.width, height).into(),
         })
         .map_err(|e| e.to_string())?;
-        crate::window_manager::set_web_content_round(&view, radius, headless);
+        // Clip from the bounds we just committed. Reading the child's client rect here can
+        // still observe the pre-resize geometry and leave stale rounded corners.
+        crate::window_manager::set_web_content_round(&view, radius, headless, size.width, height);
     }
     if let Some(frame) = app.get_webview(&frame_label) {
         if headless {
@@ -672,6 +683,16 @@ mod tests {
             assert_eq!(frame.border, border);
             assert_eq!((frame.width, frame.height), (860, 640));
         }
+    }
+
+    #[test]
+    fn card_radius_is_square_when_maximized_or_natively_framed() {
+        assert_eq!(card_radius(true, true, false, 1.0), None);
+        assert_eq!(card_radius(true, false, false, 2.0), None);
+        assert_eq!(card_radius(false, false, true, 1.0), None);
+        assert_eq!(card_radius(false, true, true, 1.0), Some(12));
+        assert_eq!(card_radius(false, true, false, 1.25), Some(15));
+        assert_eq!(card_radius(false, false, false, 2.0), Some(24));
     }
 
     #[test]

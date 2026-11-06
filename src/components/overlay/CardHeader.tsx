@@ -66,14 +66,31 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   const uiTheme = useUiTheme();
   const isNativeStyle = uiTheme.titleBarControls === 'windows';
 
+  const handleHeaderMouseDown = (event: React.MouseEvent) => {
+    // The second press belongs to a double click; let it toggle instead of dragging again.
+    if (event.detail > 1) return;
+    handleMouseDown(event);
+  };
+
+  const handleHeaderDoubleClick = (event: React.MouseEvent) => {
+    if (!onToggleMaximize) return;
+    const interactive = (event.target as HTMLElement).closest(
+      'button, .traffic-light, input, select, textarea, a, [data-no-drag="true"]'
+    );
+    if (interactive) return;
+    event.preventDefault();
+    onToggleMaximize();
+  };
+
   return (
     <div
-      onMouseDown={handleMouseDown}
+      onMouseDown={handleHeaderMouseDown}
+      onDoubleClick={handleHeaderDoubleClick}
       className="flex shrink-0 items-center justify-between border-b border-line/60 bg-transparent px-3 py-1.5 select-none cursor-grab active:cursor-grabbing gap-2"
     >
       {/* 左侧：经典样式下的 Mac 交通灯三色圆点；原生样式改用右侧系统风格按钮 */}
       {!isNativeStyle && (
-        <div data-tauri-drag-region className="flex shrink-0 items-center">
+        <div className="flex shrink-0 items-center">
           <MacTrafficLights
             onClose={onClose}
             onMinimize={onMinimize}
@@ -101,7 +118,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
           />
         </div>
       ) : (
-        <div data-tauri-drag-region className="flex flex-1 min-w-0 items-center gap-1.5 pl-1">
+        <div className="flex flex-1 min-w-0 items-center gap-1.5 pl-1">
           {icon && (
             <DynamicIcon
               name={icon}
@@ -110,7 +127,6 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
             />
           )}
           <span
-            data-tauri-drag-region
             className="max-w-36 truncate text-[13px] font-medium leading-[1.4] text-zinc-900 dark:text-zinc-100 cursor-grab active:cursor-grabbing"
           >
             {title}
@@ -133,7 +149,7 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
       )}
 
       {/* 右侧：工具按钮组 + 会话历史 + 钉住 (Pin) 按钮 */}
-      <div data-tauri-drag-region className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1">
         {tools}
 
         {/* 会话历史列表按钮 */}
