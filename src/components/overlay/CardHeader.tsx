@@ -66,9 +66,26 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   const uiTheme = useUiTheme();
   const isNativeStyle = uiTheme.titleBarControls === 'windows';
 
+  const handleHeaderMouseDown = (event: React.MouseEvent) => {
+    // The second press belongs to a double click; let it toggle instead of dragging again.
+    if (event.detail > 1) return;
+    handleMouseDown(event);
+  };
+
+  const handleHeaderDoubleClick = (event: React.MouseEvent) => {
+    if (!onToggleMaximize) return;
+    const interactive = (event.target as HTMLElement).closest(
+      'button, .traffic-light, input, select, textarea, a, [data-no-drag="true"]'
+    );
+    if (interactive) return;
+    event.preventDefault();
+    onToggleMaximize();
+  };
+
   return (
     <div
-      onMouseDown={handleMouseDown}
+      onMouseDown={handleHeaderMouseDown}
+      onDoubleClick={handleHeaderDoubleClick}
       className="flex shrink-0 items-center justify-between border-b border-line/60 bg-transparent px-3 py-1.5 select-none cursor-grab active:cursor-grabbing gap-2"
     >
       {/* 左侧：经典样式下的 Mac 交通灯三色圆点；原生样式改用右侧系统风格按钮 */}

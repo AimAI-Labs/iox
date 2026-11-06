@@ -777,6 +777,18 @@ pub fn run() {
             }
         })
         .on_window_event(|window, event| {
+            // The setting and history windows keep native DWM rounding; a maximize transition
+            // must reapply it after the native size is committed, not only in the toggle command.
+            if matches!(window.label(), "main" | "history")
+                && matches!(
+                    event,
+                    tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+                )
+            {
+                if let Ok(hwnd) = window.hwnd() {
+                    window_manager::apply_main_window_native_style(hwnd.0 as _);
+                }
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // 设置与历史窗口都是常驻隐藏，关闭只隐藏，保留界面状态
                 if matches!(window.label(), "main" | "history") {

@@ -455,6 +455,19 @@ pub fn apply_main_window_native_style(hwnd: HWND) {
     }
 }
 
+/// Prefer the native state as well: `maximize()` is posted to the event loop, so the cached
+/// Tauri flag can still be stale while the window is already maximized.
+pub fn window_is_maximized(window: &tauri::Window) -> bool {
+    if window.is_maximized().unwrap_or(false) {
+        return true;
+    }
+    match window.hwnd() {
+        // SAFETY: the caller owns a live window; IsZoomed only reads its placement state.
+        Ok(hwnd) => unsafe { IsZoomed(hwnd.0 as _) != 0 },
+        Err(_) => false,
+    }
+}
+
 /// Per-window policy: headless Web cards round independently of the global titlebar style.
 pub fn set_window_corner_preference(hwnd: HWND, rounded: bool) {
     let preference: u32 = if rounded { 2 } else { 1 };

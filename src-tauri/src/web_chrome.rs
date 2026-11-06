@@ -353,7 +353,7 @@ fn apply_layout(
     let hub = window.label() == "web_hub";
     let (top, height) = content_layout(size.height, scale, headless);
     let radius = card_radius(
-        window.is_maximized().unwrap_or(false),
+        crate::window_manager::window_is_maximized(window),
         headless,
         crate::window_manager::is_native_chrome(),
         scale,

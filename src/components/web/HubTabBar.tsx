@@ -20,7 +20,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { resolveTitleBarPress } from '@/lib/titleBarGesture';
+import { useTitleBarDrag } from '@/hooks/useTitleBarDrag';
 import { WebWindowIcon } from './WebWindowIcon';
 
 export const HubTabBar: React.FC = () => {
@@ -148,24 +148,11 @@ export const HubTabBar: React.FC = () => {
     }
   };
 
-  const handleMouseDownDrag = async (e: React.MouseEvent) => {
-    const interactive = Boolean(
-      (e.target as HTMLElement).closest('button, .traffic-light, input, select, textarea, a, .tab-item, [data-no-drag="true"]')
-    );
-    const gesture = resolveTitleBarPress(e.button, e.detail, interactive);
-    if (gesture === 'ignore') return;
-    if (gesture === 'toggle-maximize') {
-      e.preventDefault();
-      await handleMaximize();
-      return;
-    }
-    try {
-      const win = getCurrentWebviewWindow();
-      await win.startDragging();
-    } catch (err) {
-      console.warn('startDragging failed:', err);
-    }
-  };
+  const { handleMouseDown, handleDoubleClick } = useTitleBarDrag({
+    onMaximize: handleMaximize,
+    interactiveSelector:
+      'button, .traffic-light, input, select, textarea, a, .tab-item, [data-no-drag="true"]',
+  });
 
   // 3. Tab 切换与关闭
   const handleSwitchTab = async (actionId: string) => {
@@ -308,7 +295,8 @@ export const HubTabBar: React.FC = () => {
       <WebWindowIcon icon={activeIcon} actionId={currentActiveTab?.actionId} />
       <header
         className="web-card-titlebar flex h-[38px] max-h-[38px] items-center justify-between overflow-hidden border-b border-black/10 bg-[var(--bg-overlay-card)] px-3 text-foreground backdrop-blur-2xl dark:border-white/10"
-        onMouseDown={handleMouseDownDrag}
+        onMouseDown={handleMouseDown}
+        onDoubleClick={handleDoubleClick}
       >
         {/* 左侧：经典样式下的交通灯；原生样式由系统标题栏提供控制按钮 */}
         {uiTheme.windowChrome === 'custom' && (

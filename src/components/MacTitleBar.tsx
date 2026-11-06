@@ -4,7 +4,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { MacTrafficLights } from '@/components/MacTrafficLights';
 import { useUiTheme } from '@/themes/ThemeProvider';
 import { cn } from '@/lib/utils';
-import { resolveTitleBarPress } from '@/lib/titleBarGesture';
+import { useTitleBarDrag } from '@/hooks/useTitleBarDrag';
 
 export interface MacTitleBarProps {
   title?: React.ReactNode;
@@ -79,29 +79,13 @@ export const MacTitleBar: React.FC<MacTitleBarProps> = ({
     }
   };
 
-  const handleMouseDown = async (e: React.MouseEvent) => {
-    const interactive = Boolean(
-      (e.target as HTMLElement).closest('button, .traffic-light, input, select, textarea, a, [data-no-drag="true"]')
-    );
-    const gesture = resolveTitleBarPress(e.button, e.detail, interactive);
-    if (gesture === 'ignore') return;
-    if (gesture === 'toggle-maximize') {
-      e.preventDefault();
-      await handleMaximize();
-      return;
-    }
-    try {
-      const appWindow = getCurrentWebviewWindow();
-      await appWindow.startDragging();
-    } catch (err) {
-      console.warn('startDragging failed:', err);
-    }
-  };
+  const { handleMouseDown, handleDoubleClick } = useTitleBarDrag({ onMaximize: handleMaximize });
 
   return (
     <header
       className={cn("mac-titlebar", className)}
       onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
     >
       <div className="flex items-center gap-2">
         {showTrafficLights && (
