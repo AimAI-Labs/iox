@@ -121,23 +121,40 @@ fn focus_existing_web_action(app: &AppHandle, action: &ActionConfig) -> bool {
     true
 }
 
-/// 配置提交后把菜单脚本同步到已打开的内容页；关闭开关时只清理旧菜单。
+/// 菜单内容只依赖这些字段；窗口尺寸等几何提交不应重建已展开的菜单。
+pub fn context_menu_config_changed(previous: &AppConfig, current: &AppConfig) -> bool {
+    let signature = |config: &AppConfig| -> Vec<(String, String, bool)> {
+        config
+            .actions
+            .iter()
+            .filter(|action| action.action_type == "web")
+            .map(|action| (action.id.clone(), action.name.clone(), action.enabled))
+            .collect()
+    };
+    previous.general.web_context_menu != current.general.web_context_menu
+        || previous.general.theme != current.general.theme
+        || previous.general.language != current.general.language
+        || signature(previous) != signature(current)
+}
+
+const CONTEXT_MENU_DISPOSE: &str =
+    "window.__ioxContextMenuDispose && window.__ioxContextMenuDispose();";
+
+/// 配置提交后把菜单脚本同步到已打开的内容页；关闭开关或动作被删除时清理旧菜单。
 pub fn refresh_web_context_menus(app: &AppHandle, config: &AppConfig) {
     for (label, webview) in app.webviews() {
         let Some(slug) = content_action_slug(&label) else {
             continue;
         };
-        let Some(action) = config
+        let action = config
             .actions
             .iter()
-            .find(|action| sanitized_action_id(&action.id) == slug)
-        else {
-            continue;
-        };
-        let script = if config.general.web_context_menu {
-            context_menu_script(config, action)
-        } else {
-            "window.__ioxContextMenuDispose && window.__ioxContextMenuDispose();".to_string()
+            .find(|action| sanitized_action_id(&action.id) == slug);
+        let script = match action {
+            Some(action) if config.general.web_context_menu => context_menu_script(config, action),
+            // A deleted or renamed action leaves a stale panel behind; dispose it instead of
+            // leaving entries that the sentinel can no longer resolve.
+            _ => CONTEXT_MENU_DISPOSE.to_string(),
         };
         let _ = webview.eval(&script);
     }
@@ -1252,6 +1269,28 @@ mod tests {
             let url: tauri::Url = other.parse().unwrap();
             assert_eq!(menu_switch_action_id(&url), None, "{other}");
         }
+    }
+
+    #[test]
+    fn context_menu_refresh_ignores_geometry_only_commits() {
+        let previous = AppConfig::default_for_language("zh");
+        let mut resized = previous.clone();
+        resized.general.web_window_size = (900.0, 700.0);
+        assert!(!context_menu_config_changed(&previous, &resized));
+
+        let mut toggled = previous.clone();
+        toggled.general.web_context_menu = !previous.general.web_context_menu;
+        assert!(context_menu_config_changed(&previous, &toggled));
+
+        let mut renamed = previous.clone();
+        if let Some(action) = renamed
+            .actions
+            .iter_mut()
+            .find(|action| action.action_type == "web")
+        {
+            action.name = "Renamed".into();
+        }
+        assert!(context_menu_config_changed(&previous, &renamed));
     }
 
     #[test]

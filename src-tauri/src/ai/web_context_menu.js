@@ -233,7 +233,14 @@ function installIoxContextMenu(options) {
     const openSubmenu = () => {
       if (!actions.length) return;
       submenu.classList.add('open');
-      place(submenu, menu.getBoundingClientRect().right - 4, menu.getBoundingClientRect().top, true);
+      const rect = menu.getBoundingClientRect();
+      const gap = 6;
+      // Keep the cascade outside the parent so it never covers the parent's items.
+      if (window.innerWidth - rect.right - gap >= 196) {
+        place(submenu, rect.right + gap, rect.top, true);
+      } else {
+        place(submenu, rect.left - gap, rect.top, false);
+      }
     };
 
     const closeSubmenu = () => submenu.classList.remove('open');
@@ -342,19 +349,24 @@ function installIoxContextMenu(options) {
       }
     };
 
-    const onHoverOut = (event) => {
-      if (!host.contains(event.relatedTarget)) {
-        window.clearTimeout(closeTimer);
-        closeTimer = window.setTimeout(closeSubmenu, 180);
-      }
-    };
+    // Nodes inside a closed shadow root are not `host.contains()` children; compare against
+    // the two panels instead, otherwise returning to the parent menu keeps the cascade open.
+    const withinPanels = (node) => Boolean(node) && (menu.contains(node) || submenu.contains(node));
 
-    const onHoverIn = () => window.clearTimeout(closeTimer);
+    const onHoverOut = (event) => {
+      if (withinPanels(event.relatedTarget)) return;
+      window.clearTimeout(closeTimer);
+      closeTimer = window.setTimeout(closeSubmenu, 180);
+    };
 
     menu.addEventListener('mouseleave', onHoverOut);
     submenu.addEventListener('mouseleave', onHoverOut);
-    menu.addEventListener('mouseenter', onHoverIn);
-    submenu.addEventListener('mouseenter', onHoverIn);
+    // Entering the parent always collapses a stale cascade and cancels its close timer.
+    menu.addEventListener('mouseenter', () => {
+      window.clearTimeout(closeTimer);
+      closeSubmenu();
+    });
+    submenu.addEventListener('mouseenter', () => window.clearTimeout(closeTimer));
 
     document.addEventListener('contextmenu', onContextMenu, true);
     document.addEventListener('mousedown', onPointerDown, true);
