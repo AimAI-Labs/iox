@@ -149,6 +149,9 @@ pub struct GeneralConfig {
     #[serde(default = "default_ui_style")]
     pub ui_style: String,
     pub auto_start: bool,
+    /// 启动后台检查 GitHub Release；失败只降级为“无法检查”，不影响其他功能。
+    #[serde(default = "default_true")]
+    pub auto_check_update: bool,
     #[serde(default = "default_web_window_mode")]
     pub web_window_mode: String,  // "multi_window" | "tabbed"
     #[serde(default)]
@@ -224,6 +227,7 @@ impl Default for GeneralConfig {
             theme: "system".to_string(),
             ui_style: default_ui_style(),
             auto_start: false,
+            auto_check_update: true,
             web_window_mode: "multi_window".to_string(),
             web_headless_mode: false,
             web_drag_hold_delay_ms: default_web_drag_hold_delay_ms(),

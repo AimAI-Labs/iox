@@ -13,6 +13,7 @@ pub mod site_presets;
 pub mod sync;
 pub mod trigger;
 pub mod tray;
+pub mod update;
 pub mod window_manager;
 mod web_chrome;
 
@@ -754,7 +755,9 @@ pub fn run() {
             // 初始化常驻系统托盘
             tray::setup_tray(app)?;
             // 远程同步默认关闭；循环在每次唤醒时重新读取已提交配置
-            sync::spawn_background(handle);
+            sync::spawn_background(handle.clone());
+            // 更新检查失败只影响状态展示，不阻塞启动
+            update::spawn_background(handle);
             Ok(())
         })
         // With `unstable`, the overlay is a child webview: native drops are
@@ -813,6 +816,8 @@ pub fn run() {
             close_web_hub_tab,
             reload_web_hub_active_tab,
             get_site_presets,
+            update::check_for_updates,
+            update::get_update_status,
             link_metadata::fetch_link_metadata,
             start_window_picker,
             cancel_window_picker,

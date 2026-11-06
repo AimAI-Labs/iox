@@ -492,6 +492,26 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
               }
             />
           </div>
+
+          <Separator />
+
+          {/* 10. Auto update check */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label className="text-xs text-foreground font-medium">
+                {t('settings.update.autoCheck')}
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                {t('settings.update.autoCheckDesc')}
+              </p>
+            </div>
+            <Switch
+              checked={general.autoCheckUpdate ?? true}
+              onCheckedChange={(checked) =>
+                onUpdateGeneral({ autoCheckUpdate: checked })
+              }
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -65,6 +65,7 @@ export const generalConfigSchema = z.object({
   theme: themeSchema,
   uiStyle: uiStyleSchema.default('classic'),
   autoStart: z.boolean(),
+  autoCheckUpdate: z.boolean().default(true),
   webWindowMode: webWindowModeSchema.default('multi_window'),
   webHeadlessMode: z.boolean().default(false),
   webDragHoldDelayMs: z.number().int().min(0).max(MAX_WEB_DRAG_HOLD_DELAY_MS).default(DEFAULT_WEB_DRAG_HOLD_DELAY_MS),
