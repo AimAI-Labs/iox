@@ -211,6 +211,33 @@ pub fn build_initialization_script(theme: &str, dom_injection: Option<&str>) -> 
     script
 }
 
+/// 自定义右键菜单切换 AI 时使用的哨兵地址；内容页无法访问本地 IPC，
+/// 只能请求这个固定路径，由 Rust 校验后调用既有的 Web 动作调度。
+pub const CONTEXT_MENU_SWITCH_PREFIX: &str = "https://iox.local/switch-ai?action=";
+
+const WEB_CONTEXT_MENU_SCRIPT: &str = include_str!("web_context_menu.js");
+
+/// 生成页面内右键菜单脚本，排除当前站点自身，避免切换到同一个窗口。
+pub fn build_web_context_menu_script(
+    theme: &str,
+    language: &str,
+    current_action_id: &str,
+    actions: &[(String, String)],
+) -> String {
+    let choices: Vec<serde_json::Value> = actions
+        .iter()
+        .filter(|(id, _)| id != current_action_id)
+        .map(|(id, name)| serde_json::json!({ "id": id, "name": name }))
+        .collect();
+    let options = serde_json::json!({
+        "theme": theme,
+        "language": language,
+        "actions": choices,
+        "switchPrefix": CONTEXT_MENU_SWITCH_PREFIX,
+    });
+    format!("(()=>{{\n{WEB_CONTEXT_MENU_SCRIPT}\nreturn installIoxContextMenu({options});}})()\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -247,5 +274,27 @@ mod tests {
         assert!(script_with_injection.starts_with(ZOOM_PERSISTENCE_SCRIPT));
         assert!(script_with_injection.contains("__iox_loading_layer"));
         assert!(script_with_injection.ends_with(custom_code));
+    }
+
+    #[test]
+    fn web_context_menu_script_skips_the_current_action() {
+        let actions = vec![
+            ("act_web_a".to_string(), "甲".to_string()),
+            ("act_web_b".to_string(), "乙".to_string()),
+        ];
+        let script = build_web_context_menu_script("dark", "zh", "act_web_a", &actions);
+        assert!(script.contains("installIoxContextMenu"));
+        assert!(script.contains(CONTEXT_MENU_SWITCH_PREFIX));
+        assert!(script.contains("act_web_b"));
+        assert!(!script.contains("act_web_a"));
+        assert!(script.contains("乙"));
+    }
+
+    #[test]
+    fn web_context_menu_script_escapes_site_names() {
+        let actions = vec![("act".to_string(), "A\"\nB".to_string())];
+        let script = build_web_context_menu_script("system", "en", "", &actions);
+        assert!(!script.contains("A\"\nB"));
+        assert!(script.contains("A\\\"\\nB"));
     }
 }

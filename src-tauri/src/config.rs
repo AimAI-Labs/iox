@@ -209,6 +209,9 @@ pub struct GeneralConfig {
     pub web_headless_mode: bool,
     #[serde(default)]
     pub web_new_chat_key: WebNewChatKey,
+    /// 在官网页面内接管右键菜单，提供“切换 AI”级联入口。
+    #[serde(default = "default_true")]
+    pub web_context_menu: bool,
     #[serde(default = "default_web_drag_hold_delay_ms")]
     pub web_drag_hold_delay_ms: u64,
     #[serde(default = "default_web_menu_pinned_actions")]
@@ -284,6 +287,7 @@ impl Default for GeneralConfig {
             web_window_mode: "multi_window".to_string(),
             web_headless_mode: false,
             web_new_chat_key: WebNewChatKey::default(),
+            web_context_menu: true,
             web_drag_hold_delay_ms: default_web_drag_hold_delay_ms(),
             web_menu_pinned_actions: default_web_menu_pinned_actions(),
             auto_copy_on_web_action: false,

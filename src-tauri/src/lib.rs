@@ -46,6 +46,9 @@ impl config::ConfigPublisher for TauriConfigPublisher {
             // Turning the switch back on should not wait for the 12 hour sleep.
             update::wake();
         }
+        if ai::web_action::context_menu_config_changed(previous, current) {
+            ai::web_action::refresh_web_context_menus(&self.app, current);
+        }
     }
 }
 
