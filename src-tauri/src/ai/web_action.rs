@@ -10,6 +10,7 @@ use tauri::window::WindowBuilder;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl};
 
 fn cancel_injection(app: &AppHandle, label: &str) {
+    crate::web_shortcuts::interrupt();
     if let Ok(mut tasks) = app.state::<AppState>().web_injections.lock() {
         if let Some(token) = tasks.remove(label) {
             token.cancel();
@@ -39,17 +40,21 @@ fn add_web_frame(
     frame.hide().map_err(|e| e.to_string())
 }
 
-fn schedule_injection(webview: &tauri::Webview, script: &str, delays: &[u64]) {
-    let app = webview.app_handle().clone();
+fn register_injection(webview: &tauri::Webview) -> Option<tokio_util::sync::CancellationToken> {
     let label = webview.label().to_string();
     let token = tokio_util::sync::CancellationToken::new();
-    if let Ok(mut tasks) = app.state::<AppState>().web_injections.lock() {
-        if let Some(old) = tasks.insert(label, token.clone()) {
-            old.cancel();
-        }
-    } else {
-        return;
+    let state = webview.state::<AppState>();
+    let mut tasks = state.web_injections.lock().ok()?;
+    if let Some(old) = tasks.insert(label, token.clone()) {
+        old.cancel();
     }
+    Some(token)
+}
+
+fn schedule_injection(webview: &tauri::Webview, script: &str, delays: &[u64]) {
+    let Some(token) = register_injection(webview) else {
+        return;
+    };
     let webview = webview.clone();
     let script = script.to_string();
     let delays = delays.to_vec();
@@ -60,15 +65,54 @@ fn schedule_injection(webview: &tauri::Webview, script: &str, delays: &[u64]) {
                 _ = token.cancelled() => return,
                 _ = tokio::time::sleep(std::time::Duration::from_millis(delay)) => {}
             }
-            // Serialize the final check/enqueue with cancel + navigation.
-            if let Ok(_tasks) = app.state::<AppState>().web_injections.lock() {
-                if token.is_cancelled() {
-                    return;
-                }
-                let _ = webview.eval(&script);
+            if queue_site_injection(&webview, token.clone(), script.clone(), None).is_err() {
+                return;
             }
         }
     });
+}
+
+type InjectionTask = Box<dyn FnOnce() + Send>;
+
+fn queue_injection(
+    token: tokio_util::sync::CancellationToken,
+    dispatch: impl FnOnce(InjectionTask) -> tauri::Result<()>,
+    evaluate: impl FnOnce() + Send + 'static,
+) -> tauri::Result<()> {
+    dispatch(Box::new(move || {
+        if !token.is_cancelled() {
+            evaluate();
+        }
+    }))
+}
+
+fn queue_site_injection(
+    webview: &tauri::Webview,
+    token: tokio_util::sync::CancellationToken,
+    script: String,
+    origin: Option<String>,
+) -> tauri::Result<()> {
+    let app = webview.app_handle().clone();
+    let view = webview.clone();
+    let current = token.clone();
+    queue_injection(
+        token,
+        |task| app.run_on_main_thread(task),
+        move || {
+            let state = view.state::<AppState>();
+            if let Ok(_tasks) = state.web_injections.lock() {
+                // Check at execution, not enqueue: UI-thread new-chat navigation may run first.
+                if current.is_cancelled() {
+                    return;
+                }
+                if let Some(origin) = origin {
+                    eval_attachment(&view, &script, &origin);
+                } else {
+                    let _ = view.eval(&script);
+                }
+            };
+        },
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -123,6 +167,85 @@ pub fn normalize_web_action_url(raw_url: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+fn sanitized_action_id(id: &str) -> String {
+    id.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Resolve from the actual owning window, even after the global window mode changes.
+fn new_chat_target(
+    config: &AppConfig,
+    hub: &WebHubState,
+    window_label: &str,
+) -> Option<(String, tauri::Url)> {
+    let action = config.actions.iter().find(|action| {
+        action.action_type == "web"
+            && if window_label == "web_hub" {
+                hub.active_tab_id.as_deref() == Some(action.id.as_str())
+            } else {
+                window_label == format!("web_win_{}", sanitized_action_id(&action.id))
+            }
+    })?;
+    let template = normalize_web_action_url(action.url_template.as_deref()?);
+    let configured: tauri::Url = render_url_template(&template, "").parse().ok()?;
+    if !matches!(configured.scheme(), "https" | "http") || configured.host_str().is_none() {
+        return None;
+    }
+    let id = sanitized_action_id(&action.id);
+    let label = if window_label == "web_hub" {
+        format!("web_hub_tab_{id}")
+    } else {
+        format!("{window_label}_web")
+    };
+    Some((label, configured))
+}
+
+pub(crate) fn new_chat_in_window(app: &AppHandle, window: &tauri::Window) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    // This runs on the UI thread: never wait on ConfigStore while its publisher applies native effects.
+    let config = state.config.try_snapshot().ok_or("Configuration is busy")?;
+    let hub = state
+        .web_hub_state
+        .try_lock()
+        .map_err(|_| "Web Hub is busy")?
+        .clone();
+    let (label, configured) =
+        new_chat_target(&config, &hub, window.label()).ok_or("No new chat target")?;
+    let webview = app.get_webview(&label).ok_or("Webview not found")?;
+    if webview.window().label() != window.label() {
+        return Err("Webview belongs to another window".into());
+    }
+    let current = webview.url().map_err(|_| "Could not read the website URL")?;
+    if !matches!(current.scheme(), "http" | "https")
+        || !is_allowed_internal_navigation(&configured.origin().ascii_serialization(), &current)
+    {
+        return Err("Website source changed".into());
+    }
+    // Cancel old input before clicking, including same-document SPA transitions.
+    cancel_injection(app, &label);
+    let script = super::vendors::new_chat::build_script(&current.origin().ascii_serialization());
+    let app = app.clone();
+    let toolbar = format!("{}_bar", window.label());
+    webview
+        .eval_with_callback(script, move |result| {
+            let clicked = serde_json::from_str::<serde_json::Value>(&result)
+                .ok()
+                .and_then(|value| value.get("ok").and_then(|ok| ok.as_bool()))
+                .unwrap_or(false);
+            if !clicked {
+                let _ = app.emit_to(&toolbar, "web-new-chat-failed", ());
+            }
+        })
+        .map_err(|_| "Could not click new chat".into())
 }
 
 /// 提取域名的主域（例如 passport.aliyun.com -> aliyun.com）
@@ -307,7 +430,12 @@ pub fn execute_web_action(
 }
 
 fn show_attachment_origin_notice(webview: &tauri::Webview) {
-    let theme = webview.state::<AppState>().config.snapshot().general.theme;
+    let theme = webview
+        .state::<AppState>()
+        .config
+        .try_snapshot()
+        .map(|config| config.general.theme)
+        .unwrap_or_else(|| "system".into());
     let _ = webview.eval(&super::scripts::build_attachment_origin_notice(&theme));
 }
 
@@ -385,16 +513,11 @@ fn attachment_on_page_load(
         // Consume on the first completed document, including login redirects. No replay later.
         let attachment = pending.lock().ok().and_then(|mut pending| pending.take());
         if let Some((script, origin)) = attachment {
-            let state = webview.state::<AppState>();
-            let Ok(_tasks) = state.web_injections.lock() else {
-                return;
-            };
-            // Serialize the final check/enqueue with cancel + session navigation.
             if cancellation.is_cancelled() {
                 return;
             }
             if super::file_upload::is_attachment_destination(payload.url(), &origin) {
-                eval_attachment(&webview, &script, &origin);
+                let _ = queue_site_injection(&webview, cancellation.clone(), script, Some(origin));
             } else {
                 show_attachment_origin_notice(&webview);
             }
@@ -409,8 +532,10 @@ fn schedule_action_injection(
     attachment_origin: Option<&str>,
 ) {
     if let Some(origin) = attachment_origin {
-        // Reused documents already exist; JS owns retries and cancels on navigation.
-        eval_attachment(webview, script, origin);
+        if let Some(token) = register_injection(webview) {
+            let _ =
+                queue_site_injection(webview, token, script.to_string(), Some(origin.to_string()));
+        }
     } else {
         schedule_injection(webview, script, delays);
     }
@@ -911,6 +1036,7 @@ fn execute_tabbed_hub_action(
 
 /// 切换 Web Hub 当前激活的 Tab
 pub fn switch_web_hub_tab(app: &AppHandle, state: &AppState, action_id: &str) -> Result<(), String> {
+    crate::web_shortcuts::interrupt();
     let mut hub_state = state.web_hub_state.lock().map_err(|e| e.to_string())?;
     if !hub_state.tabs.iter().any(|t| t.action_id == action_id) {
         return Err(format!("Tab with action_id '{}' not found", action_id));
@@ -929,6 +1055,7 @@ pub fn switch_web_hub_tab(app: &AppHandle, state: &AppState, action_id: &str) ->
 
 /// 关闭 Web Hub 中指定的 Tab
 pub fn close_web_hub_tab(app: &AppHandle, state: &AppState, action_id: &str) -> Result<(), String> {
+    crate::web_shortcuts::interrupt();
     let mut hub_state = state.web_hub_state.lock().map_err(|e| e.to_string())?;
     let new_active = hub_state.remove_tab(action_id);
     let is_empty = hub_state.tabs.is_empty();
@@ -977,6 +1104,102 @@ pub fn reload_web_hub_active_tab(app: &AppHandle, state: &AppState) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn queued_injection_rechecks_cancellation_when_the_ui_executes_it() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        let token = tokio_util::sync::CancellationToken::new();
+        let evaluated = Arc::new(AtomicBool::new(false));
+        let result = evaluated.clone();
+        let mut queue = Vec::new();
+        queue_injection(
+            token.clone(),
+            |task| {
+                queue.push(task);
+                Ok(())
+            },
+            move || {
+                result.store(true, Ordering::SeqCst);
+            },
+        )
+        .unwrap();
+        // The new-chat UI task cancels and navigates ahead of a previously queued eval.
+        token.cancel();
+        for task in queue {
+            task();
+        }
+        assert!(!evaluated.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn queued_current_injection_waits_for_dispatch_and_evaluates_once() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        let token = tokio_util::sync::CancellationToken::new();
+        let evaluated = Arc::new(AtomicUsize::new(0));
+        let result = evaluated.clone();
+        let mut queue = Vec::new();
+        queue_injection(
+            token,
+            |task| {
+                queue.push(task);
+                Ok(())
+            },
+            move || {
+                result.fetch_add(1, Ordering::SeqCst);
+            },
+        )
+        .unwrap();
+        assert_eq!(evaluated.load(Ordering::SeqCst), 0);
+        for task in queue {
+            task();
+        }
+        assert_eq!(evaluated.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn new_chat_routes_to_existing_window_or_active_hub_tab() {
+        let mut config = AppConfig::default();
+        let mut action = config
+            .actions
+            .iter()
+            .find(|a| a.action_type == "web")
+            .unwrap()
+            .clone();
+        action.id = "custom/claude".into();
+        action.url_template = Some("https://claude.ai/chat/old".into());
+        let mut other = action.clone();
+        other.id = "other".into();
+        other.url_template = Some("https://example.com/assistant?q={text}&mode=chat".into());
+        config.actions = vec![action.clone(), other];
+        let hub = WebHubState {
+            tabs: vec![],
+            active_tab_id: Some("other".into()),
+        };
+        let (label, url) = new_chat_target(&config, &hub, "web_win_custom_claude").unwrap();
+        assert_eq!(label, "web_win_custom_claude_web");
+        assert_eq!(url.as_str(), "https://claude.ai/chat/old");
+        let (label, url) = new_chat_target(&config, &hub, "web_hub").unwrap();
+        assert_eq!(label, "web_hub_tab_other");
+        assert_eq!(url.as_str(), "https://example.com/assistant?mode=chat");
+        for label in [
+            "main",
+            "overlay",
+            "history",
+            "floating_ball",
+            "web_win_missing",
+        ] {
+            assert!(new_chat_target(&config, &hub, label).is_none());
+        }
+        assert!(new_chat_target(&config, &WebHubState::default(), "web_hub").is_none());
+        config.actions[0].url_template = Some("javascript:alert(1)".into());
+        assert!(new_chat_target(&config, &hub, "web_win_custom_claude").is_none());
+    }
 
     #[test]
     fn test_web_hub_state_flow() {

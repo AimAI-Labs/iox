@@ -29,6 +29,8 @@ const {
   DEFAULT_WEB_DRAG_HOLD_DELAY_MS,
   MAX_WEB_DRAG_HOLD_DELAY_MS,
   DEFAULT_WEB_MENU_PINNED_ACTIONS,
+  DEFAULT_WEB_NEW_CHAT_KEY,
+  WEB_NEW_CHAT_KEYS,
 } = configModule;
 
 const fixture = JSON.parse(
@@ -67,6 +69,7 @@ test('shared default constants stay equal to the Rust serialized defaults', () =
   assert.equal(DEFAULT_FLOATING_BALL_HOVER_DELAY_MS, fixture.general.floatingBallHoverDelayMs);
   assert.equal(DEFAULT_WEB_DRAG_HOLD_DELAY_MS, fixture.general.webDragHoldDelayMs);
   assert.deepEqual(DEFAULT_WEB_MENU_PINNED_ACTIONS, fixture.general.webMenuPinnedActions);
+  assert.equal(DEFAULT_WEB_NEW_CHAT_KEY, fixture.general.webNewChatKey);
 });
 
 test('legacy omissions get the same defaults as the Rust serde defaults', () => {
@@ -145,6 +148,19 @@ test('Web headless mode is opt-in for existing configs and survives serializatio
   assert.equal(appConfigSchema.safeParse({
     ...fixture, general: { ...general, webHeadlessMode: 'true' },
   }).success, false);
+});
+
+test('Web new chat key defaults to left Ctrl, persists choices and rejects unknown keys', () => {
+  const general = { ...fixture.general };
+  delete general.webNewChatKey;
+  assert.equal(parseOrFail({ ...fixture, general }).general.webNewChatKey, 'ControlLeft');
+  for (const key of WEB_NEW_CHAT_KEYS) {
+    const config = parseOrFail({ ...fixture, general: { ...general, webNewChatKey: key } });
+    assert.equal(parseOrFail(JSON.parse(JSON.stringify(config))).general.webNewChatKey, key);
+  }
+  for (const key of ['Ctrl', '', 'F13', null, 162]) {
+    assert.equal(appConfigSchema.safeParse({ ...fixture, general: { ...general, webNewChatKey: key } }).success, false);
+  }
 });
 
 test('Web window drag delay defaults for legacy configs and preserves custom milliseconds', () => {

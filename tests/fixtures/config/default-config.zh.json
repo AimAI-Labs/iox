@@ -11,6 +11,7 @@
     "autoStart": false,
     "webWindowMode": "multi_window",
     "webHeadlessMode": false,
+    "webNewChatKey": "ControlLeft",
     "webDragHoldDelayMs": 300,
     "webMenuPinnedActions": [
       "reload",

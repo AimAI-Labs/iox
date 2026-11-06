@@ -369,6 +369,13 @@ unsafe extern "system" fn mouse_hook_proc(n_code: i32, w_param: WPARAM, l_param:
 
             let app_handle = APP_HANDLE.get().cloned();
 
+            if matches!(
+                msg,
+                WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
+            ) {
+                crate::web_shortcuts::interrupt();
+            }
+
             if msg == WM_LBUTTONDOWN {
                 let inside_overlay = app_handle
                     .as_ref()
@@ -520,6 +527,17 @@ unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_par
 
             let vk = kbd_struct.vkCode as u16;
             let msg = w_param as u32;
+
+            if matches!(msg, WM_KEYDOWN | WM_SYSKEYDOWN | WM_KEYUP | WM_SYSKEYUP) {
+                if let Some(handle) = APP_HANDLE.get() {
+                    crate::web_shortcuts::key(
+                        handle,
+                        vk,
+                        matches!(msg, WM_KEYDOWN | WM_SYSKEYDOWN),
+                        kbd_struct.time,
+                    );
+                }
+            }
 
             if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
                 SELECTION_SEQ.fetch_add(1, Ordering::SeqCst);

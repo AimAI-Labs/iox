@@ -15,6 +15,8 @@ pub mod trigger;
 pub mod tray;
 pub mod window_manager;
 mod web_chrome;
+mod double_tap;
+mod web_shortcuts;
 
 use ai::AiManager;
 use config::AppConfig;
@@ -36,6 +38,7 @@ struct TauriConfigPublisher {
 
 impl config::ConfigPublisher for TauriConfigPublisher {
     fn publish(&self, previous: &AppConfig, current: &AppConfig) {
+        web_shortcuts::configure(current.general.web_new_chat_key);
         let _ = self.app.emit("config_updated", current);
         window_manager::apply_config_effects(&self.app, previous, current);
     }
@@ -721,6 +724,7 @@ pub fn run() {
                 app: handle.clone(),
             }));
             let initial_config = config.snapshot();
+            web_shortcuts::configure(initial_config.general.web_new_chat_key);
             app.manage(AppState {
                 config,
                 ai_manager: AiManager::new(),
@@ -767,6 +771,7 @@ pub fn run() {
             }
         })
         .on_window_event(|window, event| {
+            web_shortcuts::window_event(window, event);
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // 设置与历史窗口都是常驻隐藏，关闭只隐藏，保留界面状态
                 if matches!(window.label(), "main" | "history") {

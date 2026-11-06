@@ -1,0 +1,30 @@
+"""Verify failed DOM lookups remain visible inside native toolbar clipping bounds."""
+from playwright.sync_api import sync_playwright, expect
+
+with sync_playwright() as p:
+    browser = p.chromium.launch(channel='msedge', headless=True)
+    page = browser.new_page(viewport={'width': 900, 'height': 650}, reduced_motion='reduce')
+    page.goto('http://localhost:1420/tests/fixtures/web-chrome.html?lang=en-US')
+    page.wait_for_load_state('networkidle')
+    bar = page.frame_locator('#bar')
+    bar.locator('.web-menu-trigger').click()
+    toggle = bar.get_by_role('button', name='Drag whole card', exact=True)
+    toggle.click()
+    expect(toggle).to_have_attribute('aria-pressed', 'true')
+    bar.locator('.web-menu-trigger').click()
+    page.evaluate('chromeFixture.failNewChat()')
+    expect(bar.get_by_role('alert')).to_be_visible()
+    expect(toggle).to_have_attribute('aria-pressed', 'true')
+
+    page.reload(wait_until='networkidle')
+    page.evaluate('chromeFixture.setHeadless(false)')
+    bar.locator('.web-card-titlebar').wait_for()
+    page.evaluate('chromeFixture.failNewChat()')
+    alert = bar.get_by_role('alert')
+    expect(alert).to_be_visible()
+    canvas = page.locator('#bar').bounding_box()
+    box = alert.bounding_box()
+    assert box['y'] >= canvas['y'] and box['y'] + box['height'] <= canvas['y'] + 38, (canvas, box)
+    expect(alert).to_contain_text('new chat button')
+    browser.close()
+print('New chat failure feedback: headless menu state preserved and framed notice fits native titlebar')

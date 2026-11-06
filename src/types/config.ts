@@ -8,6 +8,9 @@ import { z } from 'zod';
  */
 export const DEFAULT_API_CARD_SIZE: [number, number] = [600, 900];
 export const DEFAULT_WEB_WINDOW_SIZE: [number, number] = [860, 640];
+export const WEB_NEW_CHAT_KEYS = ['Disabled', 'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'] as const;
+export const DEFAULT_WEB_NEW_CHAT_KEY = 'ControlLeft';
+export type WebNewChatKey = typeof WEB_NEW_CHAT_KEYS[number];
 export const DEFAULT_WEB_DRAG_HOLD_DELAY_MS = 300;
 export const MAX_WEB_DRAG_HOLD_DELAY_MS = 10000;
 export const WEB_MENU_ACTION_IDS = ['reload', 'openExternal', 'history', 'settings', 'moveWindow', 'minimize', 'maximize', 'closeWindow'] as const;
@@ -67,6 +70,7 @@ export const generalConfigSchema = z.object({
   autoStart: z.boolean(),
   webWindowMode: webWindowModeSchema.default('multi_window'),
   webHeadlessMode: z.boolean().default(false),
+  webNewChatKey: z.enum(WEB_NEW_CHAT_KEYS).default(DEFAULT_WEB_NEW_CHAT_KEY),
   webDragHoldDelayMs: z.number().int().min(0).max(MAX_WEB_DRAG_HOLD_DELAY_MS).default(DEFAULT_WEB_DRAG_HOLD_DELAY_MS),
   webMenuPinnedActions: z.array(webMenuActionIdSchema).max(8)
     .refine((items) => new Set(items).size === items.length, 'Pinned actions must be unique')

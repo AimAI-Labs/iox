@@ -133,6 +133,57 @@ pub fn resolve_language(configured: &str) -> &'static str {
     }
 }
 
+/// Physical keys deliberately distinguish left/right modifiers.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum WebNewChatKey {
+    Disabled,
+    #[default]
+    ControlLeft,
+    ControlRight,
+    ShiftLeft,
+    ShiftRight,
+    AltLeft,
+    AltRight,
+    F1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+}
+
+impl WebNewChatKey {
+    pub fn virtual_key(self) -> u16 {
+        match self {
+            Self::Disabled => 0,
+            Self::ControlLeft => 0xa2,
+            Self::ControlRight => 0xa3,
+            Self::ShiftLeft => 0xa0,
+            Self::ShiftRight => 0xa1,
+            Self::AltLeft => 0xa4,
+            Self::AltRight => 0xa5,
+            Self::F1 => 0x70,
+            Self::F2 => 0x71,
+            Self::F3 => 0x72,
+            Self::F4 => 0x73,
+            Self::F5 => 0x74,
+            Self::F6 => 0x75,
+            Self::F7 => 0x76,
+            Self::F8 => 0x77,
+            Self::F9 => 0x78,
+            Self::F10 => 0x79,
+            Self::F11 => 0x7a,
+            Self::F12 => 0x7b,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GeneralConfig {
@@ -153,6 +204,8 @@ pub struct GeneralConfig {
     pub web_window_mode: String,  // "multi_window" | "tabbed"
     #[serde(default)]
     pub web_headless_mode: bool,
+    #[serde(default)]
+    pub web_new_chat_key: WebNewChatKey,
     #[serde(default = "default_web_drag_hold_delay_ms")]
     pub web_drag_hold_delay_ms: u64,
     #[serde(default = "default_web_menu_pinned_actions")]
@@ -226,6 +279,7 @@ impl Default for GeneralConfig {
             auto_start: false,
             web_window_mode: "multi_window".to_string(),
             web_headless_mode: false,
+            web_new_chat_key: WebNewChatKey::default(),
             web_drag_hold_delay_ms: default_web_drag_hold_delay_ms(),
             web_menu_pinned_actions: default_web_menu_pinned_actions(),
             auto_copy_on_web_action: false,
@@ -1718,6 +1772,33 @@ mod tests {
             assert_eq!(config.web_headless_mode, enabled);
             assert_eq!(serde_json::to_value(config).unwrap()["webHeadlessMode"], enabled);
         }
+    }
+
+    #[test]
+    fn web_new_chat_key_defaults_round_trips_and_distinguishes_sides() {
+        let mut raw = serde_json::to_value(GeneralConfig::default()).unwrap();
+        raw.as_object_mut().unwrap().remove("webNewChatKey");
+        let legacy: GeneralConfig = serde_json::from_value(raw.clone()).unwrap();
+        assert_eq!(legacy.web_new_chat_key, WebNewChatKey::ControlLeft);
+        for key in [
+            "Disabled",
+            "ControlLeft",
+            "ControlRight",
+            "ShiftLeft",
+            "ShiftRight",
+            "AltLeft",
+            "AltRight",
+            "F1",
+            "F12",
+        ] {
+            raw["webNewChatKey"] = serde_json::json!(key);
+            let config: GeneralConfig = serde_json::from_value(raw.clone()).unwrap();
+            assert_eq!(serde_json::to_value(config).unwrap()["webNewChatKey"], key);
+        }
+        raw["webNewChatKey"] = serde_json::json!("Ctrl");
+        assert!(serde_json::from_value::<GeneralConfig>(raw).is_err());
+        assert_eq!(WebNewChatKey::ControlLeft.virtual_key(), 0xa2);
+        assert_eq!(WebNewChatKey::ControlRight.virtual_key(), 0xa3);
     }
 
     #[test]

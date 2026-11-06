@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Globe, LayoutGrid, Layers, RefreshCcw, ArrowUpRight, Zap } from "lucide-react";
-import { GeneralConfig, ActionConfig, DEFAULT_WEB_WINDOW_SIZE, DEFAULT_WEB_DRAG_HOLD_DELAY_MS, MAX_WEB_DRAG_HOLD_DELAY_MS, WebWindowMode } from "@/types/config";
+import { GeneralConfig, ActionConfig, DEFAULT_WEB_WINDOW_SIZE, DEFAULT_WEB_DRAG_HOLD_DELAY_MS, MAX_WEB_DRAG_HOLD_DELAY_MS, WebWindowMode, WEB_NEW_CHAT_KEYS, DEFAULT_WEB_NEW_CHAT_KEY, WebNewChatKey } from "@/types/config";
 import { useTranslation } from "@/hooks/useTranslation";
 import {
   Card,
@@ -29,6 +29,15 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
 }) => {
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
+  const newChatKeyLabels: Partial<Record<WebNewChatKey, string>> = {
+    Disabled: t('settings.web.newChatKeys.Disabled'),
+    ControlLeft: t('settings.web.newChatKeys.ControlLeft'),
+    ControlRight: t('settings.web.newChatKeys.ControlRight'),
+    ShiftLeft: t('settings.web.newChatKeys.ShiftLeft'),
+    ShiftRight: t('settings.web.newChatKeys.ShiftRight'),
+    AltLeft: t('settings.web.newChatKeys.AltLeft'),
+    AltRight: t('settings.web.newChatKeys.AltRight'),
+  };
 
   const [currentW, currentH] = general.webWindowSize ?? DEFAULT_WEB_WINDOW_SIZE;
   const webActions = actions.filter((a) => a.actionType === "web");
@@ -142,6 +151,30 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
                     description: isZh ? "所有 Web 动作收拢在单一浮窗内集中切换" : "All Web actions consolidated into a unified tabbed window",
                   },
                 ]}
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label className="text-xs text-foreground font-medium" id="web-new-chat-key-label">
+                {t('settings.web.newChatKey')}
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                {t('settings.web.newChatKeyDesc')}
+              </p>
+            </div>
+            <div className="w-56 shrink-0">
+              <Select
+                aria-label={t('settings.web.newChatKey')}
+                value={general.webNewChatKey ?? DEFAULT_WEB_NEW_CHAT_KEY}
+                onChange={(value) => onUpdateGeneral({ webNewChatKey: value as WebNewChatKey })}
+                options={WEB_NEW_CHAT_KEYS.map((key) => ({
+                  value: key,
+                  label: newChatKeyLabels[key] ?? key,
+                }))}
               />
             </div>
           </div>

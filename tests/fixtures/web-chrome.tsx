@@ -51,6 +51,7 @@ if (params.has('settings')) {
   const fixture = {
     calls: [] as { command: string; args: Record<string, unknown> }[],
     pageClicks: 0,
+    failNewChat: () => {},
     failNext: false,
     heldLayout: null as Promise<void> | null,
     releaseLayout: () => {},
@@ -176,9 +177,11 @@ if (params.has('settings')) {
     invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
     holdDelay: number; onDelay: (delay: number) => void;
     pins: WebMenuActionId[]; onPins: (pins: WebMenuActionId[]) => void;
+    failNewChat: () => void;
   } }).chromeFixture;
   fixture.onChrome = (layout) => { void emit('web_chrome_layout_changed', layout); };
   fixture.onHub = (state) => { void emit('web_hub_state_changed', state); };
+  fixture.failNewChat = () => { void emit('web-new-chat-failed', null); };
   mockIPC((command, args) => fixture.invoke(command, args as Record<string, unknown>), { shouldMockEvents: true });
   mockWindows(label);
   function ToolbarFixture() {

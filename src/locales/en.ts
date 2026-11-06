@@ -392,6 +392,18 @@ export const en: TranslationTree = {
     web: {
       title: 'Web Hub & Actions Settings',
       windowMode: 'Web Window Mode',
+      newChatKey: 'Double-tap key for new chat',
+      newChatFailed: 'Could not click the new chat button. Check that the page is loaded and you are signed in.',
+      newChatKeyDesc: 'With a Web card in front and the pointer over it, double-tap within 400 ms to click the page’s new chat button. Applies when saved.',
+      newChatKeys: {
+        Disabled: 'Disabled',
+        ControlLeft: 'Left Ctrl (default)',
+        ControlRight: 'Right Ctrl',
+        ShiftLeft: 'Left Shift',
+        ShiftRight: 'Right Shift',
+        AltLeft: 'Left Alt',
+        AltRight: 'Right Alt',
+      },
       headlessMode: 'Web Card Headless Mode',
       headlessModeDesc: 'Hide navigation and window title bars; use a draggable floating menu. Applies when saved.',
       dragHoldDelay: 'Window drag hold delay',
