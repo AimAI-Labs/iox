@@ -68,6 +68,7 @@ export const generalConfigSchema = z.object({
   theme: themeSchema,
   uiStyle: uiStyleSchema.default('classic'),
   autoStart: z.boolean(),
+  autoCheckUpdate: z.boolean().default(true),
   webWindowMode: webWindowModeSchema.default('multi_window'),
   webHeadlessMode: z.boolean().default(false),
   webNewChatKey: z.enum(WEB_NEW_CHAT_KEYS).default(DEFAULT_WEB_NEW_CHAT_KEY),

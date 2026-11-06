@@ -9,6 +9,7 @@
     "theme": "system",
     "uiStyle": "classic",
     "autoStart": false,
+    "autoCheckUpdate": true,
     "webWindowMode": "multi_window",
     "webHeadlessMode": false,
     "webNewChatKey": "ControlLeft",

@@ -263,6 +263,18 @@ export const en: TranslationTree = {
       statusError: 'Sync failed',
       statusIdle: 'Idle',
     },
+    update: {
+      autoCheck: 'Check for updates automatically',
+      autoCheckDesc: 'Checks GitHub Releases at startup and every 12 hours; failures degrade quietly and never block the app',
+      check: 'Check for updates',
+      checking: 'Checking...',
+      notChecked: 'Not checked',
+      latest: 'You are on the latest version',
+      unknown: 'The release tag cannot be compared. Open the release page instead.',
+      availableShort: 'Update',
+      available: 'Update available',
+      failed: 'Unable to check for updates right now. Try again later or open the release page.',
+    },
     general: {
       title: 'Selection & General Settings',
       subtitle: 'Configure selection capture logic, shortcuts, appearance, and auto-start',

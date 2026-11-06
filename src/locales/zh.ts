@@ -261,6 +261,18 @@ export const zh = {
       statusError: '同步失败',
       statusIdle: '空闲',
     },
+    update: {
+      autoCheck: '自动检查更新',
+      autoCheckDesc: '启动后与每 12 小时检查一次 GitHub Release；网络或 API 不可用时静默降级，不影响使用',
+      check: '检查更新',
+      checking: '检查中…',
+      notChecked: '未检查',
+      latest: '已是最新版本',
+      unknown: '版本号格式无法比较，请前往发布页查看',
+      availableShort: '新版本',
+      available: '发现新版本',
+      failed: '暂时无法检查更新，请稍后重试或直接打开发布页',
+    },
     general: {
       title: '划词触发与常规设置',
       subtitle: '调整系统级取词逻辑、快捷键、界面外观与开机自启动',

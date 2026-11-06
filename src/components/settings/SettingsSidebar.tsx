@@ -1,10 +1,12 @@
 import React from "react";
-import { Cpu, Zap, Layers, MessageSquare, MessagesSquare, Globe, Sliders, Shield, Save, Code, Database } from "lucide-react";
+import { Cpu, Zap, Layers, MessageSquare, MessagesSquare, Globe, Sliders, Shield, Save, Code, Database, RefreshCw, ArrowUpRight } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import { Button } from "@/components/ui";
 import { IOXLogo } from "@/components/common";
 import { useTranslation } from "@/hooks/useTranslation";
+import { useUpdateCheck } from "@/hooks/useUpdateCheck";
 import { cn } from "@/lib/utils";
 import { SettingsTab } from "@/types/config";
 
@@ -24,6 +26,32 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   onSave,
 }) => {
   const { t } = useTranslation();
+  const { version, status, checking, check } = useUpdateCheck();
+  const latestVersion = status?.state === 'available' ? status.latestVersion : null;
+  const needsAttention = status?.state === 'unavailable' || status?.state === 'unknown';
+
+  const handleCheckUpdate = async () => {
+    try {
+      const result = await check();
+      if (!result) return;
+      if (result.state === 'available' && result.latestVersion) {
+        toast.success(t('settings.update.available'), { description: `v${result.latestVersion}` });
+      } else if (result.state === 'current') {
+        toast.success(t('settings.update.latest'));
+      } else if (result.state === 'unknown') {
+        toast.info(t('settings.update.unknown'));
+      } else {
+        toast.info(t('settings.update.failed'));
+      }
+    } catch {
+      toast.info(t('settings.update.failed'));
+    }
+  };
+
+  const handleOpenRelease = () => {
+    const fallback = 'https://github.com/AimAI-Labs/iox/releases';
+    void openUrl(status?.releaseUrl ?? fallback).catch(() => {});
+  };
 
   const navItems: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
     { id: "providers", label: t('settings.sidebar.providers'), icon: Cpu },
@@ -86,6 +114,46 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 
       {/* Save Button in Footer */}
       <div className="pt-3 border-t border-border/30 space-y-2">
+        <div className="flex items-center justify-between gap-2 px-2.5 pb-0.5">
+          <span
+            className="font-mono text-[10.5px] text-muted-foreground"
+            title={status?.state === 'unknown'
+              ? t('settings.update.unknown')
+              : status?.state === 'unavailable'
+                ? t('settings.update.failed')
+                : undefined}
+          >
+            v{version || '…'}
+          </span>
+          {latestVersion ? (
+            <button
+              type="button"
+              onClick={handleOpenRelease}
+              className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-primary/15"
+              title={t('settings.update.available')}
+            >
+              <ArrowUpRight size={11} />
+              <span>{t('settings.update.availableShort')} v{latestVersion}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleCheckUpdate()}
+              disabled={checking}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground disabled:opacity-60 dark:hover:bg-white/5"
+              title={needsAttention ? t('settings.update.failed') : t('settings.update.check')}
+            >
+              <RefreshCw size={11} className={checking ? 'animate-spin' : ''} />
+              <span>
+                {checking
+                  ? t('settings.update.checking')
+                  : status === null
+                    ? t('settings.update.notChecked')
+                    : t('settings.update.check')}
+              </span>
+            </button>
+          )}
+        </div>
         <Button
           type="button"
           variant="ghost"
