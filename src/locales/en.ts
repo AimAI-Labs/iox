@@ -394,6 +394,8 @@ export const en: TranslationTree = {
       windowMode: 'Web Window Mode',
       headlessMode: 'Web Card Headless Mode',
       headlessModeDesc: 'Hide navigation and window title bars; use a draggable floating menu. Applies when saved.',
+      contextMenu: 'Custom web page context menu',
+      contextMenuDesc: 'Replaces the right-click menu inside AI sites with an IOX-style menu whose cascading AI pills switch to another enabled web action. Text fields keep the native menu.',
       dragHoldDelay: 'Window drag hold delay',
       dragHoldDelayDesc: 'Hold the floating button before moving the whole card (0–10000 ms). Set 0 to drag immediately, where a 300 ms hold moves the menu instead. Applies when saved.',
       menu: {

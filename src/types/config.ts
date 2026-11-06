@@ -67,6 +67,7 @@ export const generalConfigSchema = z.object({
   autoStart: z.boolean(),
   webWindowMode: webWindowModeSchema.default('multi_window'),
   webHeadlessMode: z.boolean().default(false),
+  webContextMenu: z.boolean().default(true),
   webDragHoldDelayMs: z.number().int().min(0).max(MAX_WEB_DRAG_HOLD_DELAY_MS).default(DEFAULT_WEB_DRAG_HOLD_DELAY_MS),
   webMenuPinnedActions: z.array(webMenuActionIdSchema).max(8)
     .refine((items) => new Set(items).size === items.length, 'Pinned actions must be unique')

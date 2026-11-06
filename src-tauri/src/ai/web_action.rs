@@ -1,4 +1,3 @@
-use super::scripts::build_initialization_script;
 use super::template::render_url_template;
 use super::vendors::get_vendor_adapter;
 use crate::config::{ActionConfig, AppConfig};
@@ -8,6 +7,141 @@ use serde::{Deserialize, Serialize};
 use tauri::webview::WebviewBuilder;
 use tauri::window::WindowBuilder;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl};
+
+/// 官网内容页的初始化脚本：通用脚本 + 可选的自定义右键菜单。
+fn content_init_script(config: &AppConfig, action: &ActionConfig) -> String {
+    let mut script = super::scripts::build_initialization_script(&config.general.theme, None);
+    if config.general.web_context_menu {
+        script.push('\n');
+        script.push_str(&context_menu_script(config, action));
+    }
+    script
+}
+
+fn context_menu_script(config: &AppConfig, action: &ActionConfig) -> String {
+    let choices: Vec<(String, String)> = config
+        .actions
+        .iter()
+        .filter(|candidate| candidate.action_type == "web" && candidate.enabled)
+        .map(|candidate| (candidate.id.clone(), candidate.name.clone()))
+        .collect();
+    super::scripts::build_web_context_menu_script(
+        &config.general.theme,
+        crate::config::resolve_language(&config.general.language),
+        &action.id,
+        &choices,
+    )
+}
+
+/// 内容页 WebView 的 label 与动作 id 的稳定映射（动作 id 已按窗口命名规则白名单化）。
+fn content_action_slug(label: &str) -> Option<&str> {
+    if let Some(rest) = label.strip_prefix("web_win_") {
+        return rest.strip_suffix("_web");
+    }
+    label.strip_prefix("web_hub_tab_")
+}
+
+fn sanitized_action_id(id: &str) -> String {
+    id.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// 页面只能请求固定哨兵路径；动作 id 必须命中已提交配置中启用的 Web 动作。
+fn menu_switch_action_id(url: &tauri::Url) -> Option<String> {
+    if url.scheme() != "https"
+        || url.host_str() != Some("iox.local")
+        || url.path() != "/switch-ai"
+    {
+        return None;
+    }
+    url.query_pairs()
+        .find(|(key, _)| key == "action")
+        .map(|(_, value)| value.into_owned())
+}
+
+fn intercept_menu_switch(app: &AppHandle, nav_url: &tauri::Url) -> bool {
+    let Some(action_id) = menu_switch_action_id(nav_url) else {
+        return false;
+    };
+    let dispatch = app.clone();
+    // Window creation stays on the main thread; the navigation callback may run on the
+    // WebView2 thread and must not touch window builders directly.
+    let _ = app.run_on_main_thread(move || {
+        let Some(state) = dispatch.try_state::<AppState>() else {
+            return;
+        };
+        let Some(config) = state.config.try_snapshot() else {
+            return;
+        };
+        let Some(action) = config.actions.iter().find(|action| {
+            action.action_type == "web" && action.enabled && action.id == action_id
+        }) else {
+            return;
+        };
+
+        // Switching must not reset an already open conversation: focus the existing card or
+        // activate the existing Hub tab instead of re-running the action URL.
+        if config.general.web_window_mode == "tabbed" {
+            let open = state
+                .web_hub_state
+                .lock()
+                .map(|hub| hub.tabs.iter().any(|tab| tab.action_id == action.id))
+                .unwrap_or(false);
+            if open {
+                let _ = switch_web_hub_tab(&dispatch, &state, &action.id);
+                return;
+            }
+        } else if focus_existing_web_action(&dispatch, action) {
+            return;
+        }
+
+        if let Err(error) = execute_web_action(&dispatch, &config, action, "", None, None) {
+            eprintln!("Web menu switch failed: {error}");
+        }
+    });
+    true
+}
+
+/// 复用已打开的同名卡片：只唤醒窗口，不重新导航，保留当前会话。
+fn focus_existing_web_action(app: &AppHandle, action: &ActionConfig) -> bool {
+    let label = format!("web_win_{}", sanitized_action_id(&action.id));
+    let Some(window) = app.get_window(&label) else {
+        return false;
+    };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+    true
+}
+
+/// 配置提交后把菜单脚本同步到已打开的内容页；关闭开关时只清理旧菜单。
+pub fn refresh_web_context_menus(app: &AppHandle, config: &AppConfig) {
+    for (label, webview) in app.webviews() {
+        let Some(slug) = content_action_slug(&label) else {
+            continue;
+        };
+        let Some(action) = config
+            .actions
+            .iter()
+            .find(|action| sanitized_action_id(&action.id) == slug)
+        else {
+            continue;
+        };
+        let script = if config.general.web_context_menu {
+            context_menu_script(config, action)
+        } else {
+            "window.__ioxContextMenuDispose && window.__ioxContextMenuDispose();".to_string()
+        };
+        let _ = webview.eval(&script);
+    }
+}
 
 fn cancel_injection(app: &AppHandle, label: &str) {
     if let Ok(mut tasks) = app.state::<AppState>().web_injections.lock() {
@@ -590,12 +724,16 @@ fn execute_multi_window_action(
 
     add_web_frame(&window, &label, initial_width, initial_height)?;
 
-    let init_script = build_initialization_script(&config.general.theme, None);
+    let init_script = content_init_script(config, action);
     let initial_origin = target_url.origin().ascii_serialization();
+    let navigation_app = app.clone();
     let content_builder = WebviewBuilder::new(&content_label, WebviewUrl::External(target_url))
         .transparent(true)
         .zoom_hotkeys_enabled(true)
         .on_navigation(move |nav_url| {
+            if intercept_menu_switch(&navigation_app, nav_url) {
+                return false;
+            }
             if is_allowed_internal_navigation(&initial_origin, nav_url) {
                 true
             } else {
@@ -707,7 +845,7 @@ fn execute_tabbed_hub_action(
         crate::window_manager::ui_style_policy(&config.general.ui_style).native_chrome
             && !config.general.web_headless_mode;
 
-    let init_script = build_initialization_script(&config.general.theme, None);
+    let init_script = content_init_script(config, action);
 
     // 1. 如果 web_hub 窗口已存在
     if let Some(window) = app.get_window(window_label) {
@@ -729,10 +867,14 @@ fn execute_tabbed_hub_action(
         } else {
             // 动态挂载新的 Tab Child Webview
             let initial_origin = target_url.origin().ascii_serialization();
+            let navigation_app = app.clone();
             let content_builder = WebviewBuilder::new(&tab_content_label, WebviewUrl::External(target_url.clone()))
                 .transparent(true)
                 .zoom_hotkeys_enabled(true)
                 .on_navigation(move |nav_url| {
+                    if intercept_menu_switch(&navigation_app, nav_url) {
+                        return false;
+                    }
                     if is_allowed_internal_navigation(&initial_origin, nav_url) {
                         true
                     } else {
@@ -823,10 +965,14 @@ fn execute_tabbed_hub_action(
 
     // 构建首个 AI Tab Webview
     let initial_origin = target_url.origin().ascii_serialization();
+    let navigation_app = app.clone();
     let content_builder = WebviewBuilder::new(&tab_content_label, WebviewUrl::External(target_url))
         .transparent(true)
         .zoom_hotkeys_enabled(true)
         .on_navigation(move |nav_url| {
+            if intercept_menu_switch(&navigation_app, nav_url) {
+                return false;
+            }
             if is_allowed_internal_navigation(&initial_origin, nav_url) {
                 true
             } else {
@@ -1085,5 +1231,35 @@ mod tests {
 
         let nav_github: tauri::Url = "https://github.com/rust-lang/rust".parse().unwrap();
         assert!(!is_allowed_internal_navigation(initial, &nav_github));
+    }
+
+    #[test]
+    fn menu_switch_only_accepts_the_reserved_endpoint() {
+        let url: tauri::Url = format!(
+            "{}{}",
+            super::super::scripts::CONTEXT_MENU_SWITCH_PREFIX, "act_web_kimi"
+        )
+        .parse()
+        .unwrap();
+        assert_eq!(menu_switch_action_id(&url).as_deref(), Some("act_web_kimi"));
+
+        for other in [
+            "https://example.com/switch-ai?action=act_web_kimi",
+            "http://iox.local/switch-ai?action=act_web_kimi",
+            "https://iox.local/other?action=act_web_kimi",
+            "https://iox.local/switch-ai",
+        ] {
+            let url: tauri::Url = other.parse().unwrap();
+            assert_eq!(menu_switch_action_id(&url), None, "{other}");
+        }
+    }
+
+    #[test]
+    fn content_labels_map_back_to_sanitized_action_slugs() {
+        assert_eq!(content_action_slug("web_win_act_web_kimi_web"), Some("act_web_kimi"));
+        assert_eq!(content_action_slug("web_hub_tab_act_web_kimi"), Some("act_web_kimi"));
+        assert_eq!(content_action_slug("web_win_alpha_bar"), None);
+        assert_eq!(content_action_slug("main"), None);
+        assert_eq!(sanitized_action_id("act:web/kimi"), "act_web_kimi");
     }
 }

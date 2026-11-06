@@ -11,6 +11,7 @@
     "autoStart": false,
     "webWindowMode": "multi_window",
     "webHeadlessMode": false,
+    "webContextMenu": true,
     "webDragHoldDelayMs": 300,
     "webMenuPinnedActions": [
       "reload",

@@ -392,6 +392,8 @@ export const zh = {
       windowMode: '网页打开模式',
       headlessMode: 'Web 卡片无头模式',
       headlessModeDesc: '隐藏导航栏和窗口标题栏，以可拖动的悬浮菜单操作网页；保存后立即生效',
+      contextMenu: '自定义网页右键菜单',
+      contextMenuDesc: '在官网页面内使用 IOX 样式菜单，并提供“切换 AI”级联胶囊快速跳转到其他已启用的网页动作；输入框内仍保留系统菜单',
       dragHoldDelay: '整窗拖动长按时长',
       dragHoldDelayDesc: '长按悬浮按钮多久后拖动整个卡片（0–10000ms）；0 为直接拖动卡片，此时长按 300 毫秒改为拖动菜单，保存后生效',
       menu: {

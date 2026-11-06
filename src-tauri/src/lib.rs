@@ -38,6 +38,7 @@ impl config::ConfigPublisher for TauriConfigPublisher {
     fn publish(&self, previous: &AppConfig, current: &AppConfig) {
         let _ = self.app.emit("config_updated", current);
         window_manager::apply_config_effects(&self.app, previous, current);
+        ai::web_action::refresh_web_context_menus(&self.app, current);
     }
 }
 
