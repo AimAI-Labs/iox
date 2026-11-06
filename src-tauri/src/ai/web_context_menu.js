@@ -15,8 +15,8 @@ function installIoxContextMenu(options) {
 
     const language = options.language === 'zh' ? 'zh' : 'en';
     const text = language === 'zh'
-      ? { copy: '复制选中内容', reload: '刷新页面', switchAi: '切换 AI', current: '当前', empty: '没有可切换的 AI' }
-      : { copy: 'Copy selection', reload: 'Reload page', switchAi: 'Switch AI', current: 'Current', empty: 'No other AI configured' };
+      ? { copy: '复制选中内容', reload: '刷新页面', switchAi: '切换 AI' }
+      : { copy: 'Copy selection', reload: 'Reload page', switchAi: 'Switch AI' };
     const actions = Array.isArray(options.actions) ? options.actions.filter((item) => item && item.id && item.name) : [];
     const dark = options.theme === 'dark'
       || (options.theme !== 'light'
