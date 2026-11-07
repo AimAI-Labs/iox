@@ -770,6 +770,9 @@ pub fn run() {
                 web_injections: Mutex::new(std::collections::HashMap::new()),
                 web_chrome: web_chrome::WebChromeState::new(
                     initial_config.general.web_headless_mode,
+                    initial_config.general.web_headless_bar_mode,
+                    initial_config.general.web_headless_bar_width,
+                    initial_config.general.web_menu_pinned_actions.len(),
                 ),
             });
 
@@ -863,6 +866,7 @@ pub fn run() {
             web_chrome::layout_web_menu,
             web_chrome::set_web_window_icon,
             web_chrome::set_web_menu_action_pinned,
+            web_chrome::set_web_headless_bar_width,
             web_chrome::open_web_page_in_browser,
             open_in_browser,
             set_pin_state,

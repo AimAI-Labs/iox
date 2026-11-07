@@ -13,6 +13,8 @@ export const DEFAULT_WEB_NEW_CHAT_KEY = 'ControlLeft';
 export type WebNewChatKey = typeof WEB_NEW_CHAT_KEYS[number];
 export const DEFAULT_WEB_DRAG_HOLD_DELAY_MS = 300;
 export const MAX_WEB_DRAG_HOLD_DELAY_MS = 10000;
+export const MIN_WEB_HEADLESS_BAR_WIDTH = 160;
+export const MAX_WEB_HEADLESS_BAR_WIDTH = 720;
 export const WEB_MENU_ACTION_IDS = ['reload', 'openExternal', 'history', 'settings', 'moveWindow', 'minimize', 'maximize', 'closeWindow'] as const;
 export const webMenuActionIdSchema = z.enum(WEB_MENU_ACTION_IDS);
 export type WebMenuActionId = z.infer<typeof webMenuActionIdSchema>;
@@ -71,6 +73,9 @@ export const generalConfigSchema = z.object({
   autoCheckUpdate: z.boolean().default(true),
   webWindowMode: webWindowModeSchema.default('multi_window'),
   webHeadlessMode: z.boolean().default(false),
+  webHeadlessBarMode: z.boolean().default(false),
+  /** 0 = 按固定动作数量自适应；其余为手动拉伸后的逻辑像素宽度。 */
+  webHeadlessBarWidth: z.number().int().min(0).max(MAX_WEB_HEADLESS_BAR_WIDTH).default(0),
   webNewChatKey: z.enum(WEB_NEW_CHAT_KEYS).default(DEFAULT_WEB_NEW_CHAT_KEY),
   webContextMenu: z.boolean().default(true),
   webDragHoldDelayMs: z.number().int().min(0).max(MAX_WEB_DRAG_HOLD_DELAY_MS).default(DEFAULT_WEB_DRAG_HOLD_DELAY_MS),

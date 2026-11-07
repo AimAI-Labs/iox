@@ -12,6 +12,8 @@
     "autoCheckUpdate": true,
     "webWindowMode": "multi_window",
     "webHeadlessMode": false,
+    "webHeadlessBarMode": false,
+    "webHeadlessBarWidth": 0,
     "webNewChatKey": "ControlLeft",
     "webContextMenu": true,
     "webDragHoldDelayMs": 300,

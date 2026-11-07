@@ -12,7 +12,8 @@ const deferred = () => {
   return { promise, resolve };
 };
 const layout = (revision, headless = true) => ({
-  revision, headless, menu: { x: 804, y: 12, width: 44, height: 44, expanded: false },
+  revision, headless, bar: false,
+  menu: { x: 804, y: 12, width: 44, height: 44, expanded: false },
 });
 
 test('subscription precedes the initial read and a late read cannot replace a newer mode', async () => {
@@ -63,6 +64,26 @@ test('drag updates coalesce while IPC is pending and preserve the last toggle an
     { position: [700, 20] },
     { position: [500, 40], expanded: true, wheel: false },
   ]);
+  client.dispose();
+});
+
+test('bar width previews coalesce with drag positions and send only the last width', async () => {
+  const calls = [];
+  let revision = 1;
+  const client = createWebChromeClient({
+    listen: async () => () => {},
+    invoke: async (command, args) => {
+      if (command === 'get_web_chrome') return layout(1);
+      calls.push(args);
+      return layout(++revision);
+    },
+  }, () => {}, assert.fail);
+  await client.ready;
+  const first = client.update({ barWidth: 260 });
+  const second = client.update({ barWidth: 320 });
+  const moved = client.update({ position: [400, 20], barWidth: 340 });
+  await Promise.all([first, second, moved]);
+  assert.deepEqual(calls, [{ barWidth: 340, position: [400, 20] }]);
   client.dispose();
 });
 

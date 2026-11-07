@@ -1,9 +1,10 @@
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
+use crate::config::{MAX_WEB_HEADLESS_BAR_WIDTH, MIN_WEB_HEADLESS_BAR_WIDTH};
 use crate::window_manager::{WebCardFrame, WebToolbarRegion};
 use crate::AppState;
 
@@ -13,6 +14,16 @@ const CARD_BORDER: f64 = 2.0;
 const MENU_BUTTON_SIZE: f64 = 44.0;
 const MENU_MARGIN: f64 = 12.0;
 const MENU_MIN_OPEN_HEIGHT: f64 = 160.0;
+const WEB_BAR_BASE_WIDTH: f64 = 116.0;
+const WEB_BAR_ACTION_WIDTH: f64 = 30.0;
+
+/// One source of truth for the collapsed bar's canvas width; the frontend only reads menu.width.
+fn auto_bar_width(actions: usize) -> f64 {
+    (WEB_BAR_BASE_WIDTH + actions.min(8) as f64 * WEB_BAR_ACTION_WIDTH).clamp(
+        MIN_WEB_HEADLESS_BAR_WIDTH as f64,
+        MAX_WEB_HEADLESS_BAR_WIDTH as f64,
+    )
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,7 +47,7 @@ fn content_layout(height: u32, scale: f64, headless: bool) -> (u32, u32) {
     (top, height.saturating_sub(top))
 }
 
-fn calculate_menu_layout(
+fn calculate_menu_layout_with_width(
     viewport: (f64, f64),
     previous: Option<MenuLayout>,
     expanded: Option<bool>,
@@ -44,6 +55,7 @@ fn calculate_menu_layout(
     position: Option<(f64, f64)>,
     hub: bool,
     reflow: bool,
+    canvas_width: f64,
 ) -> Result<MenuLayout, String> {
     if !viewport.0.is_finite() || !viewport.1.is_finite() {
         return Err("Invalid menu viewport".into());
@@ -54,8 +66,8 @@ fn calculate_menu_layout(
     let wheel =
         wheel.unwrap_or_else(|| expanded.is_none() && previous.is_some_and(|layout| layout.wheel));
     let expanded = !wheel && expanded.unwrap_or(previous.is_some_and(|layout| layout.expanded));
-    // Button and hover modes share the same native canvas. Only its hit region changes.
-    let width = 280.0;
+    // Button and hover modes share the native canvas; in bar mode the canvas itself is the bar.
+    let width = canvas_width;
     let height = if expanded {
         if hub {
             560.0
@@ -175,11 +187,29 @@ fn calculate_menu_layout(
     })
 }
 
+/// The pure geometry tests keep the historical fixed 280px canvas.
+#[cfg(test)]
+fn calculate_menu_layout(
+    viewport: (f64, f64),
+    previous: Option<MenuLayout>,
+    expanded: Option<bool>,
+    wheel: Option<bool>,
+    position: Option<(f64, f64)>,
+    hub: bool,
+    reflow: bool,
+) -> Result<MenuLayout, String> {
+    calculate_menu_layout_with_width(
+        viewport, previous, expanded, wheel, position, hub, reflow, 280.0,
+    )
+}
+
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebChromeLayout {
     pub revision: u64,
     pub headless: bool,
+    /// Committed headless-bar policy projected for the local toolbar WebView.
+    pub bar: bool,
     pub menu: MenuLayout,
 }
 
@@ -261,11 +291,22 @@ fn toolbar_shape(
     headless: bool,
     page_top: u32,
     radius: Option<i32>,
+    bar: bool,
 ) -> ToolbarShape {
     if headless {
-        // Button and hover modes share one canvas; only the visible region changes.
+        // Button, bar and hover modes share one canvas; only the visible region changes.
         let region = if menu.expanded || menu.wheel {
             WebToolbarRegion::Full
+        } else if bar {
+            // The bar fills the canvas width, so its position follows the canvas anchor.
+            let height = MENU_BUTTON_SIZE.min(menu.height);
+            WebToolbarRegion::Bar {
+                x: 0,
+                y: (menu.button_y * scale).round() as i32,
+                width: (menu.width * scale).round() as i32,
+                height: (height * scale).round() as i32,
+                radius: (height / 2.0 * scale).round() as i32,
+            }
         } else {
             WebToolbarRegion::Button {
                 x: (menu.button_x * scale).round() as i32,
@@ -294,13 +335,19 @@ pub struct WebChromeState {
     // Native projection of committed config. Resize callbacks must never reenter ConfigStore:
     // publishing config effects can synchronously trigger window events while its lock is held.
     headless: AtomicBool,
+    bar: AtomicBool,
+    bar_width: AtomicU32,
+    bar_actions: AtomicUsize,
     windows: Mutex<HashMap<String, WindowLayout>>,
 }
 
 impl WebChromeState {
-    pub fn new(headless: bool) -> Self {
+    pub fn new(headless: bool, bar: bool, bar_width: u32, bar_actions: usize) -> Self {
         Self {
             headless: AtomicBool::new(headless),
+            bar: AtomicBool::new(headless && bar),
+            bar_width: AtomicU32::new(bar_width),
+            bar_actions: AtomicUsize::new(bar_actions),
             windows: Mutex::new(HashMap::new()),
         }
     }
@@ -311,6 +358,31 @@ impl WebChromeState {
 
     pub fn set_headless(&self, enabled: bool) {
         self.headless.store(enabled, Ordering::Relaxed);
+    }
+
+    pub fn bar(&self) -> bool {
+        self.headless() && self.bar.load(Ordering::Relaxed)
+    }
+
+    pub fn set_bar(&self, enabled: bool) {
+        self.bar.store(enabled, Ordering::Relaxed);
+    }
+
+    /// 0 keeps the bar at its pinned-action-derived width.
+    pub fn bar_width(&self) -> u32 {
+        self.bar_width.load(Ordering::Relaxed)
+    }
+
+    pub fn set_bar_width(&self, width: u32) {
+        self.bar_width.store(width, Ordering::Relaxed);
+    }
+
+    pub fn bar_actions(&self) -> usize {
+        self.bar_actions.load(Ordering::Relaxed)
+    }
+
+    pub fn set_bar_actions(&self, count: usize) {
+        self.bar_actions.store(count, Ordering::Relaxed);
     }
 }
 
@@ -336,10 +408,12 @@ fn apply_layout(
     wheel: Option<bool>,
     position: Option<(f64, f64)>,
     relayout_content: bool,
+    bar_width_preview: Option<f64>,
 ) -> Result<WebChromeLayout, String> {
     let app = window.app_handle();
     let state = app.state::<AppState>();
     let headless = state.web_chrome.headless();
+    let bar = state.web_chrome.bar();
     // Creation may have started from a config snapshot before a concurrent commit.
     // Reconcile decorations from current native policy before measuring the client area.
     let decorated = crate::window_manager::is_native_chrome() && !headless;
@@ -351,6 +425,7 @@ fn apply_layout(
     let size = window.inner_size().map_err(|e| e.to_string())?;
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let hub = window.label() == "web_hub";
+    let viewport = (size.width as f64 / scale, size.height as f64 / scale);
     let (top, height) = content_layout(size.height, scale, headless);
     let radius = card_radius(
         crate::window_manager::window_is_maximized(window),
@@ -358,24 +433,42 @@ fn apply_layout(
         crate::window_manager::is_native_chrome(),
         scale,
     );
+    // A resize gesture previews its width without writing config; a committed width wins over
+    // the pinned-action-derived default. The frontend only reads the returned menu.width.
+    let canvas_width = if bar {
+        let committed = state.web_chrome.bar_width();
+        bar_width_preview
+            .filter(|width| width.is_finite())
+            .or_else(|| (committed > 0).then_some(committed as f64))
+            .unwrap_or_else(|| auto_bar_width(state.web_chrome.bar_actions()))
+            .clamp(
+                MIN_WEB_HEADLESS_BAR_WIDTH as f64,
+                MAX_WEB_HEADLESS_BAR_WIDTH as f64,
+            )
+    } else {
+        280.0
+    };
     let (layout, toolbar, previous_toolbar, relayout_content) = {
         let mut windows = state.web_chrome.windows.lock().map_err(|e| e.to_string())?;
         let previous = windows.get(window.label()).copied();
-        let menu = calculate_menu_layout(
-            (size.width as f64 / scale, size.height as f64 / scale),
+        let menu = calculate_menu_layout_with_width(
+            viewport,
             previous.map(|old| old.layout.menu),
             if headless { expanded } else { Some(false) },
-            if headless { wheel } else { Some(false) },
+            // The bar keeps its own navigation surface, so hover wheels never open in that mode.
+            if headless && !bar { wheel } else { Some(false) },
             position,
             hub,
             relayout_content,
+            canvas_width,
         )?;
         let layout = WebChromeLayout {
             revision: previous.map_or(1, |old| old.layout.revision + 1),
             headless,
+            bar,
             menu,
         };
-        let toolbar = toolbar_shape(size, scale, menu, headless, top, radius);
+        let toolbar = toolbar_shape(size, scale, menu, headless, top, radius, bar);
         windows.insert(window.label().to_string(), WindowLayout { layout, toolbar });
         (
             layout,
@@ -476,7 +569,7 @@ pub fn layout_window(window: &tauri::Window) {
         if window.is_minimized().unwrap_or(false) {
             return;
         }
-        if let Err(error) = apply_layout(&window, None, None, None, true) {
+        if let Err(error) = apply_layout(&window, None, None, None, true, None) {
             eprintln!("Web window layout failed: {error}");
         }
     });
@@ -496,6 +589,7 @@ async fn menu_layout(
     wheel: Option<bool>,
     position: Option<(f64, f64)>,
     require_headless: bool,
+    bar_width: Option<f64>,
 ) -> Result<WebChromeLayout, String> {
     let window = caller_window(&webview)?;
     let dispatch = window.clone();
@@ -505,7 +599,7 @@ async fn menu_layout(
             let result = if require_headless && !headless(window.app_handle()) {
                 Err("Web headless mode is disabled".into())
             } else {
-                apply_layout(&window, expanded, wheel, position, false)
+                apply_layout(&window, expanded, wheel, position, false, bar_width)
             };
             let _ = send.send(result);
         })
@@ -515,7 +609,7 @@ async fn menu_layout(
 
 #[tauri::command]
 pub async fn get_web_chrome(webview: tauri::Webview) -> Result<WebChromeLayout, String> {
-    menu_layout(webview, None, None, None, false).await
+    menu_layout(webview, None, None, None, false, None).await
 }
 
 #[tauri::command]
@@ -524,8 +618,32 @@ pub async fn layout_web_menu(
     expanded: Option<bool>,
     wheel: Option<bool>,
     position: Option<(f64, f64)>,
+    bar_width: Option<f64>,
 ) -> Result<WebChromeLayout, String> {
-    menu_layout(webview, expanded, wheel, position, true).await
+    menu_layout(webview, expanded, wheel, position, true, bar_width).await
+}
+
+/// Only a local Web toolbar may resize its own bar. The width is committed through
+/// ConfigStore so the setting page draft cannot silently overwrite it.
+#[tauri::command]
+pub fn set_web_headless_bar_width(webview: tauri::Webview, width: u32) -> Result<(), String> {
+    let window = caller_window(&webview)?;
+    if !headless(window.app_handle()) || !window.app_handle().state::<AppState>().web_chrome.bar() {
+        return Err("Web headless bar is disabled".into());
+    }
+    window
+        .app_handle()
+        .state::<AppState>()
+        .config
+        .commit(|config| {
+            if config.general.web_headless_bar_width == width {
+                false
+            } else {
+                config.general.web_headless_bar_width = width;
+                true
+            }
+        })?;
+    Ok(())
 }
 
 fn validate_window_icon(width: u32, height: u32, length: usize) -> Result<(), String> {
@@ -704,6 +822,127 @@ mod tests {
             assert_eq!(top + height, 801);
         }
         assert_eq!(content_layout(0, 1.5, true), (0, 0));
+    }
+
+    #[test]
+    fn headless_bar_clips_a_wide_pill_only_while_collapsed() {
+        use crate::window_manager::WebToolbarRegion;
+
+        let size = tauri::PhysicalSize::new(860u32, 640u32);
+        let collapsed =
+            calculate_menu_layout((860.0, 640.0), None, None, None, None, false, false).unwrap();
+        match toolbar_shape(size, 1.0, collapsed, true, 0, Some(12), true).region() {
+            WebToolbarRegion::Bar {
+                x,
+                y,
+                width,
+                height,
+                radius,
+            } => {
+                assert_eq!((x, width, height, radius), (0, 280, 44, 22));
+                assert_eq!(y, collapsed.button_y.round() as i32);
+            }
+            other => panic!("expected a bar region, got {other:?}"),
+        }
+        assert!(matches!(
+            toolbar_shape(size, 1.0, collapsed, true, 0, Some(12), false).region(),
+            WebToolbarRegion::Button { .. }
+        ));
+        let open = calculate_menu_layout(
+            (860.0, 640.0),
+            Some(collapsed),
+            Some(true),
+            None,
+            None,
+            false,
+            false,
+        )
+        .unwrap();
+        assert!(matches!(
+            toolbar_shape(size, 1.0, open, true, 0, Some(12), true).region(),
+            WebToolbarRegion::Full
+        ));
+        assert!(matches!(
+            toolbar_shape(size, 1.0, collapsed, false, 0, None, true).region(),
+            WebToolbarRegion::CardFrame(_)
+        ));
+        let scaled = toolbar_shape(
+            tauri::PhysicalSize::new(1720u32, 1280u32),
+            2.0,
+            collapsed,
+            true,
+            0,
+            Some(24),
+            true,
+        );
+        match scaled.region() {
+            WebToolbarRegion::Bar {
+                width,
+                height,
+                radius,
+                ..
+            } => assert_eq!((width, height, radius), (560, 88, 44)),
+            other => panic!("expected a bar region, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn auto_bar_width_grows_with_pinned_actions_and_stays_bounded() {
+        assert_eq!(auto_bar_width(0), MIN_WEB_HEADLESS_BAR_WIDTH as f64);
+        assert_eq!(
+            auto_bar_width(4),
+            WEB_BAR_BASE_WIDTH + 4.0 * WEB_BAR_ACTION_WIDTH
+        );
+        assert_eq!(
+            auto_bar_width(8),
+            WEB_BAR_BASE_WIDTH + 8.0 * WEB_BAR_ACTION_WIDTH
+        );
+        assert_eq!(auto_bar_width(100), auto_bar_width(8));
+        assert!(auto_bar_width(u32::MAX as usize) <= MAX_WEB_HEADLESS_BAR_WIDTH as f64);
+    }
+
+    #[test]
+    fn bar_canvas_width_follows_the_requested_width() {
+        use crate::window_manager::WebToolbarRegion;
+
+        let narrow = calculate_menu_layout_with_width(
+            (860.0, 640.0),
+            None,
+            None,
+            None,
+            None,
+            false,
+            false,
+            200.0,
+        )
+        .unwrap();
+        assert_eq!((narrow.width, narrow.button_x), (200.0, 156.0));
+        let wide = calculate_menu_layout_with_width(
+            (860.0, 640.0),
+            None,
+            None,
+            None,
+            None,
+            false,
+            false,
+            420.0,
+        )
+        .unwrap();
+        assert_eq!((wide.width, wide.button_x), (420.0, 376.0));
+        match toolbar_shape(
+            tauri::PhysicalSize::new(860u32, 640u32),
+            1.0,
+            wide,
+            true,
+            0,
+            Some(12),
+            true,
+        )
+        .region()
+        {
+            WebToolbarRegion::Bar { width, height, .. } => assert_eq!((width, height), (420, 44)),
+            other => panic!("expected a bar region, got {other:?}"),
+        }
     }
 
     #[test]

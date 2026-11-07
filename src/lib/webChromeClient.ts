@@ -12,6 +12,8 @@ export interface WebMenuLayout {
 export interface WebChromeLayout {
   revision: number;
   headless: boolean;
+  /** Committed native projection: the collapsed menu is a horizontal bar instead of a circle. */
+  bar: boolean;
   menu: WebMenuLayout;
 }
 
@@ -19,6 +21,8 @@ export interface WebMenuChange {
   expanded?: boolean;
   position?: [number, number];
   wheel?: boolean;
+  /** Preview-only bar width; the final width is committed by set_web_headless_bar_width. */
+  barWidth?: number;
 }
 
 interface ChromeTransport {

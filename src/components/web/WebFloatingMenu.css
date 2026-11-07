@@ -118,8 +118,103 @@
   from { opacity: .2; transform: scale(.94); }
   to { opacity: 1; transform: scale(1); }
 }
+/* Bar mode: the collapsed canvas is the capsule itself. Its width comes from the native
+   layout (pinned actions or a manual resize), so the frontend never recalculates it. */
+.web-floating-menu[data-bar="true"][data-expanded="false"] .web-menu-header {
+  width: 100%;
+  height: 44px;
+  padding: 0 5px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-overlay-card);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: var(--web-control-shadow), inset 0 1px 0 var(--web-control-highlight);
+}
+.web-menu-bar-resize {
+  flex: 0 0 8px;
+  height: 26px;
+  padding: 0;
+  border-radius: 999px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.web-floating-menu .web-menu-bar-resize:hover:not(:disabled) { background: transparent; }
+.web-menu-bar-drag {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 20px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--ink-2);
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+}
+.web-menu-bar-drag > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+.web-floating-menu .web-menu-bar-drag:hover:not(:disabled) { background: var(--hover-2); }
+.web-menu-bar-drag:active { cursor: grabbing; }
+.web-menu-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.web-menu-bar-actions::-webkit-scrollbar { display: none; }
+.web-menu-bar-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--ink-2);
+  cursor: pointer;
+  touch-action: none;
+}
+.web-menu-bar-action > svg { width: 15px; height: 15px; }
+.web-floating-menu .web-menu-bar-action:hover:not(:disabled) { color: var(--primary-color); background: var(--hover-2); }
+.web-menu-bar-action[data-danger="true"], .web-menu-bar-action[data-danger="true"] > svg { color: #d45353; }
+.dark .web-menu-bar-action[data-danger="true"], .dark .web-menu-bar-action[data-danger="true"] > svg { color: #f08080; }
+.web-menu-bar-action:active:not(:disabled) { transform: scale(.94); }
+.web-floating-menu[data-bar="true"][data-expanded="false"] .web-menu-header[data-holding="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border: 1.5px solid var(--primary-color);
+  border-radius: 999px;
+  pointer-events: none;
+  animation: web-bar-hold var(--web-hold-delay) linear forwards;
+}
+@keyframes web-bar-hold {
+  from { opacity: .2; }
+  to { opacity: 1; }
+}
+.web-floating-menu[data-bar="true"][data-expanded="false"] .web-menu-trigger { width: 32px; height: 32px; cursor: pointer; }
+.web-floating-menu[data-bar="true"][data-expanded="false"] .web-menu-trigger:hover:not(:disabled) { background: transparent; }
+.web-floating-menu[data-bar="true"][data-expanded="false"] .web-menu-trigger-surface {
+  inset: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
 @media (prefers-reduced-motion: reduce) {
-  .web-menu-trigger[data-holding="true"]::after { animation: none; opacity: .7; }
+  .web-menu-trigger[data-holding="true"]::after,
+  .web-menu-header[data-holding="true"]::after { animation: none; opacity: .7; }
 }
 .web-menu-grip { flex: 1; min-width: 0; height: 32px; justify-content: flex-start; gap: 8px; padding: 0 7px; border: 1px solid transparent; border-radius: var(--web-menu-item-radius); cursor: grab; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }
 .web-menu-grip > svg { flex-shrink: 0; opacity: .5; transition: opacity 140ms ease; }
@@ -200,5 +295,6 @@
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .web-menu-trigger-surface, .web-wheel-action-surface { background: var(--surface-solid); border-color: var(--line-strong); }
+  .web-floating-menu[data-bar="true"][data-expanded="false"] .web-menu-header { background: var(--surface-solid); border-color: var(--line-strong); }
   .web-floating-menu :is(.web-menu-body, .web-menu-tab-list)::-webkit-scrollbar-thumb { background-color: var(--ink-2); }
 }

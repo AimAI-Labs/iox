@@ -56,7 +56,7 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = (props) => {
   }
   if (layout.headless) {
     return <WebFloatingMenu windowLabel={label} title={props.title || params.get('title') || 'IOX Web Hub'}
-      actions={props.actions ?? []} layout={layout.menu} update={update} failed={failed}
+      actions={props.actions ?? []} layout={layout.menu} bar={layout.bar} update={update} failed={failed}
       errorMessage={newChatFailed ? t('settings.web.newChatFailed') : undefined}
       dragHoldDelayMs={props.dragHoldDelayMs ?? DEFAULT_WEB_DRAG_HOLD_DELAY_MS}
       pinnedActions={props.pinnedActions ?? DEFAULT_WEB_MENU_PINNED_ACTIONS} />;

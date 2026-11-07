@@ -28,6 +28,8 @@ const {
   DEFAULT_WEB_WINDOW_SIZE,
   DEFAULT_WEB_DRAG_HOLD_DELAY_MS,
   MAX_WEB_DRAG_HOLD_DELAY_MS,
+  MAX_WEB_HEADLESS_BAR_WIDTH,
+  MIN_WEB_HEADLESS_BAR_WIDTH,
   DEFAULT_WEB_MENU_PINNED_ACTIONS,
   DEFAULT_WEB_NEW_CHAT_KEY,
   WEB_NEW_CHAT_KEYS,
@@ -148,6 +150,38 @@ test('Web headless mode is opt-in for existing configs and survives serializatio
   assert.equal(appConfigSchema.safeParse({
     ...fixture, general: { ...general, webHeadlessMode: 'true' },
   }).success, false);
+});
+
+test('Web headless bar mode is opt-in for existing configs and survives serialization', () => {
+  const general = { ...fixture.general };
+  delete general.webHeadlessBarMode;
+  assert.equal(parseOrFail({ ...fixture, general }).general.webHeadlessBarMode, false);
+  for (const enabled of [true, false]) {
+    const config = parseOrFail({ ...fixture, general: { ...general, webHeadlessBarMode: enabled } });
+    assert.equal(parseOrFail(JSON.parse(JSON.stringify(config))).general.webHeadlessBarMode, enabled);
+  }
+  assert.equal(fixture.general.webHeadlessBarMode, false);
+  assert.equal(appConfigSchema.safeParse({
+    ...fixture, general: { ...general, webHeadlessBarMode: 'true' },
+  }).success, false);
+});
+
+test('Web headless bar width defaults to auto and accepts bounded manual widths', () => {
+  const general = { ...fixture.general };
+  delete general.webHeadlessBarWidth;
+  assert.equal(parseOrFail({ ...fixture, general }).general.webHeadlessBarWidth, 0);
+  for (const width of [0, MIN_WEB_HEADLESS_BAR_WIDTH, 240, MAX_WEB_HEADLESS_BAR_WIDTH]) {
+    const config = parseOrFail({ ...fixture, general: { ...general, webHeadlessBarWidth: width } });
+    assert.equal(parseOrFail(JSON.parse(JSON.stringify(config))).general.webHeadlessBarWidth, width);
+  }
+  assert.equal(MIN_WEB_HEADLESS_BAR_WIDTH, 160);
+  assert.equal(MAX_WEB_HEADLESS_BAR_WIDTH, 720);
+  assert.equal(fixture.general.webHeadlessBarWidth, 0);
+  for (const invalid of [-1, 1.5, MAX_WEB_HEADLESS_BAR_WIDTH + 1, '240', null]) {
+    assert.equal(appConfigSchema.safeParse({
+      ...fixture, general: { ...general, webHeadlessBarWidth: invalid },
+    }).success, false, `width ${invalid} must be rejected`);
+  }
 });
 
 test('Web new chat key defaults to left Ctrl, persists choices and rejects unknown keys', () => {

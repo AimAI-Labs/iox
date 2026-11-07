@@ -207,6 +207,12 @@ pub struct GeneralConfig {
     pub web_window_mode: String,  // "multi_window" | "tabbed"
     #[serde(default)]
     pub web_headless_mode: bool,
+    /// 无头模式下把 44px 悬浮按钮换成横向胶囊条，充当可拖动的导航栏。
+    #[serde(default)]
+    pub web_headless_bar_mode: bool,
+    /// 胶囊条宽度（逻辑像素）；0 表示按固定动作数量自适应。
+    #[serde(default)]
+    pub web_headless_bar_width: u32,
     #[serde(default)]
     pub web_new_chat_key: WebNewChatKey,
     /// 在官网页面内接管右键菜单，提供“切换 AI”级联入口。
@@ -250,6 +256,9 @@ fn default_web_drag_hold_delay_ms() -> u64 {
 
 const MAX_WEB_DRAG_HOLD_DELAY_MS: u64 = 10000;
 
+pub const MIN_WEB_HEADLESS_BAR_WIDTH: u32 = 160;
+pub const MAX_WEB_HEADLESS_BAR_WIDTH: u32 = 720;
+
 const WEB_MENU_ACTION_IDS: [&str; 8] = [
     "reload",
     "openExternal",
@@ -286,6 +295,8 @@ impl Default for GeneralConfig {
             auto_check_update: true,
             web_window_mode: "multi_window".to_string(),
             web_headless_mode: false,
+            web_headless_bar_mode: false,
+            web_headless_bar_width: 0,
             web_new_chat_key: WebNewChatKey::default(),
             web_context_menu: true,
             web_drag_hold_delay_ms: default_web_drag_hold_delay_ms(),
@@ -994,6 +1005,7 @@ fn migrate(config: &mut AppConfig) -> bool {
 
     modified |= normalize_web_drag_hold_delay(config);
     modified |= normalize_web_menu_pinned_actions(config);
+    modified |= normalize_web_headless_bar_width(config);
     modified |= normalize_sync(config);
     modified
 }
@@ -1039,14 +1051,28 @@ fn normalize_web_drag_hold_delay(config: &mut AppConfig) -> bool {
     previous != *delay
 }
 
-/// 提交前归一化菜单偏好、长按时长与遗留尺寸字段。
+fn normalize_web_headless_bar_width(config: &mut AppConfig) -> bool {
+    let width = &mut config.general.web_headless_bar_width;
+    let previous = *width;
+    if *width != 0 {
+        *width = (*width).clamp(MIN_WEB_HEADLESS_BAR_WIDTH, MAX_WEB_HEADLESS_BAR_WIDTH);
+    }
+    previous != *width
+}
+
+/// 提交前归一化菜单偏好、长按时长、胶囊条宽度与遗留尺寸字段。
 fn normalize_for_commit(config: &mut AppConfig) -> bool {
     let previous = config.general.api_card_size;
     config.general.api_card_size = default_api_card_size();
     let delay_changed = normalize_web_drag_hold_delay(config);
     let pins_changed = normalize_web_menu_pinned_actions(config);
+    let width_changed = normalize_web_headless_bar_width(config);
     let sync_changed = normalize_sync(config);
-    previous != config.general.api_card_size || delay_changed || pins_changed || sync_changed
+    previous != config.general.api_card_size
+        || delay_changed
+        || pins_changed
+        || width_changed
+        || sync_changed
 }
 
 /// 配置文件的完整读写规则：原子替换、迁移写回与损坏文件保全。
@@ -1221,7 +1247,7 @@ impl ConfigStore {
         })
     }
 
-    /// 设置草稿不拥有工具栏即时保存的固定动作，在同一提交锁内保留当前值。
+    /// 设置草稿不拥有工具栏即时保存的固定动作与胶囊条宽度，在同一提交锁内保留当前值。
     pub fn replace_preserving_web_menu_pins(
         &self,
         mut config: AppConfig,
@@ -1229,6 +1255,7 @@ impl ConfigStore {
         self.commit(move |current| {
             config.general.web_menu_pinned_actions =
                 current.general.web_menu_pinned_actions.clone();
+            config.general.web_headless_bar_width = current.general.web_headless_bar_width;
             if *current == config {
                 false
             } else {
@@ -1526,6 +1553,24 @@ mod tests {
     }
 
     #[test]
+    fn settings_save_preserves_a_bar_width_committed_after_the_draft_was_read() {
+        let fixture = Fixture::new();
+        let store = fixture.store();
+        let mut old_draft = store.snapshot();
+        old_draft.general.theme = "dark".into();
+        store
+            .commit(|config| {
+                config.general.web_headless_bar_width = 420;
+                true
+            })
+            .unwrap();
+        let saved = store.replace_preserving_web_menu_pins(old_draft).unwrap();
+        assert_eq!(saved.general.web_headless_bar_width, 420);
+        assert_eq!(saved.general.theme, "dark");
+        assert_eq!(fixture.saved(), saved);
+    }
+
+    #[test]
     fn load_migrates_legacy_fields_through_the_production_entry() {
         let fixture = Fixture::new();
         fixture.seed(
@@ -1779,6 +1824,54 @@ mod tests {
             let config: GeneralConfig = serde_json::from_value(raw.clone()).unwrap();
             assert_eq!(config.web_headless_mode, enabled);
             assert_eq!(serde_json::to_value(config).unwrap()["webHeadlessMode"], enabled);
+        }
+    }
+
+    #[test]
+    fn web_headless_bar_mode_is_opt_in_and_round_trips() {
+        let mut raw = serde_json::to_value(GeneralConfig::default()).unwrap();
+        raw.as_object_mut().unwrap().remove("webHeadlessBarMode");
+        let legacy: GeneralConfig = serde_json::from_value(raw.clone()).unwrap();
+        assert!(!legacy.web_headless_bar_mode);
+        for enabled in [true, false] {
+            raw["webHeadlessBarMode"] = serde_json::json!(enabled);
+            let config: GeneralConfig = serde_json::from_value(raw.clone()).unwrap();
+            assert_eq!(config.web_headless_bar_mode, enabled);
+            assert_eq!(
+                serde_json::to_value(config).unwrap()["webHeadlessBarMode"],
+                enabled
+            );
+        }
+    }
+
+    #[test]
+    fn web_headless_bar_width_defaults_to_auto_and_clamps_manual_values() {
+        let mut raw = serde_json::to_value(GeneralConfig::default()).unwrap();
+        raw.as_object_mut().unwrap().remove("webHeadlessBarWidth");
+        let legacy: GeneralConfig = serde_json::from_value(raw.clone()).unwrap();
+        assert_eq!(legacy.web_headless_bar_width, 0);
+        for width in [
+            0,
+            MIN_WEB_HEADLESS_BAR_WIDTH,
+            240,
+            MAX_WEB_HEADLESS_BAR_WIDTH,
+        ] {
+            raw["webHeadlessBarWidth"] = serde_json::json!(width);
+            let config: GeneralConfig = serde_json::from_value(raw.clone()).unwrap();
+            assert_eq!(config.web_headless_bar_width, width);
+            assert_eq!(
+                serde_json::to_value(config).unwrap()["webHeadlessBarWidth"],
+                width
+            );
+        }
+        for (input, expected) in [
+            (1, MIN_WEB_HEADLESS_BAR_WIDTH),
+            (u32::MAX, MAX_WEB_HEADLESS_BAR_WIDTH),
+        ] {
+            let mut config = AppConfig::default();
+            config.general.web_headless_bar_width = input;
+            assert!(normalize_for_commit(&mut config));
+            assert_eq!(config.general.web_headless_bar_width, expected);
         }
     }
 

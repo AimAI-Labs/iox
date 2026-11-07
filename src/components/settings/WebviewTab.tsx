@@ -208,21 +208,37 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
             />
           </div>
 
-          {general.webHeadlessMode && <div className="ml-3 border-l border-border/60 pl-4 flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <Label htmlFor="web-drag-hold-delay" className="text-xs text-foreground font-medium">
-                {t('settings.web.dragHoldDelay')}
-              </Label>
-              <p className="text-[11px] text-muted-foreground" id="web-drag-hold-delay-desc">
-                {t('settings.web.dragHoldDelayDesc')}
-              </p>
+          {general.webHeadlessMode && <div className="ml-3 border-l border-border/60 pl-4 space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label className="text-xs text-foreground font-medium">
+                  {t('settings.web.headlessBarMode')}
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  {t('settings.web.headlessBarModeDesc')}
+                </p>
+              </div>
+              <Switch
+                checked={general.webHeadlessBarMode}
+                onCheckedChange={(checked) => onUpdateGeneral({ webHeadlessBarMode: checked })}
+              />
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Input id="web-drag-hold-delay" type="number" min={0} max={MAX_WEB_DRAG_HOLD_DELAY_MS} step={1}
-                value={holdDelayInput} onChange={(event) => changeHoldDelay(event.target.value)}
-                onBlur={commitHoldDelay} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
-                aria-describedby="web-drag-hold-delay-desc" className="h-7 w-24 text-xs font-mono" />
-              <span className="text-[11px] text-muted-foreground">ms</span>
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="web-drag-hold-delay" className="text-xs text-foreground font-medium">
+                  {t('settings.web.dragHoldDelay')}
+                </Label>
+                <p className="text-[11px] text-muted-foreground" id="web-drag-hold-delay-desc">
+                  {t('settings.web.dragHoldDelayDesc')}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Input id="web-drag-hold-delay" type="number" min={0} max={MAX_WEB_DRAG_HOLD_DELAY_MS} step={1}
+                  value={holdDelayInput} onChange={(event) => changeHoldDelay(event.target.value)}
+                  onBlur={commitHoldDelay} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                  aria-describedby="web-drag-hold-delay-desc" className="h-7 w-24 text-xs font-mono" />
+                <span className="text-[11px] text-muted-foreground">ms</span>
+              </div>
             </div>
           </div>}
 

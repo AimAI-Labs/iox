@@ -68,7 +68,7 @@ if (params.has('settings')) {
     holdDelay: Number(params.get('holdDelay') ?? 300),
     onDelay: (_delay: number) => {},
     setDelay(delay: number) { fixture.holdDelay = delay; fixture.onDelay(delay); },
-    layout: { revision: 0, headless: true, menu: { x: innerWidth - 56, y: 12, width: 44, height: 44, expanded: false, wheel: false, buttonX: 0, buttonY: 0 } } as WebChromeLayout,
+    layout: { revision: 0, headless: true, bar: false, menu: { x: innerWidth - 56, y: 12, width: 44, height: 44, expanded: false, wheel: false, buttonX: 0, buttonY: 0 } } as WebChromeLayout,
     hubState: { tabs: actions.slice(0, 3).map((action) => ({ actionId: action.id, name: action.name, icon: action.icon, url: 'https://example.test/' })), activeTabId: 'beta' },
     onChrome: (_layout: WebChromeLayout) => {},
     onHub: (_state: unknown) => {},
@@ -108,7 +108,7 @@ if (params.has('settings')) {
         buttonX: !expanded ? Math.max(0, Math.min(width - 44, anchorX - left)) : width - 44,
         buttonY: !expanded ? Math.max(0, Math.min(height - 44, anchorY - top)) : (upward ? Math.max(0, height - 44) : 0),
       };
-      fixture.layout = { revision: fixture.layout.revision + 1, headless: fixture.layout.headless, menu };
+      fixture.layout = { revision: fixture.layout.revision + 1, headless: fixture.layout.headless, bar: fixture.layout.bar, menu };
       // Native keeps the toolbar canvas over the whole card and clips it to the frame that
       // hosts the titlebar and the 2px border, leaving the page area to the site webview.
       const cardFrame = `polygon(0px 0px, ${innerWidth}px 0px, ${innerWidth}px ${innerHeight}px, `

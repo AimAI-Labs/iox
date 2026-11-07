@@ -87,11 +87,23 @@ pub fn apply_config_effects(
     previous: &crate::config::AppConfig,
     current: &crate::config::AppConfig,
 ) {
-    let headless_changed = previous.general.web_headless_mode != current.general.web_headless_mode;
-    if headless_changed {
-        app.state::<crate::AppState>()
-            .web_chrome
-            .set_headless(current.general.web_headless_mode);
+    let headless = current.general.web_headless_mode;
+    // The floating bar only exists in headless mode. Keep the native projection in sync on
+    // every commit so resize callbacks never have to reenter ConfigStore.
+    let bar = headless && current.general.web_headless_bar_mode;
+    let headless_changed = previous.general.web_headless_mode != headless;
+    let bar_changed =
+        previous.general.web_headless_bar_mode != current.general.web_headless_bar_mode;
+    let width_changed =
+        previous.general.web_headless_bar_width != current.general.web_headless_bar_width;
+    let pins_changed =
+        previous.general.web_menu_pinned_actions != current.general.web_menu_pinned_actions;
+    {
+        let web_chrome = &app.state::<crate::AppState>().web_chrome;
+        web_chrome.set_headless(headless);
+        web_chrome.set_bar(bar);
+        web_chrome.set_bar_width(current.general.web_headless_bar_width);
+        web_chrome.set_bar_actions(current.general.web_menu_pinned_actions.len());
     }
     if previous.general.ui_style != current.general.ui_style || headless_changed {
         apply_ui_style(app, &current.general.ui_style, &current.general.theme);
@@ -99,7 +111,11 @@ pub fn apply_config_effects(
         sync_window_theme(app, &current.general.theme);
     }
 
-    if headless_changed || previous.general.ui_style != current.general.ui_style {
+    if headless_changed
+        || (headless && bar_changed)
+        || (bar && (width_changed || pins_changed))
+        || previous.general.ui_style != current.general.ui_style
+    {
         crate::web_chrome::layout_all(app);
     }
 
@@ -247,6 +263,14 @@ pub enum WebToolbarRegion {
         width: i32,
         height: i32,
     },
+    /// Headless bar at rest: a pill-shaped strip across the whole local canvas.
+    Bar {
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        radius: i32,
+    },
     /// Card frame drawn on top of the page: titlebar plus the enclosing hairline border.
     CardFrame(WebCardFrame),
 }
@@ -349,6 +373,24 @@ pub fn set_web_toolbar_region(view: &tauri::Webview, region: WebToolbarRegion) {
                     width,
                     height,
                 } => CreateRectRgn(x, y, x + width, y + height),
+                WebToolbarRegion::Bar {
+                    x,
+                    y,
+                    width,
+                    height,
+                    radius,
+                } => {
+                    let width = width.max(1);
+                    let height = height.max(1);
+                    let diameter = radius.max(0) * 2;
+                    if diameter > 0 {
+                        // GDI's rounded region omits the final row/column; the +1 keeps the
+                        // right and bottom edges symmetric with the left and top.
+                        CreateRoundRectRgn(x, y, x + width + 1, y + height + 1, diameter, diameter)
+                    } else {
+                        CreateRectRgn(x, y, x + width, y + height)
+                    }
+                }
                 WebToolbarRegion::CardFrame(frame) => card_frame_region(frame),
             };
             if region.is_null() || SetWindowRgn(child, region, 1) == 0 {
