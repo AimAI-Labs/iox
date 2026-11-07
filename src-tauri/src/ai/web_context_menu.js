@@ -15,10 +15,24 @@ function installIoxContextMenu(options) {
 
     const language = options.language === 'zh' ? 'zh' : 'en';
     const text = language === 'zh'
-      ? { copy: '复制选中内容', reload: '刷新页面', switchAi: '切换 AI' }
-      : { copy: 'Copy selection', reload: 'Reload page', switchAi: 'Switch AI' };
+      ? {
+          copy: '复制选中内容',
+          copyLink: '复制链接地址',
+          reload: '刷新页面',
+          switchAi: '切换 AI',
+          askWithSelection: '带选中内容提问',
+          switchOnlyTip: '右键仅切换窗口',
+        }
+      : {
+          copy: 'Copy selection',
+          copyLink: 'Copy link address',
+          reload: 'Reload page',
+          switchAi: 'Switch AI',
+          askWithSelection: 'Ask with selection',
+          switchOnlyTip: 'Right-click to switch only',
+        };
     const actions = Array.isArray(options.actions) ? options.actions.filter((item) => item && item.id && item.name) : [];
-    const dark = options.theme === 'dark'
+    const resolveDark = () => options.theme === 'dark'
       || (options.theme !== 'light'
         && window.matchMedia
         && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -28,103 +42,143 @@ function installIoxContextMenu(options) {
     host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none;display:none;';
     const root = host.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
-    style.textContent = `
-      :host { all: initial; }
-      .menu, .submenu {
-        box-sizing: border-box;
-        position: fixed;
-        min-width: 208px;
-        padding: 6px;
-        border-radius: 14px;
-        font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-        color: ${dark ? '#e4e4e7' : '#27272a'};
-        background: ${dark ? 'rgba(24,24,27,0.92)' : 'rgba(255,255,255,0.92)'};
-        border: 1px solid ${dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)'};
-        box-shadow: 0 18px 48px rgba(0,0,0,${dark ? '0.45' : '0.18'});
-        backdrop-filter: blur(24px) saturate(150%);
-        -webkit-backdrop-filter: blur(24px) saturate(150%);
-        pointer-events: auto;
-        user-select: none;
-        overflow: auto;
-        max-height: min(70vh, 520px);
-        animation: iox-menu-in 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
-      }
-      .submenu { display: none; min-width: 196px; padding: 8px; }
-      .submenu.open { display: flex; flex-direction: column; gap: 6px; }
-      @keyframes iox-menu-in {
-        from { opacity: 0; transform: scale(0.97) translateY(-2px); }
-        to { opacity: 1; transform: none; }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .menu, .submenu { animation: none; }
-      }
-      .item {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        width: 100%;
-        box-sizing: border-box;
-        padding: 7px 9px;
-        border: 0;
-        border-radius: 9px;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        text-align: left;
-        cursor: pointer;
-        outline: none;
-        white-space: nowrap;
-      }
-      .item:hover, .item:focus-visible { background: ${dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.055)'}; }
-      .item:disabled { opacity: 0.5; cursor: default; }
-      .item .glyph { width: 16px; height: 16px; flex: 0 0 16px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.85; }
-      .item .label { flex: 1 1 auto; }
-      .item .hint { font-size: 11px; opacity: 0.55; }
-      .item .chevron { width: 12px; height: 12px; opacity: 0.55; }
-      .separator { height: 1px; margin: 5px 4px; background: ${dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'}; }
-      .section-title {
-        padding: 4px 9px 6px;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-        opacity: 0.55;
-        white-space: nowrap;
-      }
-      .ai {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        width: 100%;
-        box-sizing: border-box;
-        padding: 5px 12px 5px 6px;
-        border: 1px solid ${dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'};
-        border-radius: 999px;
-        background: ${dark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.66)'};
-        color: inherit;
-        font: inherit;
-        text-align: left;
-        cursor: pointer;
-        outline: none;
-        transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
-      }
-      .ai:hover, .ai:focus-visible {
-        background: ${dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)'};
-        border-color: ${dark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.16)'};
-      }
-      .ai:active { transform: scale(0.985); }
-      .ai .badge {
-        width: 22px; height: 22px; flex: 0 0 22px;
-        display: inline-flex; align-items: center; justify-content: center;
-        border-radius: 999px;
-        color: #fff;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-      }
-      .ai .name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .ai .go { width: 12px; height: 12px; opacity: 0.45; }
-      .empty { padding: 6px 10px 8px; font-size: 12px; opacity: 0.6; white-space: nowrap; }
-    `;
+
+    const applyThemeStyle = () => {
+      const dark = resolveDark();
+      style.textContent = `
+        :host { all: initial; }
+        .menu, .submenu {
+          box-sizing: border-box;
+          position: fixed;
+          min-width: 204px;
+          padding: 6px;
+          border-radius: 14px;
+          font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+          color: ${dark ? '#f4f4f5' : '#27272a'};
+          background: ${dark ? 'rgba(24,24,27,0.92)' : 'rgba(255,255,255,0.94)'};
+          border: 1px solid ${dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.09)'};
+          box-shadow: 0 18px 48px rgba(0,0,0,${dark ? '0.48' : '0.16'}), 0 2px 8px rgba(0,0,0,${dark ? '0.28' : '0.06'});
+          backdrop-filter: blur(24px) saturate(160%);
+          -webkit-backdrop-filter: blur(24px) saturate(160%);
+          pointer-events: auto;
+          user-select: none;
+          overflow-x: hidden;
+          overflow-y: auto;
+          max-height: min(72vh, 520px);
+          animation: iox-menu-in 120ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .submenu {
+          display: none;
+          min-width: 188px;
+          max-width: 300px;
+          padding: 8px;
+          border-radius: 16px;
+        }
+        .submenu.open { display: flex; flex-direction: column; gap: 6px; }
+        .capsule-track {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 5px;
+          padding: 3px;
+          border-radius: 14px;
+          background: ${dark ? 'rgba(9,9,11,0.45)' : 'rgba(244,244,245,0.75)'};
+          border: 1px solid ${dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'};
+        }
+        @keyframes iox-menu-in {
+          from { opacity: 0; transform: scale(0.96) translateY(-2px); }
+          to { opacity: 1; transform: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .menu, .submenu { animation: none; }
+        }
+        .item {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          width: 100%;
+          box-sizing: border-box;
+          padding: 7px 9px;
+          border: 0;
+          border-radius: 9px;
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+          outline: none;
+          white-space: nowrap;
+          transition: background 100ms ease;
+        }
+        .item:hover, .item:focus-visible, .item.active {
+          background: ${dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.055)'};
+        }
+        .item:disabled { opacity: 0.5; cursor: default; }
+        .item .glyph { width: 15px; height: 15px; flex: 0 0 15px; display: inline-flex; align-items: center; justify-content: center; opacity: 0.85; }
+        .item .label { flex: 1 1 auto; }
+        .item .hint { font-size: 11px; opacity: 0.55; }
+        .separator { height: 1px; margin: 5px 4px; background: ${dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'}; }
+        .section-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 2px 6px 2px;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          opacity: 0.58;
+          white-space: nowrap;
+        }
+        .ai {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          height: 28px;
+          max-width: 100%;
+          box-sizing: border-box;
+          padding: 0 10px 0 6px;
+          border: 1px solid ${dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.07)'};
+          border-radius: 999px;
+          background: ${dark ? 'rgba(39,39,42,0.85)' : 'rgba(255,255,255,0.92)'};
+          color: inherit;
+          font: 500 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+          text-align: left;
+          cursor: pointer;
+          outline: none;
+          box-shadow: 0 1px 2px rgba(0,0,0,${dark ? '0.25' : '0.04'});
+          transition: background 150ms cubic-bezier(0.16, 1, 0.3, 1), border-color 150ms ease, transform 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms ease;
+        }
+        .ai:hover, .ai:focus-visible {
+          background: ${dark ? 'rgba(63,63,70,0.95)' : '#ffffff'};
+          border-color: var(--ai-accent, ${dark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.2)'});
+          box-shadow: 0 2px 8px rgba(0,0,0,${dark ? '0.35' : '0.09'});
+        }
+        .ai:hover .badge, .ai:focus-visible .badge {
+          transform: scale(1.08);
+        }
+        .ai:active { transform: scale(0.95); }
+        .ai .badge {
+          width: 18px; height: 18px; flex: 0 0 18px;
+          display: inline-flex; align-items: center; justify-content: center;
+          border-radius: 999px;
+          color: #fff;
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .ai .badge svg { width: 11px; height: 11px; }
+        .ai .name {
+          flex: 1 1 auto;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          max-width: 160px;
+        }
+      `;
+    };
+    applyThemeStyle();
     root.appendChild(style);
 
     const menu = document.createElement('div');
@@ -134,6 +188,13 @@ function installIoxContextMenu(options) {
     const submenu = document.createElement('div');
     submenu.className = 'submenu';
     submenu.setAttribute('role', 'menu');
+    const sectionHeader = document.createElement('div');
+    sectionHeader.className = 'section-header';
+    const sectionTitle = document.createElement('span');
+    sectionTitle.textContent = text.switchAi;
+    sectionHeader.appendChild(sectionTitle);
+    const capsuleTrack = document.createElement('div');
+    capsuleTrack.className = 'capsule-track';
 
     const svg = (path) => {
       const element = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -148,6 +209,16 @@ function installIoxContextMenu(options) {
       shape.setAttribute('d', path);
       element.appendChild(shape);
       return element;
+    };
+
+    let hoverTimer = 0;
+    let closeTimer = 0;
+    let activeSwitchRow = null;
+    let selection = '';
+
+    const closeSubmenu = () => {
+      submenu.classList.remove('open');
+      if (activeSwitchRow) activeSwitchRow.classList.remove('active');
     };
 
     const item = (iconPath, label, onClick, hint) => {
@@ -166,6 +237,11 @@ function installIoxContextMenu(options) {
         extra.textContent = hint;
         button.appendChild(extra);
       }
+      button.addEventListener('mouseenter', () => {
+        window.clearTimeout(hoverTimer);
+        window.clearTimeout(closeTimer);
+        closeSubmenu();
+      });
       button.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -175,50 +251,47 @@ function installIoxContextMenu(options) {
       return button;
     };
 
-    let selection = '';
+    const triggerSwitch = (actionId, carrySelection) => {
+      let target = options.switchPrefix + encodeURIComponent(actionId);
+      if (carrySelection && selection) {
+        target += '&text=' + encodeURIComponent(selection);
+      }
+      close();
+      window.location.href = target;
+    };
 
     if (actions.length > 0) {
-      const title = document.createElement('div');
-      title.className = 'section-title';
-      title.textContent = text.switchAi;
-      submenu.appendChild(title);
+      submenu.append(sectionHeader, capsuleTrack);
       for (const action of actions) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'ai';
         button.setAttribute('role', 'menuitem');
+        const accent = brandColorFor(action.id, action.name, action.icon);
+        button.style.setProperty('--ai-accent', accent);
         const badge = document.createElement('span');
         badge.className = 'badge';
-        badge.textContent = Array.from(action.name.trim())[0] || '?';
-        badge.style.background = actionColor(action.id);
+        badge.style.background = accent;
+        badge.textContent = brandInitialFor(action.id, action.name);
         const name = document.createElement('span');
         name.className = 'name';
         name.textContent = action.name;
-        const go = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        go.setAttribute('viewBox', '0 0 24 24');
-        go.setAttribute('fill', 'none');
-        go.setAttribute('stroke', 'currentColor');
-        go.setAttribute('stroke-width', '2');
-        go.setAttribute('stroke-linecap', 'round');
-        go.setAttribute('stroke-linejoin', 'round');
-        go.classList.add('go');
-        const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        arrow.setAttribute('d', 'M9 6l6 6-6 6');
-        go.appendChild(arrow);
-        button.append(badge, name, go);
+        button.append(badge, name);
         button.addEventListener('click', (event) => {
           event.preventDefault();
           event.stopPropagation();
-          const target = options.switchPrefix + encodeURIComponent(action.id);
-          close();
-          window.location.href = target;
+          triggerSwitch(action.id, true);
         });
-        submenu.appendChild(button);
+        button.addEventListener('contextmenu', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          triggerSwitch(action.id, false);
+        });
+        capsuleTrack.appendChild(button);
       }
     }
 
     root.append(menu, submenu);
-    // Initialization scripts run at document start; the root element may still be missing.
     if (document.documentElement) {
       document.documentElement.appendChild(host);
     } else {
@@ -227,26 +300,8 @@ function installIoxContextMenu(options) {
 
     const hide = () => {
       host.style.display = 'none';
-      submenu.classList.remove('open');
+      closeSubmenu();
     };
-
-    const openSubmenu = () => {
-      if (!actions.length) return;
-      submenu.classList.add('open');
-      const rect = menu.getBoundingClientRect();
-      const gap = 6;
-      // Keep the cascade outside the parent so it never covers the parent's items.
-      if (window.innerWidth - rect.right - gap >= 196) {
-        place(submenu, rect.right + gap, rect.top, true);
-      } else {
-        place(submenu, rect.left - gap, rect.top, false);
-      }
-    };
-
-    const closeSubmenu = () => submenu.classList.remove('open');
-
-    let hoverTimer = 0;
-    let closeTimer = 0;
 
     const place = (element, x, y, preferRight) => {
       element.style.left = '0px';
@@ -261,6 +316,34 @@ function installIoxContextMenu(options) {
       if (top < margin) top = margin;
       element.style.left = `${Math.round(left)}px`;
       element.style.top = `${Math.round(top)}px`;
+    };
+
+    const openSubmenu = () => {
+      if (!actions.length) return;
+      sectionTitle.textContent = selection ? text.askWithSelection : text.switchAi;
+      submenu.classList.add('open');
+      if (activeSwitchRow) activeSwitchRow.classList.add('active');
+      submenu.style.left = '0px';
+      submenu.style.top = '0px';
+      const rect = menu.getBoundingClientRect();
+      const rowRect = activeSwitchRow ? activeSwitchRow.getBoundingClientRect() : rect;
+      const subBounds = submenu.getBoundingClientRect();
+      const gap = 6;
+      const margin = 8;
+      const rightSpace = window.innerWidth - rect.right - gap - margin;
+      const leftSpace = rect.left - gap - margin;
+      // Keep the cascade outside the parent so it never covers the parent's items.
+      if (rightSpace >= subBounds.width) {
+        place(submenu, rect.right + gap, rowRect.top - 6, true);
+      } else if (leftSpace >= subBounds.width) {
+        place(submenu, rect.left - gap, rowRect.top - 6, false);
+      } else {
+        const belowSpace = window.innerHeight - rect.bottom - gap - margin;
+        const topY = belowSpace >= subBounds.height || belowSpace >= rect.top - gap - margin
+          ? rect.bottom + gap
+          : Math.max(margin, rect.top - subBounds.height - gap);
+        place(submenu, rect.left, topY, true);
+      }
     };
 
     const copyText = (value) => {
@@ -280,11 +363,16 @@ function installIoxContextMenu(options) {
       }
     };
 
-    const open = (x, y, selectedText) => {
+    const open = (x, y, selectedText, linkHref) => {
+      applyThemeStyle();
       selection = (selectedText || '').trim();
+      activeSwitchRow = null;
       menu.replaceChildren();
       if (selection) {
         menu.appendChild(item('M8 4h9a2 2 0 0 1 2 2v9M6 8h9a2 2 0 0 1 2 2v9H8a2 2 0 0 1-2-2V8z', text.copy, () => copyText(selection)));
+      }
+      if (linkHref) {
+        menu.appendChild(item('M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', text.copyLink, () => copyText(linkHref)));
       }
       menu.appendChild(item('M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6', text.reload, () => window.location.reload()));
       if (actions.length) {
@@ -299,16 +387,19 @@ function installIoxContextMenu(options) {
         switchRow.appendChild(svg('M4 7h11l-3-3M20 17H9l3 3'));
         const switchLabel = document.createElement('span');
         switchLabel.className = 'label';
-        switchLabel.textContent = text.switchAi;
+        switchLabel.textContent = selection ? text.askWithSelection : text.switchAi;
         switchRow.appendChild(switchLabel);
         switchRow.appendChild(svg('M9 6l6 6-6 6'));
+        activeSwitchRow = switchRow;
         switchRow.addEventListener('mouseenter', () => {
           window.clearTimeout(hoverTimer);
-          hoverTimer = window.setTimeout(openSubmenu, 110);
+          window.clearTimeout(closeTimer);
+          hoverTimer = window.setTimeout(openSubmenu, 100);
         });
         switchRow.addEventListener('click', (event) => {
           event.preventDefault();
           event.stopPropagation();
+          window.clearTimeout(hoverTimer);
           if (submenu.classList.contains('open')) closeSubmenu();
           else openSubmenu();
         });
@@ -319,16 +410,22 @@ function installIoxContextMenu(options) {
     };
 
     const onContextMenu = (event) => {
+      if (event.shiftKey) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
-      if (target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="searchbox"], video, audio')) {
+      if (target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="searchbox"], video, audio, img, canvas')) {
         return;
+      }
+      let linkHref = '';
+      const anchor = target.closest('a[href]');
+      if (anchor && anchor.href && /^https?:/i.test(anchor.href)) {
+        linkHref = anchor.href;
       }
       event.preventDefault();
       event.stopPropagation();
       window.clearTimeout(hoverTimer);
       closeSubmenu();
-      open(event.clientX, event.clientY, window.getSelection ? String(window.getSelection()) : '');
+      open(event.clientX, event.clientY, window.getSelection ? String(window.getSelection()) : '', linkHref);
     };
 
     const close = () => {
@@ -349,8 +446,6 @@ function installIoxContextMenu(options) {
       }
     };
 
-    // Nodes inside a closed shadow root are not `host.contains()` children; compare against
-    // the two panels instead, otherwise returning to the parent menu keeps the cascade open.
     const withinPanels = (node) => Boolean(node) && (menu.contains(node) || submenu.contains(node));
 
     const onHoverOut = (event) => {
@@ -361,11 +456,7 @@ function installIoxContextMenu(options) {
 
     menu.addEventListener('mouseleave', onHoverOut);
     submenu.addEventListener('mouseleave', onHoverOut);
-    // Entering the parent always collapses a stale cascade and cancels its close timer.
-    menu.addEventListener('mouseenter', () => {
-      window.clearTimeout(closeTimer);
-      closeSubmenu();
-    });
+    menu.addEventListener('mouseenter', () => window.clearTimeout(closeTimer));
     submenu.addEventListener('mouseenter', () => window.clearTimeout(closeTimer));
 
     document.addEventListener('contextmenu', onContextMenu, true);
@@ -393,12 +484,42 @@ function installIoxContextMenu(options) {
   }
 }
 
-/** 稳定的胶囊徽标底色，只用于区分站点，不依赖站点图标资源。 */
-function actionColor(id) {
+/** 匹配内置 AI 品牌主色调，未命中时回退至稳定色板。 */
+function brandColorFor(id, name, icon) {
+  const key = `${id || ''} ${name || ''} ${icon || ''}`.toLowerCase();
+  if (key.includes('deepseek') || key.includes('深度求索')) return '#4D6BFE';
+  if (key.includes('chatgpt') || key.includes('openai')) return '#10A37F';
+  if (key.includes('claude') || key.includes('anthropic')) return '#D97757';
+  if (key.includes('kimi') || key.includes('moonshot')) return '#1783FF';
+  if (key.includes('qwen') || key.includes('tongyi') || key.includes('千问') || key.includes('通义')) return '#615CED';
+  if (key.includes('doubao') || key.includes('豆包')) return '#1E37FC';
+  if (key.includes('gemini') || key.includes('google')) return '#3186FF';
+  if (key.includes('grok') || key.includes('xai')) return '#27272A';
+  if (key.includes('perplexity')) return '#22B8CF';
+  if (key.includes('metaso') || key.includes('秘塔')) return '#6366F1';
+  if (key.includes('xiaomi') || key.includes('mimo') || key.includes('小米')) return '#FF6900';
+  if (key.includes('zhipu') || key.includes('glm') || key.includes('智谱')) return '#3859FF';
+  if (key.includes('minimax')) return '#F23F5D';
+  if (key.includes('wenxin') || key.includes('文心')) return '#2932E1';
+  if (key.includes('hunyuan') || key.includes('混元') || key.includes('yuanbao') || key.includes('元宝')) return '#0052D9';
   let hash = 0;
-  for (let index = 0; index < id.length; index += 1) {
-    hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
+  const seed = String(id || name || '');
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
   }
-  const palette = ['#2563eb', '#7c3aed', '#0d9488', '#db2777', '#ea580c', '#0891b2', '#65a30d', '#9333ea'];
+  const palette = ['#2563eb', '#0891b2', '#059669', '#7c3aed', '#db2777', '#ea580c', '#4f46e5'];
   return palette[hash % palette.length];
+}
+
+function brandInitialFor(id, name) {
+  const key = `${id || ''} ${name || ''}`.toLowerCase();
+  if (key.includes('deepseek')) return 'D';
+  if (key.includes('chatgpt') || key.includes('openai')) return 'G';
+  if (key.includes('claude')) return 'C';
+  if (key.includes('kimi')) return 'K';
+  if (key.includes('qwen') || key.includes('千问') || key.includes('通义')) return 'Q';
+  if (key.includes('gemini')) return 'G';
+  if (key.includes('perplexity')) return 'P';
+  if (key.includes('grok')) return 'X';
+  return Array.from((name || '').trim())[0] || '?';
 }

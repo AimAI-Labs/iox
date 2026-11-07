@@ -57,6 +57,7 @@ export function OverlaySurface({ config, updateConfig }: OverlaySurfaceProps) {
       resizeTimer = setTimeout(async () => {
         try {
           const win = getCurrentWebviewWindow();
+          if (await win.isMaximized()) return;
           const size = await win.innerSize();
           const scale = await win.scaleFactor();
           const w = Math.round(size.width / scale);

@@ -273,6 +273,7 @@ export const en: TranslationTree = {
       unknown: 'The release tag cannot be compared. Open the release page instead.',
       availableShort: 'Update',
       available: 'Update available',
+      openRelease: 'Releases',
       failed: 'Unable to check for updates right now. Try again later or open the release page.',
     },
     general: {
@@ -406,7 +407,7 @@ export const en: TranslationTree = {
       windowMode: 'Web Window Mode',
       newChatKey: 'Double-tap key for new chat',
       newChatFailed: 'Could not click the new chat button. Check that the page is loaded and you are signed in.',
-      newChatKeyDesc: 'With a Web card in front and the pointer over it, double-tap within 400 ms to click the page’s new chat button. Applies when saved.',
+      newChatKeyDesc: 'When a Web card is active in the foreground, double-tap within 400 ms to trigger the page’s new chat button. Applies when saved.',
       newChatKeys: {
         Disabled: 'Disabled',
         ControlLeft: 'Left Ctrl (default)',

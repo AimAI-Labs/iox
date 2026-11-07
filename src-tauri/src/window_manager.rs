@@ -21,8 +21,12 @@ pub struct UiStylePolicy {
 
 pub fn ui_style_policy(style: &str) -> UiStylePolicy {
     match style {
-        "windows" => UiStylePolicy { native_chrome: true },
-        _ => UiStylePolicy { native_chrome: false },
+        "windows" => UiStylePolicy {
+            native_chrome: true,
+        },
+        _ => UiStylePolicy {
+            native_chrome: false,
+        },
     }
 }
 
@@ -119,10 +123,11 @@ pub fn apply_window_ui_style(window: &tauri::Window, native: bool, theme: Option
     }
 }
 
-const WEB_APP_ID_KEY: windows::Win32::Foundation::PROPERTYKEY = windows::Win32::Foundation::PROPERTYKEY {
-    fmtid: windows::core::GUID::from_u128(0x9f4c2855_9f79_4b39_a8d0_e1d42de1d5f3),
-    pid: 5,
-};
+const WEB_APP_ID_KEY: windows::Win32::Foundation::PROPERTYKEY =
+    windows::Win32::Foundation::PROPERTYKEY {
+        fmtid: windows::core::GUID::from_u128(0x9f4c2855_9f79_4b39_a8d0_e1d42de1d5f3),
+        pid: 5,
+    };
 
 /// SAFETY: hwnd is a live window owned by this process; the current thread has COM initialized.
 unsafe fn set_window_taskbar_id(
@@ -133,7 +138,9 @@ unsafe fn set_window_taskbar_id(
         PropVariantChangeType, PROPVARIANT, PVCHF_DEFAULT,
     };
     use windows::Win32::System::Variant::VT_LPWSTR;
-    use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow};
+    use windows::Win32::UI::Shell::PropertiesSystem::{
+        IPropertyStore, SHGetPropertyStoreForWindow,
+    };
     let source = PROPVARIANT::from(id);
     let mut value = PROPVARIANT::default();
     PropVariantChangeType(&mut value, &source, PVCHF_DEFAULT, VT_LPWSTR)?;
@@ -264,8 +271,12 @@ unsafe fn card_outline_region(frame: WebCardFrame) -> HRGN {
         // GDI's rounded region omits the final row/column; match the +1 used by
         // the outer rounded region so right/bottom have the same inset as left/top.
         CreateRoundRectRgn(
-            border, border, frame.width - border + 1, frame.height - border + 1,
-            inner_diameter, inner_diameter,
+            border,
+            border,
+            frame.width - border + 1,
+            frame.height - border + 1,
+            inner_diameter,
+            inner_diameter,
         )
     } else {
         CreateRectRgn(border, border, frame.width - border, frame.height - border)
@@ -455,16 +466,13 @@ pub fn apply_main_window_native_style(hwnd: HWND) {
     }
 }
 
-/// Prefer the native state as well: `maximize()` is posted to the event loop, so the cached
-/// Tauri flag can still be stale while the window is already maximized.
+/// Prefer the native Win32 state: `maximize()` / `unmaximize()` are posted to the event loop,
+/// and `IsZoomed` reflects the authoritative placement on both maximize and restore.
 pub fn window_is_maximized(window: &tauri::Window) -> bool {
-    if window.is_maximized().unwrap_or(false) {
-        return true;
-    }
     match window.hwnd() {
         // SAFETY: the caller owns a live window; IsZoomed only reads its placement state.
         Ok(hwnd) => unsafe { IsZoomed(hwnd.0 as _) != 0 },
-        Err(_) => false,
+        Err(_) => window.is_maximized().unwrap_or(false),
     }
 }
 
@@ -493,7 +501,8 @@ pub fn bring_window_to_foreground(hwnd: HWND) {
 
         let foreground_hwnd = GetForegroundWindow();
         if foreground_hwnd != hwnd {
-            let foreground_thread_id = GetWindowThreadProcessId(foreground_hwnd, std::ptr::null_mut());
+            let foreground_thread_id =
+                GetWindowThreadProcessId(foreground_hwnd, std::ptr::null_mut());
             let current_thread_id = windows_sys::Win32::System::Threading::GetCurrentThreadId();
 
             if foreground_thread_id != current_thread_id && foreground_thread_id != 0 {
@@ -587,8 +596,10 @@ pub fn calculate_overlay_position(
 
 /// Fit the entire file menu inside the cursor monitor's work area, preserving its shape.
 pub fn fit_overlay_size(app: &AppHandle, x: i32, y: i32, width: f64, height: f64) -> (i32, i32) {
-    let scale = app.get_webview_window("overlay")
-        .and_then(|window| window.scale_factor().ok()).unwrap_or(1.0);
+    let scale = app
+        .get_webview_window("overlay")
+        .and_then(|window| window.scale_factor().ok())
+        .unwrap_or(1.0);
     // SAFETY: MONITORINFO contains only integers/RECTs; zero is a valid initial value.
     let mut info: MONITORINFO = unsafe { std::mem::zeroed() };
     info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
@@ -596,22 +607,23 @@ pub fn fit_overlay_size(app: &AppHandle, x: i32, y: i32, width: f64, height: f64
     let available = unsafe {
         let monitor = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
         if GetMonitorInfoW(monitor, &mut info) != 0 {
-            ((info.rcWork.right - info.rcWork.left - 16) as f64 / scale,
-             (info.rcWork.bottom - info.rcWork.top - 24) as f64 / scale)
-        } else { (1920.0 / scale, 1040.0 / scale) }
+            (
+                (info.rcWork.right - info.rcWork.left - 16) as f64 / scale,
+                (info.rcWork.bottom - info.rcWork.top - 24) as f64 / scale,
+            )
+        } else {
+            (1920.0 / scale, 1040.0 / scale)
+        }
     };
     let factor = (available.0 / width).min(available.1 / height).min(1.0);
-    ((width * factor).ceil().max(160.0) as i32, (height * factor).ceil() as i32)
+    (
+        (width * factor).ceil().max(160.0) as i32,
+        (height * factor).ceil() as i32,
+    )
 }
 
 /// 显示并在指定坐标定位 Overlay 窗口
-pub fn show_overlay_at(
-    app: &AppHandle,
-    cursor_x: i32,
-    cursor_y: i32,
-    width: i32,
-    height: i32,
-) {
+pub fn show_overlay_at(app: &AppHandle, cursor_x: i32, cursor_y: i32, width: i32, height: i32) {
     if let Some(window) = app.get_webview_window("overlay") {
         let scale_factor = window.scale_factor().unwrap_or(1.0);
         let phys_width = (width as f64 * scale_factor).round() as i32;
@@ -781,7 +793,13 @@ pub fn calculate_floating_ball_snap(
         (max_x, "right")
     } else {
         let target_x = x.clamp(wa_left, max_x);
-        let edge = if target_x == wa_left { "left" } else if target_x == max_x { "right" } else { "none" };
+        let edge = if target_x == wa_left {
+            "left"
+        } else if target_x == max_x {
+            "right"
+        } else {
+            "none"
+        };
         (target_x, edge)
     };
 
@@ -800,7 +818,12 @@ pub fn get_screen_work_area(x: i32, y: i32) -> (i32, i32, i32, i32) {
         let mut mi: MONITORINFO = std::mem::zeroed();
         mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
         if GetMonitorInfoW(hmonitor, &mut mi) != 0 {
-            (mi.rcWork.left, mi.rcWork.top, mi.rcWork.right, mi.rcWork.bottom)
+            (
+                mi.rcWork.left,
+                mi.rcWork.top,
+                mi.rcWork.right,
+                mi.rcWork.bottom,
+            )
         } else {
             (0, 0, 1920, 1080)
         }
@@ -838,9 +861,16 @@ pub fn init_floating_ball(window: &WebviewWindow, saved_pos: (i32, i32)) -> Floa
         calculate_floating_ball_snap(phys_x, phys_y, phys_size, work_area);
 
     let layout = calculate_floating_menu_placement(
-        (target_phys_x, target_phys_y, target_phys_x + phys_size, target_phys_y + phys_size),
+        (
+            target_phys_x,
+            target_phys_y,
+            target_phys_x + phys_size,
+            target_phys_y + phys_size,
+        ),
         (328.0 * scale_factor).round() as i32,
-        (400.0 * scale_factor).round() as i32, work_area);
+        (400.0 * scale_factor).round() as i32,
+        work_area,
+    );
     if let Ok(hwnd) = window.hwnd() {
         let hwnd_raw = hwnd.0 as HWND;
         // SAFETY: Live owned window. Only initialization/docking changes geometry,
@@ -848,15 +878,29 @@ pub fn init_floating_ball(window: &WebviewWindow, saved_pos: (i32, i32)) -> Floa
         unsafe {
             ShowWindow(hwnd_raw, SW_HIDE);
             apply_no_activate_style(hwnd_raw);
-            SetWindowPos(hwnd_raw, HWND_TOPMOST, layout.x, layout.y, layout.width, layout.height,
-                SWP_NOACTIVATE);
+            SetWindowPos(
+                hwnd_raw,
+                HWND_TOPMOST,
+                layout.x,
+                layout.y,
+                layout.width,
+                layout.height,
+                SWP_NOACTIVATE,
+            );
         }
         let _ = set_floating_canvas_region(hwnd_raw, false, layout.corner, phys_size);
-        *FLOATING_CANVAS.lock().unwrap() = FloatingCanvas { corner: layout.corner, expanded: false };
+        *FLOATING_CANVAS.lock().unwrap() = FloatingCanvas {
+            corner: layout.corner,
+            expanded: false,
+        };
     }
     // The frontend commits this corner before set_floating_ball_expanded shows it.
-    ((target_phys_x as f64 / scale_factor).round() as i32,
-     (target_phys_y as f64 / scale_factor).round() as i32, layout.corner.to_string(), edge.to_string())
+    (
+        (target_phys_x as f64 / scale_factor).round() as i32,
+        (target_phys_y as f64 / scale_factor).round() as i32,
+        layout.corner.to_string(),
+        edge.to_string(),
+    )
 }
 
 struct FloatingMenuPlacement {
@@ -876,8 +920,16 @@ fn calculate_floating_menu_placement(
 ) -> FloatingMenuPlacement {
     let left = (ball.0 - area.0).abs() < (area.2 - ball.2).abs();
     let top = area.3 - ball.1 >= ball.3 - area.1;
-    let available_width = if left { area.2 - ball.0 } else { ball.2 - area.0 };
-    let available_height = if top { area.3 - ball.1 } else { ball.3 - area.1 };
+    let available_width = if left {
+        area.2 - ball.0
+    } else {
+        ball.2 - area.0
+    };
+    let available_height = if top {
+        area.3 - ball.1
+    } else {
+        ball.3 - area.1
+    };
     let width = width.min(available_width).max(1);
     let height = height.min(available_height).max(1);
     FloatingMenuPlacement {
@@ -900,8 +952,16 @@ fn calculate_collapsed_ball_position(
     corner: &str,
 ) -> (i32, i32) {
     (
-        if corner.ends_with("left") { rect.0 } else { rect.2 - size },
-        if corner.starts_with("bottom") { rect.3 - size } else { rect.1 },
+        if corner.ends_with("left") {
+            rect.0
+        } else {
+            rect.2 - size
+        },
+        if corner.starts_with("bottom") {
+            rect.3 - size
+        } else {
+            rect.1
+        },
     )
 }
 
@@ -910,7 +970,8 @@ struct FloatingCanvas {
     expanded: bool,
 }
 static FLOATING_CANVAS: Mutex<FloatingCanvas> = Mutex::new(FloatingCanvas {
-    corner: "top-right", expanded: false,
+    corner: "top-right",
+    expanded: false,
 });
 
 pub fn floating_menu_is_expanded() -> bool {
@@ -923,7 +984,9 @@ pub fn window_region_contains(hwnd: HWND, x: i32, y: i32) -> bool {
     // transferred to Windows and is always released after querying it.
     unsafe {
         let region = CreateRectRgn(0, 0, 0, 0);
-        if region.is_null() { return true; }
+        if region.is_null() {
+            return true;
+        }
         let has_region = GetWindowRgn(hwnd, region) != 0;
         let inside = !has_region || PtInRegion(region, x, y) != 0;
         DeleteObject(region);
@@ -933,7 +996,12 @@ pub fn window_region_contains(hwnd: HWND, x: i32, y: i32) -> bool {
 
 /// Keep the WebView surface at its final dimensions. Cropping the native window
 /// also excludes the transparent desktop area from mouse hit testing.
-fn set_floating_canvas_region(hwnd: HWND, expanded: bool, corner: &str, ball_size: i32) -> Result<(), String> {
+fn set_floating_canvas_region(
+    hwnd: HWND,
+    expanded: bool,
+    corner: &str,
+    ball_size: i32,
+) -> Result<(), String> {
     // SAFETY: Caller provides a live HWND. The newly allocated region transfers
     // to Windows only on success; on failure we retain ownership and delete it.
     unsafe {
@@ -943,12 +1011,17 @@ fn set_floating_canvas_region(hwnd: HWND, expanded: bool, corner: &str, ball_siz
         }
         let width = rect.right - rect.left;
         let height = rect.bottom - rect.top;
-        let (x, y, w, h) = if expanded { (0, 0, width, height) } else {
-            let (x, y) = calculate_collapsed_ball_position((0, 0, width, height), ball_size, corner);
+        let (x, y, w, h) = if expanded {
+            (0, 0, width, height)
+        } else {
+            let (x, y) =
+                calculate_collapsed_ball_position((0, 0, width, height), ball_size, corner);
             (x, y, ball_size, ball_size)
         };
         let region = CreateRectRgn(x, y, x + w, y + h);
-        if region.is_null() { return Err("Cannot create floating canvas region".into()); }
+        if region.is_null() {
+            return Err("Cannot create floating canvas region".into());
+        }
         if SetWindowRgn(hwnd, region, 1) == 0 {
             DeleteObject(region);
             return Err("Cannot apply floating canvas region".into());
@@ -969,7 +1042,9 @@ pub fn set_floating_ball_expanded(
     FLOATING_CANVAS.lock().unwrap().expanded = expanded;
     apply_no_activate_style(hwnd);
     // SAFETY: HWND belongs to the live window; show without activation, without geometry changes.
-    unsafe { ShowWindow(hwnd, SW_SHOWNOACTIVATE); }
+    unsafe {
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    }
     Ok((0, 0, corner.to_string()))
 }
 
@@ -1008,10 +1083,19 @@ pub fn run_floating_ball_drag_loop(window: &WebviewWindow) -> (i32, i32) {
                     let scale_factor = window.scale_factor().unwrap_or(1.0);
                     let corner = FLOATING_CANVAS.lock().unwrap().corner;
                     let (x, y) = calculate_collapsed_ball_position(
-                        (final_rect.left, final_rect.top, final_rect.right, final_rect.bottom),
-                        (60.0 * scale_factor).round() as i32, corner);
-                    return ((x as f64 / scale_factor).round() as i32,
-                        (y as f64 / scale_factor).round() as i32);
+                        (
+                            final_rect.left,
+                            final_rect.top,
+                            final_rect.right,
+                            final_rect.bottom,
+                        ),
+                        (60.0 * scale_factor).round() as i32,
+                        corner,
+                    );
+                    return (
+                        (x as f64 / scale_factor).round() as i32,
+                        (y as f64 / scale_factor).round() as i32,
+                    );
                 }
             }
         }
@@ -1029,7 +1113,9 @@ pub fn run_overlay_drag_loop(app: &AppHandle) {
                 let mut cursor_start: POINT = std::mem::zeroed();
                 let mut win_rect: RECT = std::mem::zeroed();
 
-                if GetCursorPos(&mut cursor_start) != 0 && GetWindowRect(hwnd_raw, &mut win_rect) != 0 {
+                if GetCursorPos(&mut cursor_start) != 0
+                    && GetWindowRect(hwnd_raw, &mut win_rect) != 0
+                {
                     let offset_x = cursor_start.x - win_rect.left;
                     let offset_y = cursor_start.y - win_rect.top;
 
@@ -1116,8 +1202,12 @@ mod tests {
 
     #[test]
     fn web_taskbar_identity_is_stored_on_its_window() {
-        use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
-        use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow};
+        use windows::Win32::System::Com::{
+            CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED,
+        };
+        use windows::Win32::UI::Shell::PropertiesSystem::{
+            IPropertyStore, SHGetPropertyStoreForWindow,
+        };
         // SAFETY: this test owns COM initialization and a hidden window on this thread.
         unsafe {
             CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().unwrap();
@@ -1181,7 +1271,10 @@ mod tests {
             auto_submit: None,
             use_url_template: None,
         };
-        assert_eq!(calculate_bubble_bar_width(&[disabled_action.clone()], false), 220);
+        assert_eq!(
+            calculate_bubble_bar_width(&[disabled_action.clone()], false),
+            220
+        );
         assert_eq!(calculate_bubble_bar_width(&[disabled_action], true), 220);
 
         // 3. 7 个典型动作 (DeepSeek, Qwen, Perplexity, 复制, Claude, ChatGPT, 豆包)
@@ -1199,7 +1292,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
-            use_url_template: None,
+                use_url_template: None,
             },
             ActionConfig {
                 id: "2".into(),
@@ -1214,7 +1307,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
-            use_url_template: None,
+                use_url_template: None,
             },
             ActionConfig {
                 id: "3".into(),
@@ -1229,7 +1322,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
-            use_url_template: None,
+                use_url_template: None,
             },
             ActionConfig {
                 id: "4".into(),
@@ -1244,7 +1337,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
-            use_url_template: None,
+                use_url_template: None,
             },
             ActionConfig {
                 id: "5".into(),
@@ -1259,7 +1352,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
-            use_url_template: None,
+                use_url_template: None,
             },
             ActionConfig {
                 id: "6".into(),
@@ -1274,7 +1367,7 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
-            use_url_template: None,
+                use_url_template: None,
             },
             ActionConfig {
                 id: "7".into(),
@@ -1289,17 +1382,25 @@ mod tests {
                 input_selector: None,
                 submit_selector: None,
                 auto_submit: None,
-            use_url_template: None,
+                use_url_template: None,
             },
         ];
 
         let width = calculate_bubble_bar_width(&sample_actions, false);
         // 7 个动作总宽应该在 600px ~ 660px 之间
-        assert!(width >= 600 && width <= 700, "Calculated width was {}", width);
+        assert!(
+            width >= 600 && width <= 700,
+            "Calculated width was {}",
+            width
+        );
 
         // 纯图标模式下 7 个动作的宽度应该更紧凑 (约 260px)
         let icon_only_width = calculate_bubble_bar_width(&sample_actions, true);
-        assert!(icon_only_width >= 240 && icon_only_width <= 280, "Calculated icon_only width was {}", icon_only_width);
+        assert!(
+            icon_only_width >= 240 && icon_only_width <= 280,
+            "Calculated icon_only width was {}",
+            icon_only_width
+        );
     }
 
     #[test]
@@ -1307,21 +1408,29 @@ mod tests {
         for scale in [1, 2] {
             let area = (-1280 * scale, 0, 0, 1080 * scale);
             let size = 60 * scale;
-            assert_eq!(calculate_floating_ball_snap(-600 * scale, 300 * scale, size, area),
-                (-600 * scale, 300 * scale, "none"));
-            assert_eq!(calculate_floating_ball_snap(-1260 * scale, 300 * scale, size, area),
-                (-1280 * scale, 300 * scale, "left"));
-            assert_eq!(calculate_floating_ball_snap(-80 * scale, 300 * scale, size, area),
-                (-60 * scale, 300 * scale, "right"));
-            assert_eq!(calculate_floating_ball_snap(-90 * scale, 300 * scale, size, area),
-                (-90 * scale, 300 * scale, "none"));
+            assert_eq!(
+                calculate_floating_ball_snap(-600 * scale, 300 * scale, size, area),
+                (-600 * scale, 300 * scale, "none")
+            );
+            assert_eq!(
+                calculate_floating_ball_snap(-1260 * scale, 300 * scale, size, area),
+                (-1280 * scale, 300 * scale, "left")
+            );
+            assert_eq!(
+                calculate_floating_ball_snap(-80 * scale, 300 * scale, size, area),
+                (-60 * scale, 300 * scale, "right")
+            );
+            assert_eq!(
+                calculate_floating_ball_snap(-90 * scale, 300 * scale, size, area),
+                (-90 * scale, 300 * scale, "none")
+            );
         }
     }
 
     #[test]
     fn test_floating_ball_snap_edge_calc() {
         let work_area = (0, 0, 1920, 1080); // left, top, right, bottom
-        
+
         // 靠近屏幕左侧 (x=100, y=300)
         let (target_x, target_y, edge) = calculate_floating_ball_snap(20, 300, 60, work_area);
         assert_eq!(target_x, 0);
@@ -1352,14 +1461,26 @@ mod tests {
         for scale in [1.0, 1.5, 2.0] {
             let px = |value: i32| (value as f64 * scale).round() as i32;
             let work_area = (0, 0, px(1920), px(1080));
-            for (x, y, corner) in [(0, 100, "top-left"), (1860, 100, "top-right"),
-                (0, 900, "bottom-left"), (1860, 900, "bottom-right")] {
+            for (x, y, corner) in [
+                (0, 100, "top-left"),
+                (1860, 100, "top-right"),
+                (0, 900, "bottom-left"),
+                (1860, 900, "bottom-right"),
+            ] {
                 let ball = (px(x), px(y), px(x + 60), px(y + 60));
                 let layout = calculate_floating_menu_placement(ball, px(328), px(360), work_area);
                 assert_eq!(layout.corner, corner);
                 assert_eq!((layout.width, layout.height), (px(328), px(360)));
-                let rect = (layout.x, layout.y, layout.x + layout.width, layout.y + layout.height);
-                assert_eq!(calculate_collapsed_ball_position(rect, px(60), corner), (px(x), px(y)));
+                let rect = (
+                    layout.x,
+                    layout.y,
+                    layout.x + layout.width,
+                    layout.y + layout.height,
+                );
+                assert_eq!(
+                    calculate_collapsed_ball_position(rect, px(60), corner),
+                    (px(x), px(y))
+                );
                 assert!(rect.0 >= work_area.0 && rect.1 >= work_area.1);
                 assert!(rect.2 <= work_area.2 && rect.3 <= work_area.3);
             }
@@ -1372,18 +1493,34 @@ mod tests {
         let layout = calculate_floating_menu_placement((-60, 250, 0, 310), 328, 360, area);
         assert_eq!(layout.corner, "bottom-right");
         assert_eq!((layout.x, layout.y), (-328, -50));
-        let small = calculate_floating_menu_placement((0, 100, 60, 160), 328, 360, (0, 0, 240, 280));
+        let small =
+            calculate_floating_menu_placement((0, 100, 60, 160), 328, 360, (0, 0, 240, 280));
         assert_eq!((small.width, small.height), (240, 180));
         assert_eq!(small.corner, "top-left");
-        assert_eq!(calculate_collapsed_ball_position((small.x, small.y, small.x + small.width,
-            small.y + small.height), 60, small.corner), (0, 100));
+        assert_eq!(
+            calculate_collapsed_ball_position(
+                (
+                    small.x,
+                    small.y,
+                    small.x + small.width,
+                    small.y + small.height
+                ),
+                60,
+                small.corner
+            ),
+            (0, 100)
+        );
     }
 
     #[test]
     fn floating_ball_config_disables_redirection_before_creation() {
         let config: tauri::Config = serde_json::from_str(include_str!("../tauri.conf.json"))
             .expect("window configuration must match the installed Tauri version");
-        let ball = config.app.windows.iter().find(|window| window.label == "floating_ball")
+        let ball = config
+            .app
+            .windows
+            .iter()
+            .find(|window| window.label == "floating_ball")
             .expect("floating ball window");
         assert!(ball.transparent && ball.no_redirection_bitmap);
         assert!(!ball.focus && !ball.visible && !ball.shadow);
@@ -1394,16 +1531,30 @@ mod tests {
         // SAFETY: This test owns a hidden STATIC window and destroys it on this thread.
         unsafe {
             let class = [83u16, 84, 65, 84, 73, 67, 0];
-            let hwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, class.as_ptr(), std::ptr::null(), WS_POPUP,
-                100, 200, 656, 800, std::ptr::null_mut(), std::ptr::null_mut(),
-                std::ptr::null_mut(), std::ptr::null());
+            let hwnd = CreateWindowExW(
+                WS_EX_NOREDIRECTIONBITMAP,
+                class.as_ptr(),
+                std::ptr::null(),
+                WS_POPUP,
+                100,
+                200,
+                656,
+                800,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null(),
+            );
             assert!(!hwnd.is_null());
             for corner in ["top-left", "top-right", "bottom-left", "bottom-right"] {
                 for expanded in [false, true, false, true, false] {
                     set_floating_canvas_region(hwnd, expanded, corner, 120).unwrap();
                     let mut rect: RECT = std::mem::zeroed();
                     assert_ne!(GetWindowRect(hwnd, &mut rect), 0);
-                    assert_eq!((rect.left, rect.top, rect.right, rect.bottom), (100, 200, 756, 1000));
+                    assert_eq!(
+                        (rect.left, rect.top, rect.right, rect.bottom),
+                        (100, 200, 756, 1000)
+                    );
                     let mut client: RECT = std::mem::zeroed();
                     assert_ne!(GetClientRect(hwnd, &mut client), 0);
                     assert_eq!((client.right, client.bottom), (656, 800));
@@ -1452,7 +1603,11 @@ mod tests {
     fn headless_outline_retains_all_edges_without_covering_the_page() {
         for radius in [0, 12] {
             let frame = WebCardFrame {
-                width: 860, height: 640, page_top: 1, border: 1, radius,
+                width: 860,
+                height: 640,
+                page_top: 1,
+                border: 1,
+                radius,
             };
             // SAFETY: the region is local to this test and is released here.
             unsafe {
@@ -1462,7 +1617,9 @@ mod tests {
                     assert_ne!(PtInRegion(region, x, y), 0, "edge at ({x}, {y})");
                 }
                 assert_eq!(PtInRegion(region, 430, 320), 0);
-                if radius > 0 { assert_eq!(PtInRegion(region, 0, 0), 0); }
+                if radius > 0 {
+                    assert_eq!(PtInRegion(region, 0, 0), 0);
+                }
                 DeleteObject(region as _);
             }
         }
@@ -1486,12 +1643,18 @@ mod tests {
                     let sides = [
                         (0..10).filter(|&x| PtInRegion(region, x, 320) != 0).count(),
                         (0..10).filter(|&y| PtInRegion(region, 430, y) != 0).count(),
-                        (0..10).filter(|&x| PtInRegion(region, 859 - x, 320) != 0).count(),
-                        (0..10).filter(|&y| PtInRegion(region, 430, 639 - y) != 0).count(),
+                        (0..10)
+                            .filter(|&x| PtInRegion(region, 859 - x, 320) != 0)
+                            .count(),
+                        (0..10)
+                            .filter(|&y| PtInRegion(region, 430, 639 - y) != 0)
+                            .count(),
                     ];
                     DeleteObject(region as _);
-                    assert_eq!(sides, [border as usize; 4],
-                        "left/top/right/bottom thickness for radius {radius}, border {border}");
+                    assert_eq!(
+                        sides, [border as usize; 4],
+                        "left/top/right/bottom thickness for radius {radius}, border {border}"
+                    );
                 }
             }
         }
@@ -1503,26 +1666,59 @@ mod tests {
         impl Drop for TestWindow {
             fn drop(&mut self) {
                 // SAFETY: this test owns the hidden parent and its children on this thread.
-                unsafe { DestroyWindow(self.0); }
+                unsafe {
+                    DestroyWindow(self.0);
+                }
             }
         }
         // SAFETY: STATIC is a built-in class; the parent stays hidden throughout the test.
         unsafe {
             let class = [83u16, 84, 65, 84, 73, 67, 0];
-            let parent = CreateWindowExW(0, class.as_ptr(), std::ptr::null(), WS_POPUP,
-                0, 0, 100, 100, std::ptr::null_mut(), std::ptr::null_mut(),
-                std::ptr::null_mut(), std::ptr::null());
+            let parent = CreateWindowExW(
+                0,
+                class.as_ptr(),
+                std::ptr::null(),
+                WS_POPUP,
+                0,
+                0,
+                100,
+                100,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null(),
+            );
             assert!(!parent.is_null());
             let _parent = TestWindow(parent);
-            let child = CreateWindowExW(0, class.as_ptr(), std::ptr::null(), WS_CHILD,
-                0, 0, 100, 100, parent, std::ptr::null_mut(),
-                std::ptr::null_mut(), std::ptr::null());
+            let child = CreateWindowExW(
+                0,
+                class.as_ptr(),
+                std::ptr::null(),
+                WS_CHILD,
+                0,
+                0,
+                100,
+                100,
+                parent,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null(),
+            );
             assert!(!child.is_null());
             assert_eq!(GetWindowLongPtrW(child, GWL_STYLE) as u32 & WS_VISIBLE, 0);
-            let frame = WebCardFrame { width: 100, height: 100, page_top: 1, border: 1, radius: 12 };
+            let frame = WebCardFrame {
+                width: 100,
+                height: 100,
+                page_top: 1,
+                border: 1,
+                radius: 12,
+            };
             assert!(install_web_outline(child, frame, true));
-            assert_ne!(GetWindowLongPtrW(child, GWL_STYLE) as u32 & WS_VISIBLE, 0,
-                "controller visibility alone does not show the native container");
+            assert_ne!(
+                GetWindowLongPtrW(child, GWL_STYLE) as u32 & WS_VISIBLE,
+                0,
+                "controller visibility alone does not show the native container"
+            );
             assert!(install_web_outline(child, frame, false));
             assert_eq!(GetWindowLongPtrW(child, GWL_STYLE) as u32 & WS_VISIBLE, 0);
             assert!(install_web_outline(child, frame, true));
@@ -1555,15 +1751,28 @@ mod tests {
         impl Drop for TestWindow {
             fn drop(&mut self) {
                 // SAFETY: 测试独占该隐藏窗口，在创建线程销毁。
-                unsafe { DestroyWindow(self.0); }
+                unsafe {
+                    DestroyWindow(self.0);
+                }
             }
         }
         // SAFETY: STATIC 是内置窗口类；窗口不显示、不激活，不操作用户窗口。
         unsafe {
             let class = [83u16, 84, 65, 84, 73, 67, 0];
-            let hwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, class.as_ptr(), std::ptr::null(), WS_POPUP,
-                0, 0, 60, 60, std::ptr::null_mut(), std::ptr::null_mut(),
-                std::ptr::null_mut(), std::ptr::null());
+            let hwnd = CreateWindowExW(
+                WS_EX_NOREDIRECTIONBITMAP,
+                class.as_ptr(),
+                std::ptr::null(),
+                WS_POPUP,
+                0,
+                0,
+                60,
+                60,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null(),
+            );
             assert!(!hwnd.is_null(), "hidden composition test window");
             let window = TestWindow(hwnd);
             apply_no_activate_style(window.0);
@@ -1578,4 +1787,3 @@ mod tests {
         }
     }
 }
-

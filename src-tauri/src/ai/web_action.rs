@@ -54,20 +54,30 @@ fn sanitized_action_id(id: &str) -> String {
 }
 
 /// 页面只能请求固定哨兵路径；动作 id 必须命中已提交配置中启用的 Web 动作。
+#[cfg(test)]
 fn menu_switch_action_id(url: &tauri::Url) -> Option<String> {
-    if url.scheme() != "https"
-        || url.host_str() != Some("iox.local")
-        || url.path() != "/switch-ai"
+    menu_switch_payload(url).map(|(action_id, _)| action_id)
+}
+
+fn menu_switch_payload(url: &tauri::Url) -> Option<(String, String)> {
+    if url.scheme() != "https" || url.host_str() != Some("iox.local") || url.path() != "/switch-ai"
     {
         return None;
     }
-    url.query_pairs()
-        .find(|(key, _)| key == "action")
-        .map(|(_, value)| value.into_owned())
+    let mut action_id = None;
+    let mut selected_text = String::new();
+    for (key, value) in url.query_pairs() {
+        match key.as_ref() {
+            "action" if !value.is_empty() => action_id = Some(value.into_owned()),
+            "text" => selected_text = value.into_owned(),
+            _ => {}
+        }
+    }
+    action_id.map(|id| (id, selected_text))
 }
 
 fn intercept_menu_switch(app: &AppHandle, nav_url: &tauri::Url) -> bool {
-    let Some(action_id) = menu_switch_action_id(nav_url) else {
+    let Some((action_id, selected_text)) = menu_switch_payload(nav_url) else {
         return false;
     };
     let dispatch = app.clone();
@@ -80,29 +90,36 @@ fn intercept_menu_switch(app: &AppHandle, nav_url: &tauri::Url) -> bool {
         let Some(config) = state.config.try_snapshot() else {
             return;
         };
-        let Some(action) = config.actions.iter().find(|action| {
-            action.action_type == "web" && action.enabled && action.id == action_id
-        }) else {
+        let Some(action) = config
+            .actions
+            .iter()
+            .find(|action| action.action_type == "web" && action.enabled && action.id == action_id)
+        else {
             return;
         };
 
-        // Switching must not reset an already open conversation: focus the existing card or
-        // activate the existing Hub tab instead of re-running the action URL.
-        if config.general.web_window_mode == "tabbed" {
-            let open = state
-                .web_hub_state
-                .lock()
-                .map(|hub| hub.tabs.iter().any(|tab| tab.action_id == action.id))
-                .unwrap_or(false);
-            if open {
-                let _ = switch_web_hub_tab(&dispatch, &state, &action.id);
+        let trimmed_text = selected_text.trim();
+        // When switching without selected text, focus the existing card or activate the
+        // existing Hub tab instead of re-running the action URL. When selected text is
+        // carried from the page, forward it to the target AI action like the bubble bar.
+        if trimmed_text.is_empty() {
+            if config.general.web_window_mode == "tabbed" {
+                let open = state
+                    .web_hub_state
+                    .lock()
+                    .map(|hub| hub.tabs.iter().any(|tab| tab.action_id == action.id))
+                    .unwrap_or(false);
+                if open {
+                    let _ = switch_web_hub_tab(&dispatch, &state, &action.id);
+                    return;
+                }
+            } else if focus_existing_web_action(&dispatch, action) {
                 return;
             }
-        } else if focus_existing_web_action(&dispatch, action) {
-            return;
         }
 
-        if let Err(error) = execute_web_action(&dispatch, &config, action, "", None, None) {
+        if let Err(error) = execute_web_action(&dispatch, &config, action, trimmed_text, None, None)
+        {
             eprintln!("Web menu switch failed: {error}");
         }
     });
@@ -140,23 +157,27 @@ pub fn context_menu_config_changed(previous: &AppConfig, current: &AppConfig) ->
 const CONTEXT_MENU_DISPOSE: &str =
     "window.__ioxContextMenuDispose && window.__ioxContextMenuDispose();";
 
+fn sync_webview_context_menu(webview: &tauri::Webview, config: &AppConfig) {
+    let Some(slug) = content_action_slug(webview.label()) else {
+        return;
+    };
+    let action = config
+        .actions
+        .iter()
+        .find(|action| sanitized_action_id(&action.id) == slug);
+    let script = match action {
+        Some(action) if config.general.web_context_menu => context_menu_script(config, action),
+        // A deleted or renamed action leaves a stale panel behind; dispose it instead of
+        // leaving entries that the sentinel can no longer resolve.
+        _ => CONTEXT_MENU_DISPOSE.to_string(),
+    };
+    let _ = webview.eval(&script);
+}
+
 /// 配置提交后把菜单脚本同步到已打开的内容页；关闭开关或动作被删除时清理旧菜单。
 pub fn refresh_web_context_menus(app: &AppHandle, config: &AppConfig) {
-    for (label, webview) in app.webviews() {
-        let Some(slug) = content_action_slug(&label) else {
-            continue;
-        };
-        let action = config
-            .actions
-            .iter()
-            .find(|action| sanitized_action_id(&action.id) == slug);
-        let script = match action {
-            Some(action) if config.general.web_context_menu => context_menu_script(config, action),
-            // A deleted or renamed action leaves a stale panel behind; dispose it instead of
-            // leaving entries that the sentinel can no longer resolve.
-            _ => CONTEXT_MENU_DISPOSE.to_string(),
-        };
-        let _ = webview.eval(&script);
+    for webview in app.webviews().into_values() {
+        sync_webview_context_menu(&webview, config);
     }
 }
 
@@ -168,7 +189,8 @@ fn cancel_injection(app: &AppHandle, label: &str) {
         }
         if let Some(webview) = app.get_webview(label) {
             // Also invalidate JavaScript timers for same-document/hash navigation.
-            let _ = webview.eval("window.__iox_injection_epoch = (window.__iox_injection_epoch || 0) + 1;");
+            let _ = webview
+                .eval("window.__iox_injection_epoch = (window.__iox_injection_epoch || 0) + 1;");
         }
     }
 }
@@ -363,7 +385,9 @@ pub(crate) fn new_chat_in_window(app: &AppHandle, window: &tauri::Window) -> Res
     if webview.window().label() != window.label() {
         return Err("Webview belongs to another window".into());
     }
-    let current = webview.url().map_err(|_| "Could not read the website URL")?;
+    let current = webview
+        .url()
+        .map_err(|_| "Could not read the website URL")?;
     if !matches!(current.scheme(), "http" | "https")
         || !is_allowed_internal_navigation(&configured.origin().ascii_serialization(), &current)
     {
@@ -393,12 +417,15 @@ pub fn get_registrable_domain(host: &str) -> &str {
     if parts.len() >= 2 {
         if parts.len() >= 3 {
             let last_two = format!("{}.{}", parts[parts.len() - 2], parts[parts.len() - 1]);
-            if ["com.cn", "net.cn", "org.cn", "gov.cn", "co.uk", "com.hk"].contains(&last_two.as_str()) {
+            if ["com.cn", "net.cn", "org.cn", "gov.cn", "co.uk", "com.hk"]
+                .contains(&last_two.as_str())
+            {
                 let start_idx = host.len() - parts[parts.len() - 3].len() - 1 - last_two.len();
                 return &host[start_idx..];
             }
         }
-        let start_idx = host.len() - parts[parts.len() - 2].len() - 1 - parts[parts.len() - 1].len();
+        let start_idx =
+            host.len() - parts[parts.len() - 2].len() - 1 - parts[parts.len() - 1].len();
         &host[start_idx..]
     } else {
         host
@@ -442,29 +469,47 @@ pub fn is_allowed_internal_navigation(initial_origin: &str, nav_url: &tauri::Url
 
     // 4. 常见 AI 官方重定向与多域名生态放行
     // 阿里 / 通义千问生态
-    let is_ali_init = initial_host.contains("aliyun.com") || initial_host.contains("qianwen.com") || initial_host.contains("tongyi.cn");
-    let is_ali_nav = nav_host.contains("aliyun.com") || nav_host.contains("qianwen.com") || nav_host.contains("tongyi.cn") || nav_host.contains("taobao.com") || nav_host.contains("alibaba.com");
+    let is_ali_init = initial_host.contains("aliyun.com")
+        || initial_host.contains("qianwen.com")
+        || initial_host.contains("tongyi.cn");
+    let is_ali_nav = nav_host.contains("aliyun.com")
+        || nav_host.contains("qianwen.com")
+        || nav_host.contains("tongyi.cn")
+        || nav_host.contains("taobao.com")
+        || nav_host.contains("alibaba.com");
     if is_ali_init && is_ali_nav {
         return true;
     }
 
     // OpenAI / ChatGPT 生态
-    let is_openai_init = initial_host.contains("openai.com") || initial_host.contains("chatgpt.com");
-    let is_openai_nav = nav_host.contains("openai.com") || nav_host.contains("chatgpt.com") || nav_host.contains("oaistatic.com") || nav_host.contains("auth0.com");
+    let is_openai_init =
+        initial_host.contains("openai.com") || initial_host.contains("chatgpt.com");
+    let is_openai_nav = nav_host.contains("openai.com")
+        || nav_host.contains("chatgpt.com")
+        || nav_host.contains("oaistatic.com")
+        || nav_host.contains("auth0.com");
     if is_openai_init && is_openai_nav {
         return true;
     }
 
     // 字节 / 豆包生态
     let is_doubao_init = initial_host.contains("doubao.com");
-    let is_doubao_nav = nav_host.contains("doubao.com") || nav_host.contains("volcengine.com") || nav_host.contains("bytedance.com");
+    let is_doubao_nav = nav_host.contains("doubao.com")
+        || nav_host.contains("volcengine.com")
+        || nav_host.contains("bytedance.com");
     if is_doubao_init && is_doubao_nav {
         return true;
     }
 
     // Kimi / 月之暗面生态
-    let is_kimi_init = initial_host.contains("kimi.com") || initial_host.contains("moonshot.cn") || initial_host.contains("kimi.ai") || initial_host.contains("moonshot.ai");
-    let is_kimi_nav = nav_host.contains("kimi.com") || nav_host.contains("moonshot.cn") || nav_host.contains("kimi.ai") || nav_host.contains("moonshot.ai");
+    let is_kimi_init = initial_host.contains("kimi.com")
+        || initial_host.contains("moonshot.cn")
+        || initial_host.contains("kimi.ai")
+        || initial_host.contains("moonshot.ai");
+    let is_kimi_nav = nav_host.contains("kimi.com")
+        || nav_host.contains("moonshot.cn")
+        || nav_host.contains("kimi.ai")
+        || nav_host.contains("moonshot.ai");
     if is_kimi_init && is_kimi_nav {
         return true;
     }
@@ -510,19 +555,20 @@ pub fn execute_web_action(
     }
 
     // 2. 提取并决定目标 URL 及注入脚本
-    let raw_template = action
-        .url_template
-        .as_deref()
-        .unwrap_or("")
-        .trim();
+    let raw_template = action.url_template.as_deref().unwrap_or("").trim();
     if raw_template.is_empty() {
-        return Err(format!("Web action '{}' has no configured URL template", action.name));
+        return Err(format!(
+            "Web action '{}' has no configured URL template",
+            action.name
+        ));
     }
 
     let normalized_template = normalize_web_action_url(raw_template);
     let template = normalized_template.as_str();
 
-    let is_url_template = template.contains("{text}") || template.contains("{query}") || template.contains("{raw_text}");
+    let is_url_template = template.contains("{text}")
+        || template.contains("{query}")
+        || template.contains("{raw_text}");
     let use_url_mode = action.use_url_template.unwrap_or(false);
     let auto_sub = auto_submit_override.unwrap_or_else(|| action.auto_submit.unwrap_or(true));
 
@@ -562,9 +608,25 @@ pub fn execute_web_action(
     let mode = config.general.web_window_mode.as_str();
 
     if mode == "tabbed" {
-        execute_tabbed_hub_action(app, config, action, target_url, &target_url_str, injection_script, None)
+        execute_tabbed_hub_action(
+            app,
+            config,
+            action,
+            target_url,
+            &target_url_str,
+            injection_script,
+            None,
+        )
     } else {
-        execute_multi_window_action(app, config, action, target_url, &target_url_str, injection_script, None)
+        execute_multi_window_action(
+            app,
+            config,
+            action,
+            target_url,
+            &target_url_str,
+            injection_script,
+            None,
+        )
     }
 }
 
@@ -649,6 +711,13 @@ fn attachment_on_page_load(
         if !finished {
             return;
         }
+        // Re-apply the latest committed context menu config on every document load so a reload
+        // or cross-page navigation does not revert to the initial WebView creation snapshot.
+        if let Some(state) = webview.try_state::<AppState>() {
+            if let Some(config) = state.config.try_snapshot() {
+                sync_webview_context_menu(&webview, &config);
+            }
+        }
         // Consume on the first completed document, including login redirects. No replay later.
         let attachment = pending.lock().ok().and_then(|mut pending| pending.take());
         if let Some((script, origin)) = attachment {
@@ -722,7 +791,12 @@ pub fn execute_web_file_action(
         "file-{}",
         NEXT_REQUEST.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     );
-    let script = super::file_upload::build_attachment_script(&origin, &attachments, &request_id, &config.general.theme);
+    let script = super::file_upload::build_attachment_script(
+        &origin,
+        &attachments,
+        &request_id,
+        &config.general.theme,
+    );
     if config.general.web_window_mode == "tabbed" {
         execute_tabbed_hub_action(
             app,
@@ -775,7 +849,13 @@ fn execute_multi_window_action(
     let sanitized_id: String = action
         .id
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let label = format!("web_win_{}", sanitized_id);
     let content_label = format!("{}_web", label);
@@ -786,7 +866,12 @@ fn execute_multi_window_action(
     if let Some(window) = app.get_window(&label) {
         if let Some(content_wv) = app.get_webview(&content_label) {
             if let Some(ref script) = injection_script {
-                schedule_action_injection(&content_wv, script, &[30, 300, 1000], attachment_origin.as_deref());
+                schedule_action_injection(
+                    &content_wv,
+                    script,
+                    &[30, 300, 1000],
+                    attachment_origin.as_deref(),
+                );
             } else {
                 content_wv.navigate(target_url).map_err(|e| e.to_string())?;
             }
@@ -807,9 +892,9 @@ fn execute_multi_window_action(
     } else {
         crate::web_chrome::TITLEBAR_HEIGHT
     };
-    let native_chrome =
-        crate::window_manager::ui_style_policy(&config.general.ui_style).native_chrome
-            && !config.general.web_headless_mode;
+    let native_chrome = crate::window_manager::ui_style_policy(&config.general.ui_style)
+        .native_chrome
+        && !config.general.web_headless_mode;
 
     let window = WindowBuilder::new(app, &label)
         .title(&action.name)
@@ -841,8 +926,8 @@ fn execute_multi_window_action(
         label, title_param, url_param
     );
 
-    let bar_builder = WebviewBuilder::new(&bar_label, WebviewUrl::App(bar_path.into()))
-        .transparent(true);
+    let bar_builder =
+        WebviewBuilder::new(&bar_label, WebviewUrl::App(bar_path.into())).transparent(true);
 
     let _titlebar_wv = window
         .add_child(
@@ -897,36 +982,34 @@ fn execute_multi_window_action(
     let window_clone = window.clone();
     let app_handle = app.clone();
 
-    window.on_window_event(move |event| {
-        match event {
-            tauri::WindowEvent::CloseRequested { api, .. } => {
-                api.prevent_close();
-                if !window_clone.is_maximized().unwrap_or(false) {
-                    if let Ok(size) = window_clone.inner_size() {
-                        let scale = window_clone.scale_factor().unwrap_or(1.0);
-                        let w = (size.width as f64 / scale).round();
-                        let h = (size.height as f64 / scale).round();
-                        if w >= 520.0 && h >= 400.0 {
-                            if let Some(state) = app_handle.try_state::<AppState>() {
-                                let _ = state.config.commit(|config| {
-                                    if config.general.web_window_size == (w, h) {
-                                        false
-                                    } else {
-                                        config.general.web_window_size = (w, h);
-                                        true
-                                    }
-                                });
-                            }
+    window.on_window_event(move |event| match event {
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            if !window_clone.is_maximized().unwrap_or(false) {
+                if let Ok(size) = window_clone.inner_size() {
+                    let scale = window_clone.scale_factor().unwrap_or(1.0);
+                    let w = (size.width as f64 / scale).round();
+                    let h = (size.height as f64 / scale).round();
+                    if w >= 520.0 && h >= 400.0 {
+                        if let Some(state) = app_handle.try_state::<AppState>() {
+                            let _ = state.config.commit(|config| {
+                                if config.general.web_window_size == (w, h) {
+                                    false
+                                } else {
+                                    config.general.web_window_size = (w, h);
+                                    true
+                                }
+                            });
                         }
                     }
                 }
-                let _ = window_clone.hide();
             }
-            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
-                crate::web_chrome::layout_window(&window_clone);
-            }
-            _ => {}
+            let _ = window_clone.hide();
         }
+        tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+            crate::web_chrome::layout_window(&window_clone);
+        }
+        _ => {}
     });
 
     crate::web_chrome::layout_window(&window);
@@ -951,7 +1034,13 @@ fn execute_tabbed_hub_action(
     let sanitized_id: String = action
         .id
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let tab_content_label = format!("web_hub_tab_{}", sanitized_id);
     cancel_injection(app, &tab_content_label);
@@ -971,9 +1060,9 @@ fn execute_tabbed_hub_action(
     } else {
         crate::web_chrome::TITLEBAR_HEIGHT
     };
-    let native_chrome =
-        crate::window_manager::ui_style_policy(&config.general.ui_style).native_chrome
-            && !config.general.web_headless_mode;
+    let native_chrome = crate::window_manager::ui_style_policy(&config.general.ui_style)
+        .native_chrome
+        && !config.general.web_headless_mode;
 
     let init_script = content_init_script(config, action);
 
@@ -990,7 +1079,12 @@ fn execute_tabbed_hub_action(
         // 检查该 Tab 的 child webview 是否已挂载
         if let Some(content_wv) = app.get_webview(&tab_content_label) {
             if let Some(ref script) = injection_script {
-                schedule_action_injection(&content_wv, script, &[30, 300, 1000], attachment_origin.as_deref());
+                schedule_action_injection(
+                    &content_wv,
+                    script,
+                    &[30, 300, 1000],
+                    attachment_origin.as_deref(),
+                );
             } else {
                 content_wv.navigate(target_url).map_err(|e| e.to_string())?;
             }
@@ -998,21 +1092,22 @@ fn execute_tabbed_hub_action(
             // 动态挂载新的 Tab Child Webview
             let initial_origin = target_url.origin().ascii_serialization();
             let navigation_app = app.clone();
-            let content_builder = WebviewBuilder::new(&tab_content_label, WebviewUrl::External(target_url.clone()))
-                .transparent(true)
-                .zoom_hotkeys_enabled(true)
-                .on_navigation(move |nav_url| {
-                    if intercept_menu_switch(&navigation_app, nav_url) {
-                        return false;
-                    }
-                    if is_allowed_internal_navigation(&initial_origin, nav_url) {
-                        true
-                    } else {
-                        let _ = open::that_detached(nav_url.as_str());
-                        false
-                    }
-                })
-                .initialization_script(&init_script);
+            let content_builder =
+                WebviewBuilder::new(&tab_content_label, WebviewUrl::External(target_url.clone()))
+                    .transparent(true)
+                    .zoom_hotkeys_enabled(true)
+                    .on_navigation(move |nav_url| {
+                        if intercept_menu_switch(&navigation_app, nav_url) {
+                            return false;
+                        }
+                        if is_allowed_internal_navigation(&initial_origin, nav_url) {
+                            true
+                        } else {
+                            let _ = open::that_detached(nav_url.as_str());
+                            false
+                        }
+                    })
+                    .initialization_script(&init_script);
             let content_builder = attachment_on_page_load(
                 app,
                 content_builder,
@@ -1080,8 +1175,8 @@ fn execute_tabbed_hub_action(
 
     // 构建顶部 Hub 专用多标签栏 Webview
     let bar_path = format!("index.html?view=web_titlebar&label={}", window_label);
-    let bar_builder = WebviewBuilder::new(bar_label, WebviewUrl::App(bar_path.into()))
-        .transparent(true);
+    let bar_builder =
+        WebviewBuilder::new(bar_label, WebviewUrl::App(bar_path.into())).transparent(true);
 
     let _titlebar_wv = window
         .add_child(
@@ -1146,36 +1241,34 @@ fn execute_tabbed_hub_action(
     let window_clone = window.clone();
     let app_handle = app.clone();
 
-    window.on_window_event(move |event| {
-        match event {
-            tauri::WindowEvent::CloseRequested { api, .. } => {
-                api.prevent_close();
-                if !window_clone.is_maximized().unwrap_or(false) {
-                    if let Ok(size) = window_clone.inner_size() {
-                        let scale = window_clone.scale_factor().unwrap_or(1.0);
-                        let w = (size.width as f64 / scale).round();
-                        let h = (size.height as f64 / scale).round();
-                        if w >= 520.0 && h >= 400.0 {
-                            if let Some(state) = app_handle.try_state::<AppState>() {
-                                let _ = state.config.commit(|config| {
-                                    if config.general.web_window_size == (w, h) {
-                                        false
-                                    } else {
-                                        config.general.web_window_size = (w, h);
-                                        true
-                                    }
-                                });
-                            }
+    window.on_window_event(move |event| match event {
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            if !window_clone.is_maximized().unwrap_or(false) {
+                if let Ok(size) = window_clone.inner_size() {
+                    let scale = window_clone.scale_factor().unwrap_or(1.0);
+                    let w = (size.width as f64 / scale).round();
+                    let h = (size.height as f64 / scale).round();
+                    if w >= 520.0 && h >= 400.0 {
+                        if let Some(state) = app_handle.try_state::<AppState>() {
+                            let _ = state.config.commit(|config| {
+                                if config.general.web_window_size == (w, h) {
+                                    false
+                                } else {
+                                    config.general.web_window_size = (w, h);
+                                    true
+                                }
+                            });
                         }
                     }
                 }
-                let _ = window_clone.hide();
             }
-            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
-                crate::web_chrome::layout_window(&window_clone);
-            }
-            _ => {}
+            let _ = window_clone.hide();
         }
+        tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+            crate::web_chrome::layout_window(&window_clone);
+        }
+        _ => {}
     });
 
     crate::web_chrome::layout_window(&window);
@@ -1186,7 +1279,11 @@ fn execute_tabbed_hub_action(
 }
 
 /// 切换 Web Hub 当前激活的 Tab
-pub fn switch_web_hub_tab(app: &AppHandle, state: &AppState, action_id: &str) -> Result<(), String> {
+pub fn switch_web_hub_tab(
+    app: &AppHandle,
+    state: &AppState,
+    action_id: &str,
+) -> Result<(), String> {
     crate::web_shortcuts::interrupt();
     let mut hub_state = state.web_hub_state.lock().map_err(|e| e.to_string())?;
     if !hub_state.tabs.iter().any(|t| t.action_id == action_id) {
@@ -1212,8 +1309,15 @@ pub fn close_web_hub_tab(app: &AppHandle, state: &AppState, action_id: &str) -> 
     let is_empty = hub_state.tabs.is_empty();
     drop(hub_state);
 
-    let sanitized_id: String = action_id.chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+    let sanitized_id: String = action_id
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let tab_label = format!("web_hub_tab_{}", sanitized_id);
     if let Some(wv) = app.get_webview(&tab_label) {
@@ -1240,8 +1344,15 @@ pub fn reload_web_hub_active_tab(app: &AppHandle, state: &AppState) -> Result<()
         hub_state.active_tab_id.clone()
     };
     if let Some(action_id) = active_id {
-        let sanitized_id: String = action_id.chars()
-            .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        let sanitized_id: String = action_id
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '_' || c == '-' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect();
         let tab_label = format!("web_hub_tab_{}", sanitized_id);
         if let Some(wv) = app.get_webview(&tab_label) {
@@ -1388,8 +1499,15 @@ mod tests {
             url: "https://chat.deepseek.com/a/chat/s/restored".into(),
         };
         state.add_or_activate(tab_ds2);
-        assert_eq!(state.tabs.len(), 2, "Duplicate tab should not increase count");
-        assert_eq!(state.tabs[0].url, "https://chat.deepseek.com/a/chat/s/restored");
+        assert_eq!(
+            state.tabs.len(),
+            2,
+            "Duplicate tab should not increase count"
+        );
+        assert_eq!(
+            state.tabs[0].url,
+            "https://chat.deepseek.com/a/chat/s/restored"
+        );
         assert_eq!(state.active_tab_id.as_deref(), Some("act_deepseek"));
 
         // 4. 关闭当前激活的 DeepSeek Tab，自动流转到 Kimi
@@ -1451,7 +1569,10 @@ mod tests {
 
         let initial_kimi_com = "https://www.kimi.com";
         let nav_moonshot: tauri::Url = "https://auth.moonshot.cn/login".parse().unwrap();
-        assert!(is_allowed_internal_navigation(initial_kimi_com, &nav_moonshot));
+        assert!(is_allowed_internal_navigation(
+            initial_kimi_com,
+            &nav_moonshot
+        ));
 
         // 外部无关第三方链接拦截（例如跳转到 wikipedia/github）
         let nav_ext: tauri::Url = "https://en.wikipedia.org/wiki/AI".parse().unwrap();
@@ -1465,7 +1586,8 @@ mod tests {
     fn menu_switch_only_accepts_the_reserved_endpoint() {
         let url: tauri::Url = format!(
             "{}{}",
-            super::super::scripts::CONTEXT_MENU_SWITCH_PREFIX, "act_web_kimi"
+            super::super::scripts::CONTEXT_MENU_SWITCH_PREFIX,
+            "act_web_kimi"
         )
         .parse()
         .unwrap();
@@ -1480,6 +1602,15 @@ mod tests {
             let url: tauri::Url = other.parse().unwrap();
             assert_eq!(menu_switch_action_id(&url), None, "{other}");
         }
+
+        let with_text: tauri::Url =
+            "https://iox.local/switch-ai?action=act_web_kimi&text=hello%20world"
+                .parse()
+                .unwrap();
+        assert_eq!(
+            menu_switch_payload(&with_text),
+            Some(("act_web_kimi".to_string(), "hello world".to_string()))
+        );
     }
 
     #[test]
@@ -1506,8 +1637,14 @@ mod tests {
 
     #[test]
     fn content_labels_map_back_to_sanitized_action_slugs() {
-        assert_eq!(content_action_slug("web_win_act_web_kimi_web"), Some("act_web_kimi"));
-        assert_eq!(content_action_slug("web_hub_tab_act_web_kimi"), Some("act_web_kimi"));
+        assert_eq!(
+            content_action_slug("web_win_act_web_kimi_web"),
+            Some("act_web_kimi")
+        );
+        assert_eq!(
+            content_action_slug("web_hub_tab_act_web_kimi"),
+            Some("act_web_kimi")
+        );
         assert_eq!(content_action_slug("web_win_alpha_bar"), None);
         assert_eq!(content_action_slug("main"), None);
         assert_eq!(sanitized_action_id("act:web/kimi"), "act_web_kimi");

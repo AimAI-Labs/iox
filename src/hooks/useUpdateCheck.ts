@@ -14,9 +14,13 @@ export interface UpdateStatus {
   checkedAt: number;
 }
 
-/** 事件与缓存读取可能乱序到达，只接受检查时间更新的状态。 */
-function mergeStatus(previous: UpdateStatus | null, next: UpdateStatus): UpdateStatus {
-  return !previous || next.checkedAt >= previous.checkedAt ? next : previous;
+/** 事件与缓存读取可能乱序到达，只接受检查时间更新的状态；瞬时失败不覆盖已有有效状态。 */
+export function mergeStatus(previous: UpdateStatus | null, next: UpdateStatus): UpdateStatus {
+  if (!previous) return next;
+  if (next.state === 'unavailable' && previous.state !== 'unavailable') {
+    return previous;
+  }
+  return next.checkedAt >= previous.checkedAt ? next : previous;
 }
 
 /**

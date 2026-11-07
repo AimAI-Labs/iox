@@ -1,23 +1,23 @@
 pub mod ai;
 pub mod chat_store;
-pub mod web_sessions;
-pub mod web_history_sync;
 pub mod config;
-pub mod file_selection;
+mod double_tap;
 mod file_drag;
+pub mod file_selection;
 pub mod link_metadata;
 pub mod overlay;
 pub mod picker;
 pub mod selection;
 pub mod site_presets;
 pub mod sync;
-pub mod trigger;
 pub mod tray;
+pub mod trigger;
 pub mod update;
-pub mod window_manager;
 mod web_chrome;
-mod double_tap;
+pub mod web_history_sync;
+pub mod web_sessions;
 mod web_shortcuts;
+pub mod window_manager;
 
 use ai::AiManager;
 use config::AppConfig;
@@ -28,7 +28,8 @@ pub struct AppState {
     pub config: config::ConfigStore,
     pub ai_manager: AiManager,
     pub web_hub_state: Mutex<ai::WebHubState>,
-    pub web_injections: Mutex<std::collections::HashMap<String, tokio_util::sync::CancellationToken>>,
+    pub web_injections:
+        Mutex<std::collections::HashMap<String, tokio_util::sync::CancellationToken>>,
     pub web_chrome: web_chrome::WebChromeState,
 }
 
@@ -143,7 +144,9 @@ async fn trigger_web_file_action(
         }
         ai::web_action::execute_web_file_action(&app, &config, &action_id, &files)
     })();
-    if result.is_err() { file_selection::allow_retry(drag_id); }
+    if result.is_err() {
+        file_selection::allow_retry(drag_id);
+    }
     result
 }
 
@@ -274,14 +277,26 @@ fn layout_overlay(
 #[tauri::command]
 fn toggle_maximize_overlay(app: AppHandle) -> Result<bool, String> {
     if let Some(window) = app.get_webview_window("overlay") {
-        let is_max = window.is_maximized().map_err(|e| e.to_string())?;
-        if is_max {
+        let is_max = window
+            .hwnd()
+            .map(|hwnd| unsafe {
+                windows_sys::Win32::UI::WindowsAndMessaging::IsZoomed(hwnd.0 as _) != 0
+            })
+            .unwrap_or_else(|_| window.is_maximized().unwrap_or(false));
+        let next = if is_max {
             window.unmaximize().map_err(|e| e.to_string())?;
-            Ok(false)
+            false
         } else {
             window.maximize().map_err(|e| e.to_string())?;
-            Ok(true)
+            true
+        };
+        if let Ok(hwnd) = window.hwnd() {
+            window_manager::set_window_corner_preference(
+                hwnd.0 as _,
+                !window_manager::is_native_chrome() && !next,
+            );
         }
+        Ok(next)
     } else {
         Err("Overlay window not found".to_string())
     }
@@ -417,11 +432,7 @@ fn set_pin_state(pinned: bool) {
 }
 
 #[tauri::command]
-fn save_api_card_size(
-    state: State<AppState>,
-    width: f64,
-    height: f64,
-) -> Result<(), String> {
+fn save_api_card_size(state: State<AppState>, width: f64, height: f64) -> Result<(), String> {
     if width < 320.0 || height < 200.0 {
         return Ok(());
     }
@@ -482,7 +493,7 @@ fn minimize_web_window(app: AppHandle, label: String) -> Result<(), String> {
 #[tauri::command]
 fn toggle_maximize_web_window(app: AppHandle, label: String) -> Result<(), String> {
     if let Some(window) = app.get_window(&label) {
-        if window.is_maximized().unwrap_or(false) {
+        if window_manager::window_is_maximized(&window) {
             let _ = window.unmaximize();
         } else {
             let _ = window.maximize();
@@ -523,12 +534,20 @@ fn get_site_presets() -> Vec<site_presets::SitePreset> {
 }
 
 #[tauri::command]
-fn switch_web_hub_tab(app: AppHandle, state: State<AppState>, action_id: String) -> Result<(), String> {
+fn switch_web_hub_tab(
+    app: AppHandle,
+    state: State<AppState>,
+    action_id: String,
+) -> Result<(), String> {
     ai::switch_web_hub_tab(&app, &state, &action_id)
 }
 
 #[tauri::command]
-fn close_web_hub_tab(app: AppHandle, state: State<AppState>, action_id: String) -> Result<(), String> {
+fn close_web_hub_tab(
+    app: AppHandle,
+    state: State<AppState>,
+    action_id: String,
+) -> Result<(), String> {
     ai::close_web_hub_tab(&app, &state, &action_id)
 }
 
@@ -539,11 +558,9 @@ fn reload_web_hub_active_tab(app: AppHandle, state: State<AppState>) -> Result<(
 
 #[tauri::command]
 async fn start_window_picker(app: AppHandle) -> Result<Option<picker::PickedProcessInfo>, String> {
-    let res = tauri::async_runtime::spawn_blocking(move || {
-        picker::pick_window_blocking()
-    })
-    .await
-    .map_err(|e| e.to_string())??;
+    let res = tauri::async_runtime::spawn_blocking(move || picker::pick_window_blocking())
+        .await
+        .map_err(|e| e.to_string())??;
 
     if let Some(main_win) = app.get_webview_window("main") {
         if let Ok(hwnd) = main_win.hwnd() {
@@ -563,10 +580,7 @@ fn cancel_window_picker() {
 }
 
 #[tauri::command]
-async fn fetch_provider_models(
-    base_url: String,
-    api_key: String,
-) -> Result<Vec<String>, String> {
+async fn fetch_provider_models(base_url: String, api_key: String) -> Result<Vec<String>, String> {
     ai::fetch_provider_models(base_url, api_key).await
 }
 
@@ -611,7 +625,10 @@ pub(crate) fn set_floating_ball_visible(
 }
 
 #[tauri::command]
-fn init_floating_ball(app: AppHandle, state: State<AppState>) -> Result<window_manager::FloatingBallPosition, String> {
+fn init_floating_ball(
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<window_manager::FloatingBallPosition, String> {
     if let Some(window) = app.get_webview_window("floating_ball") {
         let config = state.config.snapshot();
         let pos = config.general.floating_ball_pos;
@@ -638,7 +655,8 @@ fn snap_floating_ball(
             let _ = window.hide();
             return Ok((x, y, "top-right".to_string(), "none".to_string()));
         }
-        let (logical_x, logical_y, corner, edge) = window_manager::snap_floating_ball(&window, x, y);
+        let (logical_x, logical_y, corner, edge) =
+            window_manager::snap_floating_ball(&window, x, y);
         // 位置记忆失败不影响本次吸附交互。
         let _ = state.config.commit(|config| {
             if config.general.floating_ball_pos == (logical_x, logical_y) {
@@ -675,7 +693,8 @@ async fn start_floating_ball_dragging(
     .map_err(|e| e.to_string())?;
 
     if let Some(win) = app.get_webview_window("floating_ball") {
-        let (logical_x, logical_y, corner, edge) = window_manager::snap_floating_ball(&win, drag_x, drag_y);
+        let (logical_x, logical_y, corner, edge) =
+            window_manager::snap_floating_ball(&win, drag_x, drag_y);
         // 位置记忆失败不影响本次拖动结果。
         let _ = state.config.commit(|config| {
             if config.general.floating_ball_pos == (logical_x, logical_y) {
@@ -722,7 +741,8 @@ fn set_floating_ball_expanded(
 
 #[tauri::command]
 fn focus_floating_ball_input(app: AppHandle) -> Result<(), String> {
-    let window = app.get_webview_window("floating_ball")
+    let window = app
+        .get_webview_window("floating_ball")
         .ok_or_else(|| "Floating ball window not found".to_string())?;
     if !window_manager::floating_menu_is_expanded() {
         return Err("Floating menu is closed".to_string());
@@ -748,7 +768,9 @@ pub fn run() {
                 ai_manager: AiManager::new(),
                 web_hub_state: Mutex::new(ai::WebHubState::default()),
                 web_injections: Mutex::new(std::collections::HashMap::new()),
-                web_chrome: web_chrome::WebChromeState::new(initial_config.general.web_headless_mode),
+                web_chrome: web_chrome::WebChromeState::new(
+                    initial_config.general.web_headless_mode,
+                ),
             });
 
             // 首帧前应用持久化的界面样式，避免窗口显示后再切换装饰
@@ -882,7 +904,6 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-
 #[cfg(test)]
 mod api_request_config_tests {
     use super::resolve_api_request_config;
@@ -918,7 +939,11 @@ mod api_request_config_tests {
         model: Option<&str>,
     ) -> Result<(ProviderConfig, String, String), String> {
         resolve_api_request_config(
-            config, &config.actions[0].id, provider, model.map(str::to_string), None,
+            config,
+            &config.actions[0].id,
+            provider,
+            model.map(str::to_string),
+            None,
         )
     }
 
@@ -970,8 +995,14 @@ mod api_request_config_tests {
         config.providers[0].default_model.clear();
 
         assert_eq!(resolve(&config, None, None).unwrap().1, "original-model");
-        assert_eq!(resolve(&config, None, Some("")).unwrap().1, "original-model");
-        assert_eq!(resolve(&config, None, Some("picked-model")).unwrap().1, "picked-model");
+        assert_eq!(
+            resolve(&config, None, Some("")).unwrap().1,
+            "original-model"
+        );
+        assert_eq!(
+            resolve(&config, None, Some("picked-model")).unwrap().1,
+            "picked-model"
+        );
 
         config.providers[0].models.clear();
         let error = resolve(&config, None, None).unwrap_err();
@@ -983,9 +1014,13 @@ mod api_request_config_tests {
         let config = fixture();
         for prompt in ["Custom {text}", ""] {
             let (provider, model, actual) = resolve_api_request_config(
-                &config, &config.actions[0].id, Some("selected"),
-                Some("custom-model".into()), Some(prompt.into()),
-            ).unwrap();
+                &config,
+                &config.actions[0].id,
+                Some("selected"),
+                Some("custom-model".into()),
+                Some(prompt.into()),
+            )
+            .unwrap();
             assert_eq!(provider.id, "selected");
             assert_eq!(model, "custom-model");
             assert_eq!(actual, prompt);

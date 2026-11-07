@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   isDragThresholdExceeded,
   isTitleBarToggleGesture,
@@ -42,7 +42,12 @@ export function useTitleBarDrag({ onMaximize, interactiveSelector }: TitleBarDra
 
   const handleMouseDown = useCallback(
     (event: React.MouseEvent) => {
-      if (resolveTitleBarPress(event.button, isInteractive(event.target)) !== 'arm-drag') return;
+      if (
+        resolveTitleBarPress(event.button, isInteractive(event.target), event.detail) !== 'arm-drag'
+      ) {
+        stopTracking();
+        return;
+      }
       stopTracking();
       pending.current = { x: event.clientX, y: event.clientY };
 
@@ -52,7 +57,7 @@ export function useTitleBarDrag({ onMaximize, interactiveSelector }: TitleBarDra
           return;
         }
         stopTracking();
-        getCurrentWebviewWindow().startDragging().catch((error) => {
+        getCurrentWindow().startDragging().catch((error) => {
           console.warn('startDragging failed:', error);
         });
       };
@@ -72,13 +77,14 @@ export function useTitleBarDrag({ onMaximize, interactiveSelector }: TitleBarDra
 
   const handleDoubleClick = useCallback(
     (event: React.MouseEvent) => {
+      stopTracking();
       if (!onMaximize || !isTitleBarToggleGesture(event.button, isInteractive(event.target))) {
         return;
       }
       event.preventDefault();
       void onMaximize();
     },
-    [isInteractive, onMaximize]
+    [isInteractive, onMaximize, stopTracking]
   );
 
   return { handleMouseDown, handleDoubleClick };

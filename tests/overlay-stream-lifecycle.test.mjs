@@ -41,9 +41,11 @@ test('an actual close revokes the stream before its exit animation starts', asyn
   assert.deepEqual(h.events, ['detach', 'closing', 'hidden']);
 });
 
-test('a pinned card ignoring passive hide keeps its running stream', () => {
+test('canceling the close timer before it fires prevents stale hide completion', async () => {
   const h = setup(true);
   h.hook.executeGracefulHide();
-  assert.deepEqual(h.events, []);
-  assert.equal(h.timers.length, 0);
+  assert.deepEqual(h.events, ['detach', 'closing']);
+  h.hook.cancelCloseTimer();
+  await h.timers[0]();
+  assert.deepEqual(h.events, ['detach', 'closing']);
 });

@@ -30,27 +30,39 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   const latestVersion = status?.state === 'available' ? status.latestVersion : null;
   const needsAttention = status?.state === 'unavailable' || status?.state === 'unknown';
 
+  const handleOpenRelease = () => {
+    const fallback = 'https://github.com/AimAI-Labs/iox/releases';
+    const url = status?.releaseUrl?.startsWith('https://github.com/AimAI-Labs/iox/')
+      ? status.releaseUrl
+      : fallback;
+    void openUrl(url).catch(() => {});
+  };
+
   const handleCheckUpdate = async () => {
     try {
       const result = await check();
       if (!result) return;
       if (result.state === 'available' && result.latestVersion) {
-        toast.success(t('settings.update.available'), { description: `v${result.latestVersion}` });
+        toast.success(t('settings.update.available'), {
+          description: `v${result.latestVersion}`,
+          action: { label: t('settings.update.openRelease'), onClick: handleOpenRelease },
+        });
       } else if (result.state === 'current') {
         toast.success(t('settings.update.latest'));
       } else if (result.state === 'unknown') {
-        toast.info(t('settings.update.unknown'));
+        toast.info(t('settings.update.unknown'), {
+          action: { label: t('settings.update.openRelease'), onClick: handleOpenRelease },
+        });
       } else {
-        toast.info(t('settings.update.failed'));
+        toast.info(t('settings.update.failed'), {
+          action: { label: t('settings.update.openRelease'), onClick: handleOpenRelease },
+        });
       }
     } catch {
-      toast.info(t('settings.update.failed'));
+      toast.info(t('settings.update.failed'), {
+        action: { label: t('settings.update.openRelease'), onClick: handleOpenRelease },
+      });
     }
-  };
-
-  const handleOpenRelease = () => {
-    const fallback = 'https://github.com/AimAI-Labs/iox/releases';
-    void openUrl(status?.releaseUrl ?? fallback).catch(() => {});
   };
 
   const navItems: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
@@ -136,22 +148,35 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
               <span>{t('settings.update.availableShort')} v{latestVersion}</span>
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={() => void handleCheckUpdate()}
-              disabled={checking}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground disabled:opacity-60 dark:hover:bg-white/5"
-              title={needsAttention ? t('settings.update.failed') : t('settings.update.check')}
-            >
-              <RefreshCw size={11} className={checking ? 'animate-spin' : ''} />
-              <span>
-                {checking
-                  ? t('settings.update.checking')
-                  : status === null
-                    ? t('settings.update.notChecked')
-                    : t('settings.update.check')}
-              </span>
-            </button>
+            <div className="inline-flex items-center gap-1">
+              {needsAttention && (
+                <button
+                  type="button"
+                  onClick={handleOpenRelease}
+                  className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/5"
+                  title={status?.state === 'unknown' ? t('settings.update.unknown') : t('settings.update.failed')}
+                >
+                  <ArrowUpRight size={10} />
+                  <span>{t('settings.update.openRelease')}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleCheckUpdate()}
+                disabled={checking}
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground disabled:opacity-60 dark:hover:bg-white/5"
+                title={needsAttention ? t('settings.update.failed') : t('settings.update.check')}
+              >
+                <RefreshCw size={11} className={checking ? 'animate-spin' : ''} />
+                <span>
+                  {checking
+                    ? t('settings.update.checking')
+                    : status === null
+                      ? t('settings.update.notChecked')
+                      : t('settings.update.check')}
+                </span>
+              </button>
+            </div>
           )}
         </div>
         <Button

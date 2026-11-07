@@ -29,7 +29,7 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
 }) => {
   const { t, resolvedLanguage } = useTranslation();
   const isZh = resolvedLanguage === 'zh';
-  const newChatKeyLabels: Partial<Record<WebNewChatKey, string>> = {
+  const newChatKeyLabels: Record<WebNewChatKey, string> = {
     Disabled: t('settings.web.newChatKeys.Disabled'),
     ControlLeft: t('settings.web.newChatKeys.ControlLeft'),
     ControlRight: t('settings.web.newChatKeys.ControlRight'),
@@ -37,6 +37,18 @@ export const WebviewTab: React.FC<WebviewTabProps> = ({
     ShiftRight: t('settings.web.newChatKeys.ShiftRight'),
     AltLeft: t('settings.web.newChatKeys.AltLeft'),
     AltRight: t('settings.web.newChatKeys.AltRight'),
+    F1: 'F1',
+    F2: 'F2',
+    F3: 'F3',
+    F4: 'F4',
+    F5: 'F5',
+    F6: 'F6',
+    F7: 'F7',
+    F8: 'F8',
+    F9: 'F9',
+    F10: 'F10',
+    F11: 'F11',
+    F12: 'F12',
   };
 
   const [currentW, currentH] = general.webWindowSize ?? DEFAULT_WEB_WINDOW_SIZE;

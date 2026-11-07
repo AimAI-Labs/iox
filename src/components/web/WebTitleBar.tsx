@@ -27,18 +27,22 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = (props) => {
   const { layout, update, failed } = useWebChrome();
   const { t } = useTranslation();
   const [newChatFailed, setNewChatFailed] = useState(false);
+  const headlessRef = React.useRef(layout?.headless);
+  headlessRef.current = layout?.headless;
+  const updateRef = React.useRef(update);
+  updateRef.current = update;
   useEffect(() => {
     let disposed = false;
     const unlisten = listen('web-new-chat-failed', () => {
       if (disposed) return;
       setNewChatFailed(true);
-      if (layout?.headless) void update({ expanded: true, wheel: false });
+      if (headlessRef.current) void updateRef.current({ expanded: true, wheel: false });
     });
     return () => {
       disposed = true;
       void unlisten.then((cleanup) => cleanup()).catch(() => {});
     };
-  }, [layout?.headless, update]);
+  }, []);
   useEffect(() => {
     if (!newChatFailed) return;
     const timer = setTimeout(() => setNewChatFailed(false), 3500);
@@ -52,7 +56,8 @@ export const WebTitleBar: React.FC<WebTitleBarProps> = (props) => {
   }
   if (layout.headless) {
     return <WebFloatingMenu windowLabel={label} title={props.title || params.get('title') || 'IOX Web Hub'}
-      actions={props.actions ?? []} layout={layout.menu} update={update} failed={failed || newChatFailed}
+      actions={props.actions ?? []} layout={layout.menu} update={update} failed={failed}
+      errorMessage={newChatFailed ? t('settings.web.newChatFailed') : undefined}
       dragHoldDelayMs={props.dragHoldDelayMs ?? DEFAULT_WEB_DRAG_HOLD_DELAY_MS}
       pinnedActions={props.pinnedActions ?? DEFAULT_WEB_MENU_PINNED_ACTIONS} />;
   }

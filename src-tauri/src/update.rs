@@ -13,6 +13,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::AppState;
 
 const RELEASES_API: &str = "https://api.github.com/repos/AimAI-Labs/iox/releases/latest";
+const RELEASE_PAGE_URL: &str = "https://github.com/AimAI-Labs/iox/releases";
+const ALLOWED_RELEASE_URL_PREFIX: &str = "https://github.com/AimAI-Labs/iox/";
 const STARTUP_DELAY: Duration = Duration::from_secs(10);
 const CHECK_INTERVAL: Duration = Duration::from_secs(12 * 60 * 60);
 
@@ -68,25 +70,76 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-/// Accept `v1.2.3`, `1.2`, `1.2.3-beta.1` and ignore build metadata.
-fn parse_version(value: &str) -> Option<(u64, u64, u64)> {
+fn parse_semver(value: &str) -> Option<(u64, u64, u64, Option<&str>)> {
     let trimmed = value.trim();
     let trimmed = trimmed
         .strip_prefix('v')
         .or_else(|| trimmed.strip_prefix('V'))
         .unwrap_or(trimmed);
-    let core = trimmed.split(['-', '+']).next()?;
+    let without_build = trimmed.split('+').next()?;
+    let (core, prerelease) = match without_build.split_once('-') {
+        Some((core, pre)) if !pre.is_empty() => (core, Some(pre)),
+        Some(_) => return None,
+        None => (without_build, None),
+    };
     let mut parts = core.split('.');
     let major = parts.next()?.parse().ok()?;
     let minor = parts.next().unwrap_or("0").parse().ok()?;
     let patch = parts.next().unwrap_or("0").parse().ok()?;
-    Some((major, minor, patch))
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((major, minor, patch, prerelease))
+}
+
+/// Accept `v1.2.3`, `1.2`, `1.2.3-beta.1` and ignore build metadata.
+fn parse_version(value: &str) -> Option<(u64, u64, u64)> {
+    parse_semver(value).map(|(major, minor, patch, _)| (major, minor, patch))
+}
+
+fn compare_prerelease(left: &str, right: &str) -> std::cmp::Ordering {
+    for (l, r) in left.split('.').zip(right.split('.')) {
+        if l == r {
+            continue;
+        }
+        let ord = match (l.parse::<u64>(), r.parse::<u64>()) {
+            (Ok(ln), Ok(rn)) => ln.cmp(&rn),
+            (Ok(_), Err(_)) => std::cmp::Ordering::Less,
+            (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
+            (Err(_), Err(_)) => l.cmp(r),
+        };
+        if ord != std::cmp::Ordering::Equal {
+            return ord;
+        }
+    }
+    left.split('.').count().cmp(&right.split('.').count())
 }
 
 fn is_newer(latest: &str, current: &str) -> bool {
-    match (parse_version(latest), parse_version(current)) {
-        (Some(latest), Some(current)) => latest > current,
+    match (parse_semver(latest), parse_semver(current)) {
+        (Some((l_maj, l_min, l_pat, l_pre)), Some((c_maj, c_min, c_pat, c_pre))) => {
+            match (l_maj, l_min, l_pat).cmp(&(c_maj, c_min, c_pat)) {
+                std::cmp::Ordering::Greater => true,
+                std::cmp::Ordering::Less => false,
+                std::cmp::Ordering::Equal => match (l_pre, c_pre) {
+                    (None, Some(_)) => true,
+                    (Some(_), None) | (None, None) => false,
+                    (Some(lp), Some(cp)) => {
+                        compare_prerelease(lp, cp) == std::cmp::Ordering::Greater
+                    }
+                },
+            }
+        }
         _ => false,
+    }
+}
+
+fn sanitize_release_url(url: &str) -> String {
+    let trimmed = url.trim();
+    if trimmed.starts_with(ALLOWED_RELEASE_URL_PREFIX) {
+        trimmed.to_string()
+    } else {
+        RELEASE_PAGE_URL.to_string()
     }
 }
 
@@ -108,7 +161,13 @@ fn status(
 }
 
 fn unavailable(current: &str) -> UpdateStatus {
-    status("unavailable", current, None, None, None)
+    status(
+        "unavailable",
+        current,
+        None,
+        Some(RELEASE_PAGE_URL.to_string()),
+        None,
+    )
 }
 
 async fn latest_release() -> Result<Release, String> {
@@ -148,11 +207,17 @@ async fn resolve(current: &str) -> UpdateStatus {
     }
 
     let latest = release.tag_name.trim();
-    let link = Some(release.html_url);
+    let link = Some(sanitize_release_url(&release.html_url));
     let published = release.published_at;
     if parse_version(latest).is_none() {
         // A tag such as `nightly` must not be reported as "up to date".
-        return status("unknown", current, Some(latest.to_string()), link, published);
+        return status(
+            "unknown",
+            current,
+            Some(latest.to_string()),
+            link,
+            published,
+        );
     }
     let available = is_newer(latest, current);
     let version = latest
@@ -242,6 +307,8 @@ mod tests {
         assert_eq!(parse_version("1.2"), Some((1, 2, 0)));
         assert_eq!(parse_version("1.2.3-beta.1"), Some((1, 2, 3)));
         assert_eq!(parse_version("1.2.3+build.7"), Some((1, 2, 3)));
+        assert_eq!(parse_version("1.2.3.4"), None);
+        assert_eq!(parse_version("1.2.3-"), None);
         assert_eq!(parse_version("nightly"), None);
         assert_eq!(parse_version("v"), None);
     }
@@ -250,10 +317,25 @@ mod tests {
     fn only_newer_versions_offer_an_update() {
         assert!(is_newer("v0.2.0", "0.1.0"));
         assert!(is_newer("0.1.10", "0.1.9"));
+        assert!(is_newer("0.2.0", "0.2.0-beta.1"));
+        assert!(is_newer("0.2.0-beta.2", "0.2.0-beta.1"));
+        assert!(!is_newer("0.2.0-beta.1", "0.2.0"));
         assert!(!is_newer("0.1.0", "0.1.0"));
         assert!(!is_newer("0.0.9", "0.1.0"));
         assert!(!is_newer("latest", "0.1.0"));
         assert!(!is_newer("0.2.0", "unknown"));
+    }
+
+    #[test]
+    fn sanitizes_release_url_to_official_repo() {
+        assert_eq!(
+            sanitize_release_url("https://github.com/AimAI-Labs/iox/releases/tag/v0.2.0"),
+            "https://github.com/AimAI-Labs/iox/releases/tag/v0.2.0"
+        );
+        assert_eq!(
+            sanitize_release_url("https://evil.example.com/iox"),
+            RELEASE_PAGE_URL
+        );
     }
 
     #[test]

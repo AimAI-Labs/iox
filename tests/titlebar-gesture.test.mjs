@@ -11,6 +11,12 @@ const { resolveTitleBarPress, isDragThresholdExceeded, isTitleBarToggleGesture }
 
 test('a left press on the titlebar arms dragging instead of starting it immediately', () => {
   assert.equal(resolveTitleBarPress(0, false), 'arm-drag');
+  assert.equal(resolveTitleBarPress(0, false, 1), 'arm-drag');
+});
+
+test('the second press of a double click never re-arms dragging', () => {
+  assert.equal(resolveTitleBarPress(0, false, 2), 'ignore');
+  assert.equal(resolveTitleBarPress(0, false, 3), 'ignore');
 });
 
 test('interactive controls never drag or maximize the window', () => {

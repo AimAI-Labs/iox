@@ -1,17 +1,15 @@
-//! Native keyboard integration; eligibility follows the actual foreground and pointer owner.
+//! Native keyboard integration; eligibility follows the active foreground Web window.
 
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicU16, AtomicU64, AtomicUsize, Ordering};
 use tauri::{Emitter, Manager};
-use windows_sys::Win32::Foundation::POINT;
 use windows_sys::Win32::System::Threading::GetCurrentProcessId;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_RCONTROL, VK_RMENU, VK_RSHIFT,
     VK_RWIN,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetAncestor, GetCursorPos, GetForegroundWindow, GetWindowThreadProcessId, WindowFromPoint,
-    GA_ROOT,
+    GetAncestor, GetForegroundWindow, GetWindowThreadProcessId, GA_ROOT,
 };
 
 use crate::config::WebNewChatKey;
@@ -51,35 +49,39 @@ pub fn window_event(_window: &tauri::Window, event: &tauri::WindowEvent) {
 }
 
 fn foreground() -> usize {
-    // SAFETY: GetForegroundWindow returns a borrowed HWND; no ownership or dereference.
-    unsafe { GetForegroundWindow() as usize }
+    // SAFETY: GetForegroundWindow and GetAncestor return borrowed HWNDs; no ownership or dereference.
+    unsafe {
+        let window = GetForegroundWindow();
+        if window.is_null() {
+            return 0;
+        }
+        let root = GetAncestor(window, GA_ROOT);
+        if root.is_null() {
+            window as usize
+        } else {
+            root as usize
+        }
+    }
 }
 
-fn pointer_target(foreground: usize, pointer_root: usize, owned: bool) -> usize {
-    if foreground != 0 && foreground == pointer_root && owned {
+fn foreground_target(foreground: usize, owned: bool) -> usize {
+    if foreground != 0 && owned {
         foreground
     } else {
         0
     }
 }
 
-fn hovered_target() -> usize {
-    // SAFETY: The HWNDs are borrowed snapshots. No window is activated or dereferenced;
-    // coordinates and WindowFromPoint use the same physical screen coordinate space.
+fn active_target() -> usize {
+    // SAFETY: The HWND is a borrowed snapshot. No window is activated or dereferenced.
     unsafe {
-        let window = GetForegroundWindow();
-        let mut process = 0;
-        GetWindowThreadProcessId(window, &mut process);
-        let mut point: POINT = std::mem::zeroed();
-        if GetCursorPos(&mut point) == 0 {
+        let root = foreground();
+        if root == 0 {
             return 0;
         }
-        let under_pointer = GetAncestor(WindowFromPoint(point), GA_ROOT);
-        pointer_target(
-            window as usize,
-            under_pointer as usize,
-            process == GetCurrentProcessId(),
-        )
+        let mut process = 0;
+        GetWindowThreadProcessId(root as _, &mut process);
+        foreground_target(root, process == GetCurrentProcessId())
     }
 }
 
@@ -87,7 +89,7 @@ pub fn key(app: &tauri::AppHandle, vk: u16, down: bool, time: u32) {
     observe_foreground(foreground());
     let revision = REVISION.load(Ordering::SeqCst);
     let configured = KEY.load(Ordering::SeqCst);
-    let target = hovered_target();
+    let target = active_target();
     // SAFETY: GetAsyncKeyState reads the current desktop's key state without modifying input.
     let modified = unsafe {
         [
@@ -119,7 +121,7 @@ pub fn key(app: &tauri::AppHandle, vk: u16, down: bool, time: u32) {
     let _ = app.run_on_main_thread(move || {
         if REVISION.load(Ordering::SeqCst) != revision
             || KEY.load(Ordering::SeqCst) != configured
-            || hovered_target() != target
+            || active_target() != target
         {
             return;
         }
@@ -141,11 +143,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_actual_foreground_and_pointer_owner_define_eligibility() {
-        assert_eq!(pointer_target(42, 42, true), 42);
-        assert_eq!(pointer_target(42, 43, true), 0);
-        assert_eq!(pointer_target(42, 42, false), 0);
-        assert_eq!(pointer_target(42, 0, true), 0);
-        assert_eq!(pointer_target(0, 0, true), 0);
+    fn the_actual_foreground_owner_defines_eligibility() {
+        assert_eq!(foreground_target(42, true), 42);
+        assert_eq!(foreground_target(42, false), 0);
+        assert_eq!(foreground_target(0, true), 0);
+        assert_eq!(foreground_target(0, false), 0);
     }
 }

@@ -21,6 +21,7 @@ interface WebFloatingMenuProps {
   layout: WebMenuLayout;
   update: (changes: WebMenuChange) => Promise<boolean>;
   failed: boolean;
+  errorMessage?: string;
   dragHoldDelayMs: number;
   pinnedActions: WebMenuActionId[];
 }
@@ -32,7 +33,7 @@ const MENU_BUTTON_SIZE = 44;
 const prefersReducedMotion = () =>
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
-export function WebFloatingMenu({ windowLabel, title, actions, layout, update, failed, dragHoldDelayMs, pinnedActions }: WebFloatingMenuProps) {
+export function WebFloatingMenu({ windowLabel, title, actions, layout, update, failed, errorMessage, dragHoldDelayMs, pinnedActions }: WebFloatingMenuProps) {
   const { t } = useTranslation();
   const hub = windowLabel === 'web_hub';
   const [hubState, setHubState] = useState<WebHubState>({ tabs: [], activeTabId: null });
@@ -353,7 +354,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, update, f
         operations={pinnedActions.flatMap((id) => operations.find((operation) => operation.id === id) ?? [])}
         dismiss={wheel.dismiss} />}
       {layout.expanded && <div id="web-floating-menu-actions" className="web-menu-body">
-        {(failed || actionFailed) && <p className="web-menu-error" role="alert">{t('settings.web.menu.failed')}</p>}
+        {(failed || actionFailed || errorMessage) && <p className="web-menu-error" role="alert">{errorMessage || t('settings.web.menu.failed')}</p>}
         {hub && <section className="web-menu-tabs" aria-label={t('settings.web.menu.tabs')}>
           <p className="web-menu-section-title">{t('settings.web.menu.tabs')} <span>{hubState.tabs.length}</span></p>
           <div className="web-menu-tab-list">

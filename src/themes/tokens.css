@@ -23,6 +23,13 @@ html[data-ui-style="windows"] {
   --ui-web-card-radius: 0px;
 }
 
+/* 窗口最大化时铺满工作区，移除自绘外框与 Web 卡片的四角圆角 */
+html[data-maximized="true"] {
+  --ui-window-radius: 0px;
+  --ui-card-radius: 0px;
+  --ui-web-card-radius: 0px;
+}
+
 /* Windows 样式使用系统标题栏，自绘交通灯与标题让位给系统导航栏 */
 html[data-ui-style="windows"] .web-titlebar-root .mac-traffic-lights {
   display: none;

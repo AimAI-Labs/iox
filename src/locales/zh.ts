@@ -271,6 +271,7 @@ export const zh = {
       unknown: '版本号格式无法比较，请前往发布页查看',
       availableShort: '新版本',
       available: '发现新版本',
+      openRelease: '发布页',
       failed: '暂时无法检查更新，请稍后重试或直接打开发布页',
     },
     general: {
@@ -404,7 +405,7 @@ export const zh = {
       windowMode: '网页打开模式',
       newChatKey: '双击按键新建对话',
       newChatFailed: '无法点击新建对话按钮，请确认网页已加载且已登录',
-      newChatKeyDesc: 'Web 卡片在前台且鼠标位于卡片内时，400 毫秒内双击按键，点击网页的新建对话按钮；保存后生效',
+      newChatKeyDesc: 'Web 卡片处于前台激活状态时，400 毫秒内双击按键，触发网页的新建对话按钮；保存后生效',
       newChatKeys: {
         Disabled: '关闭',
         ControlLeft: '左 Ctrl（默认）',
