@@ -88,21 +88,25 @@ fn intercept_menu_switch(app: &AppHandle, nav_url: &tauri::Url) -> bool {
     let Some((action_id, selected_text)) = menu_switch_payload(nav_url) else {
         return false;
     };
+    eprintln!("[context-menu] switch requested: {action_id}");
     let dispatch = app.clone();
-    // Window creation stays on the main thread; the navigation callback may run on the
-    // WebView2 thread and must not touch window builders directly.
-    let _ = app.run_on_main_thread(move || {
+    // WRY's create_webview must run outside the event loop, otherwise its channel
+    // deadlocks. run_on_main_thread executes the task inside that loop, so creating
+    // a web card from it hangs and the click appears to do nothing. Use the same
+    // async runtime thread as the trigger_web_action command instead.
+    tauri::async_runtime::spawn(async move {
         let Some(state) = dispatch.try_state::<AppState>() else {
+            eprintln!("[context-menu] switch dropped: app state unavailable");
             return;
         };
-        let Some(config) = state.config.try_snapshot() else {
-            return;
-        };
+        // A short lock wait during a config broadcast must not silently discard the click.
+        let config = state.config.snapshot();
         let Some(action) = config
             .actions
             .iter()
             .find(|action| action.action_type == "web" && action.enabled && action.id == action_id)
         else {
+            eprintln!("[context-menu] switch dropped: unknown action {action_id}");
             return;
         };
 
@@ -128,7 +132,7 @@ fn intercept_menu_switch(app: &AppHandle, nav_url: &tauri::Url) -> bool {
 
         if let Err(error) = execute_web_action(&dispatch, &config, action, trimmed_text, None, None)
         {
-            eprintln!("Web menu switch failed: {error}");
+            eprintln!("[context-menu] switch failed: {error}");
         }
     });
     true
