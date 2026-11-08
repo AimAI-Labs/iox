@@ -405,9 +405,7 @@ export function WebFloatingMenu({ windowLabel, title, actions, layout, bar, upda
             aria-label={t('settings.web.menu.resizeBar')} {...resizeHandlers} />
           <button type="button" className="web-menu-bar-drag"
             aria-label={t('settings.web.menu.openBarImmediate', { delay: holdDelayMs })}
-            {...barDragHandlers} onClick={openMenu}>
-            <span>{activeTitle}</span>
-          </button>
+            {...barDragHandlers} onClick={openMenu} />
           <div className="web-menu-bar-actions">
             {pinnedActions.flatMap((id) => operations.find((operation) => operation.id === id) ?? [])
               .map((operation) => <button key={operation.id} type="button" className="web-menu-bar-action"

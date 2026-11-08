@@ -153,15 +153,6 @@
   cursor: grab;
   touch-action: none;
 }
-.web-menu-bar-drag > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ink);
-  font-size: 11px;
-  font-weight: 600;
-}
 .web-floating-menu .web-menu-bar-drag:hover:not(:disabled) { background: var(--hover-2); }
 .web-menu-bar-drag:active { cursor: grabbing; }
 .web-menu-bar-actions {
