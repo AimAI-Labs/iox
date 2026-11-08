@@ -19,11 +19,19 @@ fn content_init_script(config: &AppConfig, action: &ActionConfig) -> String {
 }
 
 fn context_menu_script(config: &AppConfig, action: &ActionConfig) -> String {
-    let choices: Vec<(String, String)> = config
+    // 与划词胶囊条的 enabledActions 同源：沿用 config.actions 的已提交顺序
+    // （用户拖拽排序后自动一致），仅过滤非 Web / 禁用动作和当前动作。
+    let choices: Vec<(String, String, String)> = config
         .actions
         .iter()
         .filter(|candidate| candidate.action_type == "web" && candidate.enabled)
-        .map(|candidate| (candidate.id.clone(), candidate.name.clone()))
+        .map(|candidate| {
+            (
+                candidate.id.clone(),
+                candidate.name.clone(),
+                candidate.icon.clone(),
+            )
+        })
         .collect();
     super::scripts::build_web_context_menu_script(
         &config.general.theme,
@@ -140,12 +148,19 @@ fn focus_existing_web_action(app: &AppHandle, action: &ActionConfig) -> bool {
 
 /// 菜单内容只依赖这些字段；窗口尺寸等几何提交不应重建已展开的菜单。
 pub fn context_menu_config_changed(previous: &AppConfig, current: &AppConfig) -> bool {
-    let signature = |config: &AppConfig| -> Vec<(String, String, bool)> {
+    let signature = |config: &AppConfig| -> Vec<(String, String, String, bool)> {
         config
             .actions
             .iter()
             .filter(|action| action.action_type == "web")
-            .map(|action| (action.id.clone(), action.name.clone(), action.enabled))
+            .map(|action| {
+                (
+                    action.id.clone(),
+                    action.name.clone(),
+                    action.icon.clone(),
+                    action.enabled,
+                )
+            })
             .collect()
     };
     previous.general.web_context_menu != current.general.web_context_menu
@@ -1633,6 +1648,16 @@ mod tests {
             action.name = "Renamed".into();
         }
         assert!(context_menu_config_changed(&previous, &renamed));
+
+        let mut reiconed = previous.clone();
+        if let Some(action) = reiconed
+            .actions
+            .iter_mut()
+            .find(|action| action.action_type == "web")
+        {
+            action.icon = "Claude".into();
+        }
+        assert!(context_menu_config_changed(&previous, &reiconed));
     }
 
     #[test]

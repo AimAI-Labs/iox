@@ -216,18 +216,22 @@ pub fn build_initialization_script(theme: &str, dom_injection: Option<&str>) -> 
 pub const CONTEXT_MENU_SWITCH_PREFIX: &str = "https://iox.local/switch-ai?action=";
 
 const WEB_CONTEXT_MENU_SCRIPT: &str = include_str!("web_context_menu.js");
+const WEB_CONTEXT_MENU_ICONS_SCRIPT: &str = include_str!("web_context_menu_icons.js");
 
-/// 生成页面内右键菜单脚本，排除当前站点自身，避免切换到同一个窗口。
+/// 生成页面内右键菜单脚本；保持 `actions` 的传入顺序（与划词胶囊条同源），
+/// 排除当前站点自身，避免切换到同一个窗口。
+/// `actions` 为 `(id, name, icon key)`；icon key 与前端 `DynamicIcon` 使用同一套命名，
+/// 由 `web_context_menu_icons.js` 的静态图标表解析成对应品牌 SVG。
 pub fn build_web_context_menu_script(
     theme: &str,
     language: &str,
     current_action_id: &str,
-    actions: &[(String, String)],
+    actions: &[(String, String, String)],
 ) -> String {
     let choices: Vec<serde_json::Value> = actions
         .iter()
-        .filter(|(id, _)| id != current_action_id)
-        .map(|(id, name)| serde_json::json!({ "id": id, "name": name }))
+        .filter(|(id, _, _)| id != current_action_id)
+        .map(|(id, name, icon)| serde_json::json!({ "id": id, "name": name, "icon": icon }))
         .collect();
     let options = serde_json::json!({
         "theme": theme,
@@ -235,7 +239,7 @@ pub fn build_web_context_menu_script(
         "actions": choices,
         "switchPrefix": CONTEXT_MENU_SWITCH_PREFIX,
     });
-    format!("(()=>{{\n{WEB_CONTEXT_MENU_SCRIPT}\nreturn installIoxContextMenu({options});}})()\n")
+    format!("(()=>{{\n{WEB_CONTEXT_MENU_ICONS_SCRIPT}\n{WEB_CONTEXT_MENU_SCRIPT}\nreturn installIoxContextMenu({options});}})()\n")
 }
 
 #[cfg(test)]
@@ -279,8 +283,16 @@ mod tests {
     #[test]
     fn web_context_menu_script_skips_the_current_action() {
         let actions = vec![
-            ("act_web_a".to_string(), "甲".to_string()),
-            ("act_web_b".to_string(), "乙".to_string()),
+            (
+                "act_web_a".to_string(),
+                "甲".to_string(),
+                "DeepSeek".to_string(),
+            ),
+            (
+                "act_web_b".to_string(),
+                "乙".to_string(),
+                "Kimi".to_string(),
+            ),
         ];
         let script = build_web_context_menu_script("dark", "zh", "act_web_a", &actions);
         assert!(script.contains("installIoxContextMenu"));
@@ -288,13 +300,70 @@ mod tests {
         assert!(script.contains("act_web_b"));
         assert!(!script.contains("act_web_a"));
         assert!(script.contains("乙"));
+        assert!(script.contains("\"icon\":\"Kimi\""));
+        assert!(!script.contains("\"icon\":\"DeepSeek\""));
     }
 
     #[test]
     fn web_context_menu_script_escapes_site_names() {
-        let actions = vec![("act".to_string(), "A\"\nB".to_string())];
+        let actions = vec![(
+            "act".to_string(),
+            "A\"\nB".to_string(),
+            "OpenAI".to_string(),
+        )];
         let script = build_web_context_menu_script("system", "en", "", &actions);
         assert!(!script.contains("A\"\nB"));
         assert!(script.contains("A\\\"\\nB"));
+    }
+
+    #[test]
+    fn web_context_menu_script_preserves_action_order() {
+        let actions = vec![
+            (
+                "act_third".to_string(),
+                "第三".to_string(),
+                "Grok".to_string(),
+            ),
+            (
+                "act_first".to_string(),
+                "第一".to_string(),
+                "Claude".to_string(),
+            ),
+            (
+                "act_second".to_string(),
+                "第二".to_string(),
+                "Gemini".to_string(),
+            ),
+        ];
+        let script = build_web_context_menu_script("dark", "zh", "", &actions);
+        let third = script.find("\"id\":\"act_third\"").expect("third action");
+        let first = script.find("\"id\":\"act_first\"").expect("first action");
+        let second = script.find("\"id\":\"act_second\"").expect("second action");
+        assert!(third < first && first < second, "动作顺序必须与胶囊条一致");
+    }
+
+    #[test]
+    fn web_context_menu_script_bundles_default_action_icons() {
+        let script = build_web_context_menu_script("system", "en", "", &[]);
+        assert!(script.contains("IOX_MENU_ICON_ALIASES"));
+        assert!(script.contains("IOX_MENU_ICON_KEYWORDS"));
+        for key in [
+            "DeepSeek",
+            "OpenAI",
+            "Kimi",
+            "Qwen",
+            "Perplexity",
+            "Metaso",
+            "Felo",
+            "Xiaomi",
+            "Phind",
+            "Ai360",
+            "Sparkles",
+        ] {
+            assert!(
+                script.contains(&format!("\"{key}\":")),
+                "missing icon {key}"
+            );
+        }
     }
 }
