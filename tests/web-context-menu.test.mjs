@@ -28,13 +28,22 @@ function iconTables() {
 }
 
 const SHAPE_TAGS = ['path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon'];
+const CONTAINER_TAGS = [
+  'defs', 'g', 'linearGradient', 'radialGradient', 'stop', 'filter',
+  'feFlood', 'feBlend', 'feColorMatrix', 'feOffset', 'feGaussianBlur', 'feComposite',
+];
 const SHAPE_ATTRS = [
   'd', 'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'x1', 'y1', 'x2', 'y2',
-  'width', 'height', 'points', 'fill-rule', 'clip-rule', 'stroke-width',
-  'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray',
+  'width', 'height', 'points', 'offset', 'id', 'transform', 'fill', 'stroke',
+  'fill-rule', 'clip-rule', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
+  'stroke-dasharray', 'fill-opacity', 'stroke-opacity', 'opacity', 'stop-color',
+  'stop-opacity', 'gradientUnits', 'gradientTransform', 'color-interpolation-filters',
+  'filter', 'filterUnits', 'result', 'in', 'in2', 'operator', 'k2', 'k3', 'k4',
+  'stdDeviation', 'values', 'flood-color', 'flood-opacity',
 ];
+const ROOT_ATTRS = ['viewBox', 'fill', 'fill-rule', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'];
 
-test('图标表覆盖前端图标 key，且只包含静态 SVG 几何图形', () => {
+test('图标表覆盖前端图标 key，且只包含静态 SVG 图形', () => {
   const { icons, aliases, keywords } = iconTables();
   const keys = [...frontendMapKeys('AI_ICON_MAP'), ...frontendMapKeys('LUCIDE_ICON_MAP')];
   assert.ok(keys.length > 50);
@@ -42,15 +51,27 @@ test('图标表覆盖前端图标 key，且只包含静态 SVG 几何图形', ()
     const entry = icons[key];
     assert.ok(entry, `缺少图标 ${key}`);
     assert.ok(entry.markup.length > 0, `图标 ${key} 为空`);
-    assert.ok(['fill', 'stroke'].includes(entry.mode), `图标 ${key} 模式无效`);
-    assert.ok(entry.color === null || /^#[0-9A-F]{6}$/.test(entry.color), `图标 ${key} 颜色无效`);
-    const shapes = [...entry.markup.matchAll(/<([a-z]+)\s+([^>]*?)\/>/g)];
-    assert.equal(shapes.length, (entry.markup.match(/</g) || []).length, `图标 ${key} 含非形状标签`);
-    for (const [, tag, attrs] of shapes) {
-      assert.ok(SHAPE_TAGS.includes(tag), `图标 ${key} 含标签 ${tag}`);
-      for (const attr of attrs.matchAll(/([a-z-]+)="[^"]*"/g)) {
-        assert.ok(SHAPE_ATTRS.includes(attr[1]), `图标 ${key} 含属性 ${attr[1]}`);
-      }
+    assert.match(entry.attrs.viewBox, /^0 0 [\d.]+ [\d.]+$/, `图标 ${key} 缺少 viewBox`);
+    for (const name of Object.keys(entry.attrs)) {
+      assert.ok(ROOT_ATTRS.includes(name), `图标 ${key} 根属性 ${name} 无效`);
+    }
+    assert.doesNotMatch(entry.markup, /\son[a-z]+\s*=/, `图标 ${key} 含内联事件`);
+    assert.doesNotMatch(entry.markup, /<script/i, `图标 ${key} 含脚本标签`);
+    const tags = [...entry.markup.matchAll(/<\s*([A-Za-z][\w-]*)/g)].map((match) => match[1]);
+    for (const tag of tags) {
+      assert.ok(SHAPE_TAGS.includes(tag) || CONTAINER_TAGS.includes(tag), `图标 ${key} 含标签 ${tag}`);
+    }
+    for (const attr of entry.markup.matchAll(/\s([a-z-]+)="[^"]*"/g)) {
+      assert.ok(SHAPE_ATTRS.includes(attr[1]), `图标 ${key} 含属性 ${attr[1]}`);
+    }
+    // 同一 shadow root 内多个图标并存，`url(#id)` 必须指向本图标自己的定义。
+    const declared = new Set([...entry.markup.matchAll(/id="([^"]+)"/g)].map((match) => match[1]));
+    const references = [...entry.markup.matchAll(/url\(#([^)"']+)\)/g)].map((match) => match[1]);
+    for (const reference of references) {
+      assert.ok(declared.has(reference), `图标 ${key} 引用未定义的 ${reference}`);
+    }
+    for (const id of declared) {
+      assert.ok(references.includes(id), `图标 ${key} 的 ${id} 未被引用`);
     }
   }
   for (const [alias, key] of Object.entries(aliases)) {
@@ -352,10 +373,15 @@ test('级联面板按动作 icon 渲染对应品牌图标，并保留两种切�
     assert.equal(iconBox.className, 'icon-box');
     const svg = iconBox.children[0];
     assert.equal(svg.attributes['aria-hidden'], 'true');
+    assert.equal(svg.attributes.viewBox, icons[key].attrs.viewBox, `${key} 未使用胶囊条同源视图`);
+    assert.equal(svg.attributes.fill, icons[key].attrs.fill, `${key} 未继承胶囊条绘制模式`);
     assert.equal(svg.innerHTML, icons[key].markup, `${key} 未使用对应图标`);
+    // 品牌多色图形不再被单色染色，因此也不再注入品牌强调色与底色。
+    assert.equal(buttons[index].style['--ai-accent'], undefined);
+    assert.equal(buttons[index].style['--ai-tint'], undefined);
   }
-  assert.equal(buttons[0].style['--ai-accent'], icons.DeepSeek.color);
-  assert.match(buttons[0].style['--ai-tint'], /^rgba\(/);
+  assert.equal(icons.OpenAI.attrs.fill, 'currentColor', 'OpenAI 应继承主题前景色');
+  assert.match(icons.DeepSeek.markup, /fill="#4D6BFE"/);
   assert.equal(
     h.submenu.children.find((node) => node.className === 'submenu-footer').textContent,
     '右键仅切换窗口',
@@ -413,5 +439,27 @@ test('级联顺序与胶囊条一致，按传入的动作次序依次展开', ()
   );
   for (const [index, key] of ['Grok', 'Claude', 'Gemini'].entries()) {
     assert.equal(buttons[index].children[0].children[0].innerHTML, icons[key].markup);
+  }
+});
+
+test('级联图标与胶囊条同源：品牌多色、Mono 继承前景色、渐变 id 逐图标唯一', () => {
+  const { icons } = iconTables();
+  // 品牌 Color 变体保留官方配色，不再被单色品牌色覆盖。
+  assert.match(icons.DeepSeek.markup, /fill="#4D6BFE"/);
+  assert.match(icons.Kimi.markup, /fill="#1783FF"/);
+  assert.match(icons.Metaso.markup, /fill="url\(#iox-metaso-1\)"/);
+  // 自定义 48 视图图标（小米）必须按原 viewBox 渲染，否则只会画出左上角四分之一。
+  assert.equal(icons.Xiaomi.attrs.viewBox, '0 0 48 48');
+  assert.match(icons.Xiaomi.markup, /fill="#FF6900"/);
+  // 没有 Color 变体的品牌沿用 Mono + currentColor，与胶囊条前景色一致。
+  assert.equal(icons.OpenAI.attrs.fill, 'currentColor');
+  assert.doesNotMatch(icons.OpenAI.markup, /fill="/);
+  // 所有渐变 / 滤镜 id 全局唯一，多个图标共处一个 shadow root 也不会串色。
+  const seen = new Map();
+  for (const [key, entry] of Object.entries(icons)) {
+    for (const match of entry.markup.matchAll(/id="([^"]+)"/g)) {
+      assert.ok(!seen.has(match[1]), `${key} 与 ${seen.get(match[1])} 复用了 id ${match[1]}`);
+      seen.set(match[1], key);
+    }
   }
 });

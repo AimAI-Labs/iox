@@ -7,7 +7,8 @@
  * 页面本身不会获得任何 Tauri IPC 权限。级联项复用划词胶囊条的 iconOnly 形态、
  * ActionConfig.icon 契约与 config.actions 顺序；因运行在第三方页面的 closed shadow root，
  * 无法直接复用 BubbleBar / DynamicIcon 等 React 组件或应用主题 token，故品牌 SVG 由
- * web_context_menu_icons.js（scripts/generate-web-context-menu-icons.mjs 生成）随脚本注入。
+ * web_context_menu_icons.js（scripts/generate-web-context-menu-icons.mjs 生成）随脚本注入，
+ * 并与胶囊条同源取 Color 变体（多色）或 Mono 变体（currentColor）。
  */
 function installIoxContextMenu(options) {
   try {
@@ -129,7 +130,8 @@ function installIoxContextMenu(options) {
       /* 与划词胶囊条一致：按配置顺序从左到右排列，不重排、不按列填充。 */
       .ai-track { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
       /* 复用胶囊条的 iconOnly 形态：只显示品牌图标，动作名由 aria-label 承载。
-         尺寸对齐无头胶囊条的固定动作按钮（28–30px 圆形、15px 图标、按压回弹）。 */
+         尺寸对齐无头胶囊条的固定动作按钮（28–30px 圆形、15px 图标、按压回弹），
+         图标底色保持中性，避免品牌多色图形被染色后失真。 */
       .ai {
         display: inline-flex;
         align-items: center;
@@ -142,20 +144,21 @@ function installIoxContextMenu(options) {
         border: 1px solid var(--iox-line);
         border-radius: 999px;
         background: var(--iox-chip);
-        color: var(--iox-ink);
+        /* 与胶囊条的图标容器同色，Mono 变体据此继承 currentColor。 */
+        color: var(--iox-ink-2);
         cursor: pointer;
         outline: none;
         transition: background-color 140ms var(--iox-ease), border-color 140ms ease, transform 140ms var(--iox-ease), box-shadow 140ms ease;
       }
       .ai:hover, .ai:focus-visible {
         background: var(--iox-chip-hover);
-        border-color: var(--ai-accent, var(--iox-accent));
+        border-color: var(--iox-accent);
         box-shadow: 0 2px 10px var(--iox-shadow-soft);
         transform: translateY(-1px);
       }
       .ai:focus-visible { outline: 2px solid var(--iox-focus); outline-offset: -2px; }
       .ai:active { transform: scale(0.94); }
-      .ai .icon-box { display: grid; place-items: center; width: 22px; height: 22px; flex: 0 0 22px; border-radius: 999px; background: var(--ai-tint, var(--iox-inset)); }
+      .ai .icon-box { display: grid; place-items: center; width: 22px; height: 22px; flex: 0 0 22px; border-radius: 999px; background: var(--iox-inset); }
       .ai .icon-box svg { display: block; width: 15px; height: 15px; }
       /* 顺序与胶囊条一致：从左到右逐个展开，索引即传入动作的相对次序。 */
       .submenu.open .ai {
@@ -257,14 +260,13 @@ function installIoxContextMenu(options) {
       return element;
     };
 
-    // 图标几何图形由 scripts.rs 拼接 web_context_menu_icons.js 注入，仅含 SVG 形状。
+    // 图标图形由 scripts.rs 拼接 web_context_menu_icons.js 注入；与胶囊条的 DynamicIcon 同源。
     const iconTable = typeof IOX_MENU_ICONS === 'undefined' ? {} : IOX_MENU_ICONS;
     const iconAliases = typeof IOX_MENU_ICON_ALIASES === 'undefined' ? {} : IOX_MENU_ICON_ALIASES;
     const iconKeywords = typeof IOX_MENU_ICON_KEYWORDS === 'undefined' ? [] : IOX_MENU_ICON_KEYWORDS;
     const fallbackIcon = {
+      attrs: { viewBox: '0 0 24 24', fill: 'currentColor' },
       markup: '<path d="M12 3l1.7 4.8L18.5 9.5l-4.8 1.7L12 16l-1.7-4.8L5.5 9.5l4.8-1.7L12 3z"/><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z"/>',
-      mode: 'fill',
-      color: null,
     };
 
     /** 按动作 icon key（或其别名、动作名 / id 中的品牌词）解析对应图标。 */
@@ -280,32 +282,22 @@ function installIoxContextMenu(options) {
       return iconTable.Sparkles || fallbackIcon;
     };
 
-    const tintFor = (color) => {
-      const match = /^#([0-9a-f]{6})$/i.exec(color || '');
-      if (!match) return null;
-      const value = parseInt(match[1], 16);
-      return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, 0.14)`;
-    };
-
+    /**
+     * 渲染与胶囊条 `DynamicIcon` 相同的图形：品牌 Color 变体自带多色填充，
+     * Mono 与通用功能图标继承主题前景色；根属性（viewBox / fill / stroke）由生成表给出。
+     */
     const brandIcon = (action) => {
       const entry = iconFor(action);
       const element = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      element.setAttribute('viewBox', '0 0 24 24');
       element.setAttribute('aria-hidden', 'true');
       element.setAttribute('class', 'ai-glyph');
-      if (entry.mode === 'stroke') {
-        element.setAttribute('fill', 'none');
-        element.setAttribute('stroke', 'currentColor');
-        element.setAttribute('stroke-width', '2');
-        element.setAttribute('stroke-linecap', 'round');
-        element.setAttribute('stroke-linejoin', 'round');
-      } else {
-        element.setAttribute('fill', 'currentColor');
+      for (const [name, value] of Object.entries(entry.attrs || {})) {
+        if (value) element.setAttribute(name, value);
       }
-      element.style.color = entry.color || 'var(--iox-accent)';
+      if (!element.getAttribute('viewBox')) element.setAttribute('viewBox', '0 0 24 24');
       // 只写入构建期生成的静态图形；动作名等配置值一律通过 textContent 写入。
       element.innerHTML = entry.markup;
-      return { element, color: entry.color };
+      return element;
     };
 
     let hoverTimer = 0;
@@ -369,12 +361,7 @@ function installIoxContextMenu(options) {
         button.setAttribute('role', 'menuitem');
         // 索引决定展开先后，顺序始终等于 Rust 传入的动作顺序。
         button.style.setProperty('--iox-index', String(index));
-        const { element: glyph, color } = brandIcon(action);
-        if (color) {
-          button.style.setProperty('--ai-accent', color);
-          const tint = tintFor(color);
-          if (tint) button.style.setProperty('--ai-tint', tint);
-        }
+        const glyph = brandIcon(action);
         const iconBox = document.createElement('span');
         iconBox.className = 'icon-box';
         iconBox.appendChild(glyph);
